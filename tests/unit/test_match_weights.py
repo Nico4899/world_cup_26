@@ -84,9 +84,7 @@ def test_time_decay_future_is_clamped_to_today() -> None:
 
 def test_time_decay_series() -> None:
     ref = pd.Timestamp("2026-05-23")
-    dates = pd.Series(
-        pd.to_datetime(["2026-05-23", "2024-05-24", "2022-05-25", "2018-05-26"])
-    )
+    dates = pd.Series(pd.to_datetime(["2026-05-23", "2024-05-24", "2022-05-25", "2018-05-26"]))
     weights = time_decay_weight(dates, ref, half_life_days=730)
     # today → 1.0
     assert math.isclose(weights.iloc[0], 1.0, rel_tol=1e-9)
