@@ -56,9 +56,7 @@ def test_manual_only_specs_include_squads_refresh():
 
 
 def test_job_registry_covers_cron_and_manual_jobs():
-    expected = {s.name for s in job_mod.JOB_SPECS} | {
-        s.name for s in job_mod.MANUAL_ONLY_JOB_SPECS
-    }
+    expected = {s.name for s in job_mod.JOB_SPECS} | {s.name for s in job_mod.MANUAL_ONLY_JOB_SPECS}
     assert set(job_mod.JOB_REGISTRY) == expected
 
 

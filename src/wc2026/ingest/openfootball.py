@@ -37,6 +37,7 @@ extract group → team membership.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from collections.abc import Mapping
@@ -104,10 +105,10 @@ def parse_cup_txt(text: str) -> dict[str, tuple[str, ...]]:
         groups[current].append(team_match.group("name").strip())
 
     if set(groups.keys()) != {chr(ord("A") + i) for i in range(EXPECTED_GROUPS)}:
-        raise ValueError(
-            f"openfootball cup.txt: expected groups A..L; got {sorted(groups.keys())}"
-        )
-    bad_size = {g: len(members) for g, members in groups.items() if len(members) != EXPECTED_TEAMS_PER_GROUP}
+        raise ValueError(f"openfootball cup.txt: expected groups A..L; got {sorted(groups.keys())}")
+    bad_size = {
+        g: len(members) for g, members in groups.items() if len(members) != EXPECTED_TEAMS_PER_GROUP
+    }
     if bad_size:
         raise ValueError(
             f"openfootball cup.txt: each group must have {EXPECTED_TEAMS_PER_GROUP} teams; got {bad_size}"
@@ -189,8 +190,6 @@ def write_group_assignment_json(
     out_path: Path = Path("data/wc2026_group_assignment.json"),
 ) -> Path:
     """Serialise an assignment to the JSON form the simulator's ``load_group_assignment`` reads."""
-    import json
-
     out_path.parent.mkdir(parents=True, exist_ok=True)
     payload: Mapping[str, object] = {
         "source": assignment.citation,

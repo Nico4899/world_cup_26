@@ -45,7 +45,7 @@ def test_parse_ignores_matchday_section() -> None:
 
 def test_parse_rejects_when_wrong_group_count() -> None:
     text = "= Header =\n\nGroup A:\n 1. T1\n 2. T2\n 3. T3\n 4. T4\n"
-    with pytest.raises(ValueError, match="A..L"):
+    with pytest.raises(ValueError, match=r"A\.\.L"):
         parse_cup_txt(text)
 
 

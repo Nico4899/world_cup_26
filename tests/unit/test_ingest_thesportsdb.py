@@ -69,7 +69,10 @@ def test_parse_picks_first_soccer_entry_exact_match() -> None:
 
 
 def test_parse_returns_none_for_empty_payload() -> None:
-    assert parse_team_lookup_response(_load_fixture("thesportsdb_empty.json"), canonical_name="X") is None
+    assert (
+        parse_team_lookup_response(_load_fixture("thesportsdb_empty.json"), canonical_name="X")
+        is None
+    )
     assert parse_team_lookup_response({}, canonical_name="X") is None
     assert parse_team_lookup_response(None, canonical_name="X") is None
 
@@ -146,9 +149,7 @@ def test_fetch_team_assets_skips_missing_teams_and_writes_remaining(tmp_path) ->
 
 def test_load_latest_snapshot_picks_most_recent_file(tmp_path) -> None:
     for d in ["2026-05-20", "2026-05-22", "2026-05-21"]:
-        pd.DataFrame({"team": ["X"], "snapshot": [d]}).to_parquet(
-            tmp_path / f"teams_{d}.parquet"
-        )
+        pd.DataFrame({"team": ["X"], "snapshot": [d]}).to_parquet(tmp_path / f"teams_{d}.parquet")
     df = load_latest_snapshot(tmp_path)
     assert df["snapshot"].iloc[0] == "2026-05-22"
 

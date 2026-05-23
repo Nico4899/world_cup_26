@@ -316,9 +316,7 @@ def test_run_job_404_on_unknown_name(client: TestClient, monkeypatch) -> None:
     assert "unknown job" in r.json()["detail"]
 
 
-def test_run_job_enqueues_known_job_when_token_unset(
-    client: TestClient, monkeypatch
-) -> None:
+def test_run_job_enqueues_known_job_when_token_unset(client: TestClient, monkeypatch) -> None:
     """With WC2026_OPS_TOKEN unset, manual runs are open and return 202."""
     from wc2026.api.routes import ops as ops_mod
 
@@ -331,9 +329,7 @@ def test_run_job_enqueues_known_job_when_token_unset(
     assert body["status"] == "enqueued"
 
 
-def test_run_job_rejects_bad_token_when_required(
-    client: TestClient, monkeypatch
-) -> None:
+def test_run_job_rejects_bad_token_when_required(client: TestClient, monkeypatch) -> None:
     monkeypatch.setenv("WC2026_OPS_TOKEN", "secret")
     r = client.post(
         "/api/v1/_ops/run-job/openfootball_refresh",

@@ -53,9 +53,7 @@ def upgrade() -> None:
         sa.Column("caps", sa.Integer(), nullable=True),
         sa.Column("goals", sa.Integer(), nullable=True),
         sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint(
-            "tournament", "team", "player_name", "snapshot_date"
-        ),
+        sa.PrimaryKeyConstraint("tournament", "team", "player_name", "snapshot_date"),
     )
     op.create_index("ix_raw_squads_team", "raw_squads", ["team"])
     op.create_index("ix_raw_squads_snapshot_date", "raw_squads", ["snapshot_date"])
@@ -70,9 +68,7 @@ def upgrade() -> None:
         sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("ranking_date", "team"),
     )
-    op.create_index(
-        "ix_raw_fifa_rankings_team", "raw_fifa_rankings", ["team"]
-    )
+    op.create_index("ix_raw_fifa_rankings_team", "raw_fifa_rankings", ["team"])
 
 
 def downgrade() -> None:

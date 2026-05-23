@@ -157,9 +157,7 @@ if available is not None:
                 if st.button(f"Run {name}", key=f"trigger-{name}"):
                     headers = {"X-Ops-Token": token} if token else None
                     try:
-                        body = post_json(
-                            f"/api/v1/_ops/run-job/{name}", headers=headers
-                        )
+                        body = post_json(f"/api/v1/_ops/run-job/{name}", headers=headers)
                     except APIUnreachable:
                         st.error("API became unreachable mid-request.")
                     except httpx.HTTPStatusError as exc:

@@ -130,8 +130,8 @@ def _parse_template_kwargs(body: str) -> dict[str, str]:
     Skips positional args (entries without ``=``).
     """
     out: dict[str, str] = {}
-    for part in _split_template_args(body):
-        part = part.strip()
+    for raw in _split_template_args(body):
+        part = raw.strip()
         if not part or "=" not in part:
             continue
         k, _, v = part.partition("=")
@@ -283,7 +283,9 @@ def fetch_all_squads(
             continue
         frames.append(df)
     combined = (
-        pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=["team", "player_name"])
+        pd.concat(frames, ignore_index=True)
+        if frames
+        else pd.DataFrame(columns=["team", "player_name"])
     )
     slug = tournament.lower().replace(" ", "_")
     out = target_dir / f"squads_{slug}_{today:%Y-%m-%d}.parquet"
@@ -317,9 +319,7 @@ def parse_fifa_ranking_html(html: str, *, ranking_date: date) -> pd.DataFrame:
     """
     table = _find_rankings_table(html)
     if table is None or table.empty:
-        return pd.DataFrame(
-            columns=["ranking_date", "team", "rank", "points", "previous_rank"]
-        )
+        return pd.DataFrame(columns=["ranking_date", "team", "rank", "points", "previous_rank"])
     col_map = {str(c).strip().lower(): c for c in table.columns}
     df = pd.DataFrame(
         {

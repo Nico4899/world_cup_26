@@ -142,7 +142,7 @@ def _make_session(
 
 
 def _coerce_int(value: Any) -> int | None:
-    if value is None or value == "" or value == "0":
+    if value is None or value in {"", "0"}:
         return None
     try:
         return int(value)

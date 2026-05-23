@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import pytest
 
 from wc2026.ingest.wikipedia import (
     fetch_all_squads,
@@ -97,7 +96,9 @@ def test_fifa_ranking_parser_picks_the_rank_team_points_table() -> None:
 
 
 def test_fifa_ranking_parser_returns_empty_on_no_matching_table() -> None:
-    df = parse_fifa_ranking_html("<html><body><p>no tables</p></body></html>", ranking_date=date(2026, 4, 4))
+    df = parse_fifa_ranking_html(
+        "<html><body><p>no tables</p></body></html>", ranking_date=date(2026, 4, 4)
+    )
     assert df.empty
 
 
@@ -132,9 +133,7 @@ class _StubSession:
 
 
 def test_fetch_all_squads_writes_combined_parquet(tmp_path: Path) -> None:
-    payload = {
-        "parse": {"wikitext": _squad_wikitext()}
-    }
+    payload = {"parse": {"wikitext": _squad_wikitext()}}
     session = _StubSession({"Argentina at the 2026 FIFA World Cup": _StubResponse(payload=payload)})
     out = fetch_all_squads(
         {"Argentina": "Argentina at the 2026 FIFA World Cup"},
@@ -142,14 +141,20 @@ def test_fetch_all_squads_writes_combined_parquet(tmp_path: Path) -> None:
         session=session,
         today=datetime(2026, 5, 23, tzinfo=UTC),
     )
-    assert "squads_fifa_world_cup_2026_2026-05-23.parquet" == out.name
+    assert out.name == "squads_fifa_world_cup_2026_2026-05-23.parquet"
     df = pd.read_parquet(out)
     assert len(df) == 3
     assert set(df["team"]) == {"Argentina"}
 
 
 def test_fetch_fifa_ranking_writes_parquet(tmp_path: Path) -> None:
-    session = _StubSession({"https://en.wikipedia.org/wiki/FIFA_Men%27s_World_Ranking": _StubResponse(text=_ranking_html())})
+    session = _StubSession(
+        {
+            "https://en.wikipedia.org/wiki/FIFA_Men%27s_World_Ranking": _StubResponse(
+                text=_ranking_html()
+            )
+        }
+    )
     out = fetch_fifa_ranking(
         session=session,
         target_dir=tmp_path,
