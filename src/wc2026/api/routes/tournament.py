@@ -7,11 +7,12 @@ import time
 from typing import Any
 
 import numpy as np
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
 from wc2026.api.dependencies import get_fixtures, get_model
 from wc2026.models.poisson_dc import PoissonDC
 from wc2026.sim.fixtures import WC2026Fixtures
+from wc2026.sim.knockout import ShootoutStrategy
 from wc2026.sim.tournament import (
     ROUND_COLUMNS,
     TournamentResult,
@@ -38,14 +39,19 @@ def _cached_summary(
     fixtures: WC2026Fixtures,
     n_sims: int,
     seed: int,
+    shootout_strategy: ShootoutStrategy | None,
 ) -> TournamentSummary:
+    # NB: cache key intentionally excludes shootout_strategy because the strategy
+    # is fixed per-process (built once in the lifespan) and would not be hashable.
     key = (n_sims, seed)
     now = time.monotonic()
     with _CACHE_LOCK:
         cached = _STANDINGS_CACHE.get(key)
         if cached is not None and now - cached[0] < CACHE_TTL_SECONDS:
             return cached[1]
-    summary = simulate_tournament_monte_carlo(fixtures, model, n_sims=n_sims, seed=seed)
+    summary = simulate_tournament_monte_carlo(
+        fixtures, model, n_sims=n_sims, seed=seed, shootout_strategy=shootout_strategy
+    )
     with _CACHE_LOCK:
         _STANDINGS_CACHE[key] = (now, summary)
     return summary
@@ -55,6 +61,7 @@ def _cached_bracket(
     model: PoissonDC,
     fixtures: WC2026Fixtures,
     seed: int,
+    shootout_strategy: ShootoutStrategy | None,
 ) -> TournamentResult:
     now = time.monotonic()
     with _CACHE_LOCK:
@@ -62,7 +69,7 @@ def _cached_bracket(
         if cached is not None and now - cached[0] < CACHE_TTL_SECONDS:
             return cached[1]
     rng = np.random.default_rng(seed)
-    result = simulate_tournament(fixtures, model, rng)
+    result = simulate_tournament(fixtures, model, rng, shootout_strategy=shootout_strategy)
     with _CACHE_LOCK:
         _BRACKET_CACHE[seed] = (now, result)
     return result
@@ -94,12 +101,14 @@ def _build_group_block(letter: str, summary, fixtures: WC2026Fixtures) -> dict[s
 
 @router.get("/standings")
 def standings(
+    request: Request,
     n_sims: int = Query(default=DEFAULT_N_SIMS, ge=100, le=20_000),
     seed: int = Query(default=DEFAULT_SEED),
     model: PoissonDC = Depends(get_model),
     fixtures: WC2026Fixtures = Depends(get_fixtures),
 ) -> dict[str, Any]:
-    summary = _cached_summary(model, fixtures, n_sims, seed)
+    shootout_strategy = getattr(request.app.state, "shootout_strategy", None)
+    summary = _cached_summary(model, fixtures, n_sims, seed, shootout_strategy)
     groups = [_build_group_block(letter, summary, fixtures) for letter in fixtures.groups]
     # Top-10 championship probabilities for the headline
     top = (
@@ -128,11 +137,13 @@ def standings(
 
 @router.get("/bracket")
 def bracket(
+    request: Request,
     seed: int = Query(default=DEFAULT_SEED, description="Sample one bracket realisation."),
     model: PoissonDC = Depends(get_model),
     fixtures: WC2026Fixtures = Depends(get_fixtures),
 ) -> dict[str, Any]:
-    result = _cached_bracket(model, fixtures, seed)
+    shootout_strategy = getattr(request.app.state, "shootout_strategy", None)
+    result = _cached_bracket(model, fixtures, seed, shootout_strategy)
     matches = []
     for mid, outcome in sorted(result.knockout_results.items()):
         # round_label by match id range per FIFA numbering

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from wc2026.sim.knockout import simulate_knockout_match
 
@@ -72,6 +73,46 @@ def test_extra_time_decides_when_regulation_tied_and_et_breaks_tie() -> None:
     # ET should dominate
     assert n_et > n_shootout
     assert n_et + n_shootout == 200
+
+
+def test_injected_shootout_strategy_overrides_coin_flip() -> None:
+    """When shootout_strategy is provided, it replaces the 50/50 fallback. Verify the
+    strategy is actually called (and its return value used as the winner)."""
+    calls: list[tuple[str, str]] = []
+
+    def always_home(home: str, away: str, rng: np.random.Generator) -> str:
+        _ = rng
+        calls.append((home, away))
+        return home
+
+    rng = np.random.default_rng(0)
+    out = simulate_knockout_match(
+        "A",
+        "B",
+        _AlwaysScoreModel(0, 0, lh=0.0, la=0.0),  # type: ignore[arg-type]
+        rng,
+        shootout_strategy=always_home,
+    )
+    assert out.decided_in == "shootout"
+    assert out.winner == "A"
+    assert out.shootout_winner == "A"
+    assert calls == [("A", "B")]
+
+
+def test_injected_shootout_strategy_must_return_a_participating_team() -> None:
+    def bogus(home: str, away: str, rng: np.random.Generator) -> str:
+        _ = home, away, rng
+        return "Atlantis"
+
+    rng = np.random.default_rng(0)
+    with pytest.raises(ValueError, match="must be either"):
+        simulate_knockout_match(
+            "A",
+            "B",
+            _AlwaysScoreModel(0, 0, lh=0.0, la=0.0),  # type: ignore[arg-type]
+            rng,
+            shootout_strategy=bogus,
+        )
 
 
 def test_shootout_50_50_when_et_can_not_break_tie() -> None:

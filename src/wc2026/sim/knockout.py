@@ -19,6 +19,7 @@ Canada. The model's home_advantage is therefore not applied.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
@@ -28,6 +29,11 @@ from wc2026.models.poisson_dc import PoissonDC
 from wc2026.sim.groups import sample_scoreline
 
 DecidedIn = Literal["regulation", "extra_time", "shootout"]
+
+ShootoutStrategy = Callable[[str, str, np.random.Generator], str]
+"""(home_team, away_team, rng) -> winning team name. The default 50/50 strategy is
+built inline in ``simulate_knockout_match``; pass a different one (e.g. an Elo-based
+logistic from ``wc2026.models.shootout``) to override."""
 
 
 @dataclass(frozen=True)
@@ -58,8 +64,14 @@ def simulate_knockout_match(
     rng: np.random.Generator,
     *,
     neutral: bool = True,
+    shootout_strategy: ShootoutStrategy | None = None,
 ) -> KnockoutOutcome:
-    """Simulate one knockout match end-to-end. See module docstring for phases."""
+    """Simulate one knockout match end-to-end. See module docstring for phases.
+
+    If ``shootout_strategy`` is provided it replaces the 50/50 coin-flip when the
+    match is still tied after extra time. The strategy receives ``(home, away,
+    rng)`` and returns the winning team name.
+    """
     prob = model.score_probs(home_team, away_team, neutral=neutral)
     h, a = sample_scoreline(prob, rng)
     reg = (h, a)
@@ -94,8 +106,17 @@ def simulate_knockout_match(
             decided_in="extra_time",
         )
 
-    # Still tied after ET → shootout (50/50 placeholder).
-    shootout_winner = home_team if rng.random() < 0.5 else away_team
+    # Still tied after ET → shootout. Use the injected strategy if given;
+    # otherwise fall back to the documented 50/50 placeholder.
+    if shootout_strategy is not None:
+        shootout_winner = shootout_strategy(home_team, away_team, rng)
+        if shootout_winner not in (home_team, away_team):
+            raise ValueError(
+                f"shootout_strategy returned {shootout_winner!r}; "
+                f"must be either {home_team!r} or {away_team!r}"
+            )
+    else:
+        shootout_winner = home_team if rng.random() < 0.5 else away_team
     return KnockoutOutcome(
         home_team=home_team,
         away_team=away_team,

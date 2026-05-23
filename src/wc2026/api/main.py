@@ -15,8 +15,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from wc2026.api.routes import h2h, health, matches, predictions, teams, tournament
 from wc2026.features.match_weights import combined_weight
+from wc2026.ingest.eloratings_scraper import load_latest_snapshot
 from wc2026.ingest.kaggle_intl import load_played, load_scheduled
 from wc2026.models.poisson_dc import PoissonDC
+from wc2026.models.shootout import (
+    fit_shootout_model,
+    load_historical_shootouts,
+    simulate_shootout,
+)
 from wc2026.sim.fixtures import parse_wc2026_fixtures
 
 # Match Stage 0.6's tuned defaults.
@@ -40,6 +46,26 @@ def _fit_model(df: pd.DataFrame) -> PoissonDC:
     return PoissonDC().fit(train, weights=weights)
 
 
+def _build_shootout_strategy():
+    """Try to fit the Elo-based shootout submodel; return a strategy closure or None.
+
+    If the elo snapshot or the shootouts.csv are missing — or if the fit fails
+    (too few overlapping teams) — we silently fall back to None, and the
+    knockout simulator's built-in 50/50 coin flip takes over.
+    """
+    try:
+        elo = load_latest_snapshot()
+        shootouts = load_historical_shootouts()
+        model = fit_shootout_model(shootouts, elo)
+    except (FileNotFoundError, ValueError):
+        return None, None
+
+    def strategy(home: str, away: str, rng) -> str:
+        return simulate_shootout(home, away, model, None, rng)
+
+    return strategy, model
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Cache the full played-matches DataFrame once: the model fit uses a
@@ -50,6 +76,8 @@ async def lifespan(app: FastAPI):
     app.state.fixtures = parse_wc2026_fixtures(load_scheduled())
     app.state.model_version = MODEL_VERSION
     app.state.model_fit_at = datetime.now(UTC)
+    # Optional Elo-based shootout model; None falls back to the 50/50 placeholder.
+    app.state.shootout_strategy, app.state.shootout_model = _build_shootout_strategy()
     yield
 
 

@@ -26,7 +26,7 @@ from wc2026.sim.bracket import (
 )
 from wc2026.sim.fixtures import GROUP_LETTERS, WC2026Fixtures
 from wc2026.sim.groups import GroupResult, simulate_group
-from wc2026.sim.knockout import KnockoutOutcome, simulate_knockout_match
+from wc2026.sim.knockout import KnockoutOutcome, ShootoutStrategy, simulate_knockout_match
 from wc2026.sim.third_place import ThirdPlacedEntry, rank_third_placed
 
 # Columns of the aggregated probability table.
@@ -60,8 +60,14 @@ def simulate_tournament(
     rng: np.random.Generator,
     *,
     fifa_ranking: dict[str, int] | None = None,
+    shootout_strategy: ShootoutStrategy | None = None,
 ) -> TournamentResult:
-    """Run a single tournament simulation end-to-end."""
+    """Run a single tournament simulation end-to-end.
+
+    ``shootout_strategy``, when provided, replaces the 50/50 coin-flip on every
+    shootout (R32 → final). Pass an Elo-based logistic from
+    :mod:`wc2026.models.shootout` for slightly better than chance shootout calls.
+    """
     # --- group stage ---
     group_results: dict[str, GroupResult] = {}
     for letter in GROUP_LETTERS:
@@ -88,37 +94,34 @@ def simulate_tournament(
     knockout_results: dict[int, KnockoutOutcome] = {}
     winners_by_match: dict[int, str] = {}
 
+    def _ko(home: str, away: str) -> KnockoutOutcome:
+        return simulate_knockout_match(
+            home, away, model, rng, neutral=True, shootout_strategy=shootout_strategy
+        )
+
     # R32
     for mid, (a, b) in r32_matchups.items():
-        out = simulate_knockout_match(a, b, model, rng, neutral=True)
+        out = _ko(a, b)
         knockout_results[mid] = out
         winners_by_match[mid] = out.winner
 
     # R16, QF, SF
     for mid, ma, mb in R16_PAIRS:
-        out = simulate_knockout_match(
-            winners_by_match[ma], winners_by_match[mb], model, rng, neutral=True
-        )
+        out = _ko(winners_by_match[ma], winners_by_match[mb])
         knockout_results[mid] = out
         winners_by_match[mid] = out.winner
     for mid, ma, mb in QF_PAIRS:
-        out = simulate_knockout_match(
-            winners_by_match[ma], winners_by_match[mb], model, rng, neutral=True
-        )
+        out = _ko(winners_by_match[ma], winners_by_match[mb])
         knockout_results[mid] = out
         winners_by_match[mid] = out.winner
     for mid, ma, mb in SF_PAIRS:
-        out = simulate_knockout_match(
-            winners_by_match[ma], winners_by_match[mb], model, rng, neutral=True
-        )
+        out = _ko(winners_by_match[ma], winners_by_match[mb])
         knockout_results[mid] = out
         winners_by_match[mid] = out.winner
 
     # Final
     final_id, sf1, sf2 = FINAL_PAIR
-    out = simulate_knockout_match(
-        winners_by_match[sf1], winners_by_match[sf2], model, rng, neutral=True
-    )
+    out = _ko(winners_by_match[sf1], winners_by_match[sf2])
     knockout_results[final_id] = out
     champion = out.winner
 
@@ -149,6 +152,7 @@ def simulate_tournament_monte_carlo(
     n_sims: int = 10_000,
     seed: int = 42,
     fifa_ranking: dict[str, int] | None = None,
+    shootout_strategy: ShootoutStrategy | None = None,
 ) -> TournamentSummary:
     """Run ``n_sims`` simulations; return per-team advancement probabilities."""
     if n_sims <= 0:
@@ -158,7 +162,13 @@ def simulate_tournament_monte_carlo(
 
     rng = np.random.default_rng(seed)
     for _ in range(n_sims):
-        result = simulate_tournament(fixtures, model, rng, fifa_ranking=fifa_ranking)
+        result = simulate_tournament(
+            fixtures,
+            model,
+            rng,
+            fifa_ranking=fifa_ranking,
+            shootout_strategy=shootout_strategy,
+        )
         _update_counters_from_result(counters, result)
 
     df = pd.DataFrame.from_dict(counters, orient="index", columns=list(ROUND_COLUMNS))
