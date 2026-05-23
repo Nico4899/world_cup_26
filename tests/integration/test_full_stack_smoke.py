@@ -116,6 +116,4 @@ def test_dashboard_page_renders_without_exception(script: Path, api_ready: dict)
 
     at = AppTest.from_file(str(script), default_timeout=30.0)
     at.run()
-    assert not at.exception, (
-        f"{script.name} raised: " + "; ".join(str(e) for e in at.exception)
-    )
+    assert not at.exception, f"{script.name} raised: " + "; ".join(str(e) for e in at.exception)

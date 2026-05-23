@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from wc2026.scheduler import jobs as job_mod
 
@@ -188,3 +191,93 @@ def test_db_backup_prune_removes_files_older_than_retention(tmp_path):
 
 def test_db_backup_prune_returns_zero_when_dir_missing(tmp_path):
     assert job_mod._prune_backups(tmp_path / "does-not-exist") == 0
+
+
+# --- tournament-window standings cache warm --------------------------------
+
+
+def test_is_tournament_window_recognises_window_bounds():
+    assert not job_mod.is_tournament_window(date(2026, 6, 10))
+    assert job_mod.is_tournament_window(date(2026, 6, 11))  # opener
+    assert job_mod.is_tournament_window(date(2026, 6, 25))
+    assert job_mod.is_tournament_window(date(2026, 7, 19))  # final day
+    assert not job_mod.is_tournament_window(date(2026, 7, 20))
+
+
+def test_register_jobs_skips_standings_warm_outside_tournament_window():
+    scheduler = BackgroundScheduler(timezone="UTC")
+    job_mod.register_jobs(scheduler, today=date(2026, 5, 23))
+    ids = {j.id for j in scheduler.get_jobs()}
+    assert "standings_cache_warm" not in ids
+    # All cron jobs still registered.
+    assert ids == {s.name for s in job_mod.JOB_SPECS}
+
+
+def test_register_jobs_adds_standings_warm_inside_tournament_window():
+    scheduler = BackgroundScheduler(timezone="UTC")
+    job_mod.register_jobs(scheduler, today=date(2026, 6, 25))
+    by_id = {j.id: j for j in scheduler.get_jobs()}
+    assert "standings_cache_warm" in by_id
+    trig = by_id["standings_cache_warm"].trigger
+    assert isinstance(trig, IntervalTrigger)
+    # Interval should match the documented STANDINGS_WARM_INTERVAL_MINUTES.
+    expected = job_mod.STANDINGS_WARM_INTERVAL_MINUTES * 60
+    assert int(trig.interval.total_seconds()) == expected
+
+
+def test_warm_standings_cache_no_ops_outside_window(monkeypatch):
+    """Even if directly invoked outside the tournament window, the job should
+    not hit the network (defensive guard against mis-registration)."""
+    import httpx as _httpx
+
+    called = {"get": 0}
+
+    def fake_get(*args, **kwargs):
+        called["get"] += 1
+        raise AssertionError("must not call httpx.get outside the window")
+
+    monkeypatch.setattr(_httpx, "get", fake_get)
+    # Frozen "today" via a temporary monkeypatch of datetime in the module.
+    monkeypatch.setattr(
+        job_mod,
+        "WC_TOURNAMENT_START",
+        date(2099, 1, 1),  # window in the far future → today is "outside"
+    )
+    job_mod._job_warm_standings_cache(api_url="http://fake")
+    assert called["get"] == 0
+
+
+def test_warm_standings_cache_calls_api_inside_window(monkeypatch):
+    import httpx as _httpx
+
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_START", date(1900, 1, 1))
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_END", date(2999, 12, 31))
+
+    captured = {}
+
+    class FakeResp:
+        def raise_for_status(self) -> None:
+            return None
+
+    def fake_get(url, *, timeout):
+        captured["url"] = url
+        captured["timeout"] = timeout
+        return FakeResp()
+
+    monkeypatch.setattr(_httpx, "get", fake_get)
+    job_mod._job_warm_standings_cache(api_url="http://api.example:8000/")
+    assert captured["url"] == "http://api.example:8000/api/v1/tournament/standings"
+
+
+def test_warm_standings_cache_swallows_http_errors(monkeypatch, caplog):
+    import httpx as _httpx
+
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_START", date(1900, 1, 1))
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_END", date(2999, 12, 31))
+
+    def fake_get(*args, **kwargs):
+        raise _httpx.ConnectError("boom")
+
+    monkeypatch.setattr(_httpx, "get", fake_get)
+    # Must not raise.
+    job_mod._job_warm_standings_cache(api_url="http://fake")

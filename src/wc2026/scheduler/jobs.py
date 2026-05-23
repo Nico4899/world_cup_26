@@ -8,6 +8,15 @@ Schedule (UTC)
     05:00  Poisson + Dixon-Coles model refit → data/artifacts/poisson_dc/latest.npz
            (also refits the Elo-based shootout submodel → data/artifacts/shootout/latest.json)
 
+Tournament-only (registered only when today ∈ [2026-06-11, 2026-07-19]):
+    every 60 min  Warm the API's /tournament/standings cache via HTTP so the
+                  dashboard sees a freshly-recomputed Monte Carlo on the next
+                  refresh. Does NOT condition on completed matches yet — the
+                  simulator still sims every match from scratch using the latest
+                  daily-refit model parameters. Conditional re-simulation
+                  against in-tournament results is a larger feature deferred
+                  until a results-ingest pipeline lands.
+
 Each job writes a row to ``scheduler_job_runs`` so the run history is visible
 in Postgres. If the DB is unavailable, the failure is logged but does not
 abort the scheduler process — the next tick will retry.
@@ -29,14 +38,16 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pandas as pd
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from wc2026.db.models import SchedulerJobRun
 from wc2026.db.session import session_scope
@@ -49,6 +60,10 @@ from wc2026.ingest.kaggle_intl import download_dataset
 
 DEFAULT_BACKUP_DIR = Path("data/backups")
 BACKUP_RETENTION_DAYS = 14
+
+WC_TOURNAMENT_START = date(2026, 6, 11)
+WC_TOURNAMENT_END = date(2026, 7, 19)
+STANDINGS_WARM_INTERVAL_MINUTES = 60
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +144,25 @@ def _job_poisson_refit() -> None:
     refit_and_save(ref_date=pd.Timestamp(datetime.now(UTC).date()))
 
 
+def _job_warm_standings_cache(api_url: str | None = None, timeout_s: float = 60.0) -> None:
+    """Force the API to recompute its standings cache against the latest model.
+
+    No-op outside the tournament window — but the job is also only *registered*
+    inside the window, so this guard is belt-and-braces. Failures are logged but
+    swallowed so a transient API outage doesn't fail the scheduler.
+    """
+    today = datetime.now(UTC).date()
+    if not (WC_TOURNAMENT_START <= today <= WC_TOURNAMENT_END):
+        return
+    url = (api_url or os.environ.get("WC2026_API_URL", "http://localhost:8000")).rstrip("/")
+    try:
+        # Default n_sims; the API will recompute if its cache entry is older than its TTL.
+        r = httpx.get(f"{url}/api/v1/tournament/standings", timeout=timeout_s)
+        r.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("standings cache-warm hit %s failed: %s", url, exc)
+
+
 JOB_SPECS: tuple[JobSpec, ...] = (
     JobSpec(name="db_backup", hour=2, minute=0, func=_job_db_backup),
     JobSpec(name="kaggle_refresh", hour=4, minute=0, func=_job_kaggle_refresh),
@@ -141,6 +175,12 @@ JOB_SPECS: tuple[JobSpec, ...] = (
     ),
     JobSpec(name="poisson_refit", hour=5, minute=0, func=_job_poisson_refit),
 )
+
+
+def is_tournament_window(today: date | None = None) -> bool:
+    """True when ``today`` (or now if None) is within the WC 2026 match window."""
+    d = today or datetime.now(UTC).date()
+    return WC_TOURNAMENT_START <= d <= WC_TOURNAMENT_END
 
 
 def _record_job_run(name: str, started_at: datetime, status: str, error_text: str | None) -> None:
@@ -182,14 +222,34 @@ def _wrap_with_tracking(spec: JobSpec) -> Callable[[], None]:
 def register_jobs(
     scheduler: BlockingScheduler | BackgroundScheduler,
     specs: tuple[JobSpec, ...] = JOB_SPECS,
+    *,
+    today: date | None = None,
 ) -> None:
-    """Attach every spec to the scheduler as a UTC cron trigger."""
+    """Attach every cron spec to the scheduler.
+
+    Inside the tournament window, also attach the interval-triggered standings
+    cache-warm job. The ``today`` arg lets tests pin the window decision.
+    """
     for spec in specs:
         scheduler.add_job(
             _wrap_with_tracking(spec),
             trigger=CronTrigger(hour=spec.hour, minute=spec.minute, timezone="UTC"),
             id=spec.name,
             name=spec.name,
+            replace_existing=True,
+        )
+    if is_tournament_window(today):
+        warm_spec = JobSpec(
+            name="standings_cache_warm",
+            hour=-1,
+            minute=-1,
+            func=_job_warm_standings_cache,
+        )
+        scheduler.add_job(
+            _wrap_with_tracking(warm_spec),
+            trigger=IntervalTrigger(minutes=STANDINGS_WARM_INTERVAL_MINUTES, timezone="UTC"),
+            id=warm_spec.name,
+            name=warm_spec.name,
             replace_existing=True,
         )
 
@@ -213,8 +273,12 @@ if __name__ == "__main__":
 
 __all__ = [
     "JOB_SPECS",
+    "STANDINGS_WARM_INTERVAL_MINUTES",
+    "WC_TOURNAMENT_END",
+    "WC_TOURNAMENT_START",
     "JobSpec",
     "build_scheduler",
+    "is_tournament_window",
     "main",
     "register_jobs",
 ]
