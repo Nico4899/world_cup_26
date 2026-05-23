@@ -256,6 +256,24 @@ def _job_poisson_refit() -> None:
     refit_and_save(ref_date=pd.Timestamp(datetime.now(UTC).date()))
 
 
+def _job_features_rebuild() -> None:
+    """Rebuild the materialised features_match_features table.
+
+    Runs after ``poisson_refit`` so the Poisson outputs in each row match the
+    freshly-fit artefact. Skipped (with a logged warning) when no
+    ``DATABASE_URL`` / ``WC2026_DATABASE_URL`` is set — without a DB there's
+    nowhere to persist to.
+    """
+    if not (os.environ.get("DATABASE_URL") or os.environ.get("WC2026_DATABASE_URL")):
+        logger.warning(
+            "neither DATABASE_URL nor WC2026_DATABASE_URL set — skipping features rebuild"
+        )
+        return
+    from scripts.build_features import build_and_persist_features  # noqa: PLC0415
+
+    build_and_persist_features()
+
+
 def _job_warm_standings_cache(api_url: str | None = None, timeout_s: float = 60.0) -> None:
     """Force the API to recompute its standings cache against the latest model.
 
@@ -286,6 +304,7 @@ JOB_SPECS: tuple[JobSpec, ...] = (
         func=_job_football_data_refresh,
     ),
     JobSpec(name="poisson_refit", hour=5, minute=0, func=_job_poisson_refit),
+    JobSpec(name="features_rebuild", hour=5, minute=15, func=_job_features_rebuild),
     # Weekly Sunday 03:00 — TheSportsDB metadata + openfootball cup.txt.
     JobSpec(
         name="thesportsdb_refresh",

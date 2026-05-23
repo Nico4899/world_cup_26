@@ -135,9 +135,7 @@ def _squad_age_diff(spec: MatchSpec, sources: FeatureSources) -> float | None:
     return _diff(h, a)
 
 
-def _poisson_features(
-    spec: MatchSpec, sources: FeatureSources
-) -> dict[str, float | None]:
+def _poisson_features(spec: MatchSpec, sources: FeatureSources) -> dict[str, float | None]:
     if sources.poisson_model is None:
         return {
             "poisson_exp_home_goals": None,
@@ -171,9 +169,7 @@ def _poisson_features(
     }
 
 
-def build_features_for_match(
-    spec: MatchSpec, sources: FeatureSources
-) -> dict[str, Any]:
+def build_features_for_match(spec: MatchSpec, sources: FeatureSources) -> dict[str, Any]:
     """Return a single feature dict matching the ``MatchFeatures`` schema.
 
     Numeric features whose upstream source is missing come back as ``None``;
@@ -198,9 +194,7 @@ def build_features_for_match(
     return row
 
 
-def build_features_for_matches(
-    specs: list[MatchSpec], sources: FeatureSources
-) -> pd.DataFrame:
+def build_features_for_matches(specs: list[MatchSpec], sources: FeatureSources) -> pd.DataFrame:
     """Vectorised wrapper: apply ``build_features_for_match`` to every spec."""
     return pd.DataFrame([build_features_for_match(s, sources) for s in specs])
 

@@ -11,10 +11,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 from wc2026.scheduler import jobs as job_mod
 
 
-def test_job_specs_have_ten_entries_at_distinct_slots():
+def test_job_specs_have_eleven_entries_at_distinct_slots():
     slots = {(s.hour, s.minute, s.day_of_week, s.day) for s in job_mod.JOB_SPECS}
-    assert len(job_mod.JOB_SPECS) == 10
-    assert len(slots) == 10, "expected ten distinct (hour, minute, day_of_week, day) slots"
+    assert len(job_mod.JOB_SPECS) == 11
+    assert len(slots) == 11, "expected eleven distinct (hour, minute, day_of_week, day) slots"
 
 
 def test_job_specs_use_expected_names_and_window():
@@ -25,6 +25,7 @@ def test_job_specs_use_expected_names_and_window():
         "elo_refresh",
         "football_data_org_refresh",
         "poisson_refit",
+        "features_rebuild",
         "thesportsdb_refresh",
         "openfootball_refresh",
         "fifa_ranking_refresh",
@@ -32,8 +33,8 @@ def test_job_specs_use_expected_names_and_window():
         "fbref_refresh",
     }
     for spec in job_mod.JOB_SPECS:
-        # 02:xx backup, 03:xx weekly metadata + odds, 04:xx ingest, 05:00 refit
-        # (+ 05:30 weekly FBref), 06:00 monthly ranking.
+        # 02:xx backup, 03:xx weekly metadata + odds, 04:xx ingest, 05:00 refit,
+        # 05:15 daily feature rebuild, 05:30 weekly FBref, 06:00 monthly ranking.
         assert spec.hour in (2, 3, 4, 5, 6)
         assert spec.minute in {0, 15, 30, 45}
 
@@ -128,6 +129,39 @@ def test_wrap_with_tracking_records_error_when_func_raises(monkeypatch):
     assert name == "t_err"
     assert status == "error"
     assert "kaboom" in err
+
+
+def test_features_rebuild_job_no_ops_without_database_url(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("WC2026_DATABASE_URL", raising=False)
+    # Patch the build script in scripts.build_features so a stray attempt to
+    # call it would be visible.
+    import scripts.build_features as bf
+
+    called = {"n": 0}
+
+    def fake_build(**_):
+        called["n"] += 1
+        return 0
+
+    monkeypatch.setattr(bf, "build_and_persist_features", fake_build)
+    job_mod._job_features_rebuild()
+    assert called["n"] == 0
+
+
+def test_features_rebuild_job_calls_build_when_database_url_set(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@z/db")
+    import scripts.build_features as bf
+
+    called = {"n": 0}
+
+    def fake_build(**_):
+        called["n"] += 1
+        return 72
+
+    monkeypatch.setattr(bf, "build_and_persist_features", fake_build)
+    job_mod._job_features_rebuild()
+    assert called["n"] == 1
 
 
 def test_football_data_job_no_ops_without_api_key(monkeypatch):

@@ -40,9 +40,7 @@ def last_match_date(
     """
     df = _validate(matches)
     as_of_ts = pd.Timestamp(as_of)
-    involved = df[
-        ((df["home_team"] == team) | (df["away_team"] == team)) & (df["date"] < as_of_ts)
-    ]
+    involved = df[((df["home_team"] == team) | (df["away_team"] == team)) & (df["date"] < as_of_ts)]
     if involved.empty:
         return None
     return involved["date"].max().date()

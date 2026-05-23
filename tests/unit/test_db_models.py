@@ -286,7 +286,10 @@ def test_match_features_round_trip_with_json_provenance(sqlite_engine):
             "elo_snapshot_date": "2026-05-23",
             "model_version": "poisson_dc.v1",
         }
-        assert abs((loaded.poisson_p_home + loaded.poisson_p_draw + loaded.poisson_p_away) - 1.0) < 1e-9
+        assert (
+            abs((loaded.poisson_p_home + loaded.poisson_p_draw + loaded.poisson_p_away) - 1.0)
+            < 1e-9
+        )
 
 
 def test_raw_match_xg_composite_pk_allows_multiple_sources(sqlite_engine):

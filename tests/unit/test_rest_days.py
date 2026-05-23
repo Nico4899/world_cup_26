@@ -71,9 +71,7 @@ def test_rest_days_zero_for_same_day_doubleheader() -> None:
 def test_rest_days_diff_positive_when_home_better_rested() -> None:
     # As of 2026-06-12: Argentina last played 2026-06-05 (7 days);
     # France last played 2026-06-05 (7 days). Diff = 0.
-    diff = rest_days_diff(
-        _matches(), home="Argentina", away="France", as_of=date(2026, 6, 12)
-    )
+    diff = rest_days_diff(_matches(), home="Argentina", away="France", as_of=date(2026, 6, 12))
     assert diff == 0
 
 
@@ -81,16 +79,12 @@ def test_rest_days_diff_picks_up_asymmetry() -> None:
     # France played 2026-05-30 + 2026-06-05; Argentina played 2026-05-10 + 2026-06-05.
     # As of 2026-06-06: both played 2026-06-05 → diff = 0.
     # As of 2026-06-04 (before June 5 matches): France = 2026-05-30 (5d), Argentina = 2026-05-10 (25d).
-    diff = rest_days_diff(
-        _matches(), home="Argentina", away="France", as_of=date(2026, 6, 4)
-    )
+    diff = rest_days_diff(_matches(), home="Argentina", away="France", as_of=date(2026, 6, 4))
     assert diff == 25 - 5
 
 
 def test_rest_days_diff_returns_none_when_either_team_missing() -> None:
-    diff = rest_days_diff(
-        _matches(), home="Argentina", away="Atlantis", as_of=date(2026, 6, 11)
-    )
+    diff = rest_days_diff(_matches(), home="Argentina", away="Atlantis", as_of=date(2026, 6, 11))
     assert diff is None
 
 

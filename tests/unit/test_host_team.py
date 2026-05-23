@@ -6,7 +6,7 @@ from wc2026.features.host_team import WC_2026_HOSTS, is_host
 
 
 def test_wc_2026_hosts_set_contains_exactly_three_countries() -> None:
-    assert WC_2026_HOSTS == frozenset({"United States", "Mexico", "Canada"})
+    assert frozenset({"United States", "Mexico", "Canada"}) == WC_2026_HOSTS
 
 
 def test_is_host_is_one_for_each_host_nation() -> None:
