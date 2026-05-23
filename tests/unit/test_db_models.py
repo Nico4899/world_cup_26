@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from wc2026.db.models import (
     Base,
+    MatchFeatures,
     ModelPrediction,
     RawEloSnapshot,
     RawFifaRanking,
@@ -53,6 +54,7 @@ def test_all_expected_tables_are_registered(sqlite_engine):
         "raw_squads",
         "raw_fifa_rankings",
         "raw_match_xg",
+        "features_match_features",
     }
     assert expected.issubset(tables), f"missing tables: {expected - tables}"
 
@@ -249,6 +251,42 @@ def test_raw_fifa_ranking_round_trip(sqlite_engine):
         loaded = s.scalar(select(RawFifaRanking))
         assert loaded.rank == 1
         assert loaded.points == 1886.16
+
+
+def test_match_features_round_trip_with_json_provenance(sqlite_engine):
+    with Session(sqlite_engine) as s:
+        row = MatchFeatures(
+            match_date=date(2026, 6, 11),
+            home_team="Mexico",
+            away_team="Senegal",
+            elo_diff=-58.2,
+            fifa_rank_diff=-5,
+            xg_form_diff=0.34,
+            rest_days_diff=2,
+            squad_age_diff=0.7,
+            is_neutral=0,
+            is_host_home=1,
+            is_host_away=0,
+            poisson_exp_home_goals=1.46,
+            poisson_exp_away_goals=1.10,
+            poisson_p_home=0.47,
+            poisson_p_draw=0.27,
+            poisson_p_away=0.26,
+            source_snapshots={
+                "elo_snapshot_date": "2026-05-23",
+                "model_version": "poisson_dc.v1",
+            },
+            built_at=datetime.now(UTC),
+        )
+        s.add(row)
+        s.commit()
+        loaded = s.scalar(select(MatchFeatures))
+        assert loaded.is_host_home == 1
+        assert loaded.source_snapshots == {
+            "elo_snapshot_date": "2026-05-23",
+            "model_version": "poisson_dc.v1",
+        }
+        assert abs((loaded.poisson_p_home + loaded.poisson_p_draw + loaded.poisson_p_away) - 1.0) < 1e-9
 
 
 def test_raw_match_xg_composite_pk_allows_multiple_sources(sqlite_engine):

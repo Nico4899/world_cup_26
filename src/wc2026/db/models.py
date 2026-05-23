@@ -197,6 +197,43 @@ class RawFifaRanking(Base):
     )
 
 
+class MatchFeatures(Base):
+    """Materialised per-match feature row consumed by Phase 5's XGBoost model.
+
+    One row per (home_team, away_team, match_date). Numeric features are NaN-
+    tolerant: callers downstream decide how to impute missing values. The
+    ``source_snapshots`` JSON column records *which* upstream snapshots fed
+    this row so a regression can be re-pinned to the exact data state.
+    """
+
+    __tablename__ = "features_match_features"
+
+    match_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    home_team: Mapped[str] = mapped_column(String(128), primary_key=True)
+    away_team: Mapped[str] = mapped_column(String(128), primary_key=True)
+
+    elo_diff: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fifa_rank_diff: Mapped[float | None] = mapped_column(Float, nullable=True)
+    xg_form_diff: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rest_days_diff: Mapped[float | None] = mapped_column(Float, nullable=True)
+    squad_age_diff: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    is_neutral: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_host_home: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_host_away: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    poisson_exp_home_goals: Mapped[float | None] = mapped_column(Float, nullable=True)
+    poisson_exp_away_goals: Mapped[float | None] = mapped_column(Float, nullable=True)
+    poisson_p_home: Mapped[float | None] = mapped_column(Float, nullable=True)
+    poisson_p_draw: Mapped[float | None] = mapped_column(Float, nullable=True)
+    poisson_p_away: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    source_snapshots: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    built_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
 class RawMatchXg(Base):
     """Per-match, per-team expected-goals aggregate.
 
@@ -226,6 +263,7 @@ class RawMatchXg(Base):
 
 __all__ = [
     "Base",
+    "MatchFeatures",
     "ModelPrediction",
     "RawEloSnapshot",
     "RawFifaRanking",
