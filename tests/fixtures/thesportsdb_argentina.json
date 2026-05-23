@@ -1,0 +1,24 @@
+{
+  "teams": [
+    {
+      "idTeam": "133602",
+      "strTeam": "Argentina",
+      "strSport": "Soccer",
+      "strLeague": "FIFA World Cup",
+      "strCountry": "Argentina",
+      "strStadium": "Estadio Monumental",
+      "intStadiumCapacity": "83214",
+      "strStadiumLocation": "Buenos Aires",
+      "strBadge": "https://example.test/badges/argentina.png",
+      "strKitColour1": "#75AADB",
+      "strKitColour2": "#000080",
+      "strKitColour3": "#FFFFFF"
+    },
+    {
+      "idTeam": "999999",
+      "strTeam": "Argentina U20",
+      "strSport": "Soccer",
+      "strCountry": "Argentina"
+    }
+  ]
+}
