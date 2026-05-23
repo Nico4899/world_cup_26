@@ -12,6 +12,7 @@ from wc2026.models.shootout import (
     ShootoutModel,
     fit_shootout_model,
     load_historical_shootouts,
+    load_shootout_model,
     predict_shootout,
     simulate_shootout,
 )
@@ -193,3 +194,33 @@ def test_loader_reads_real_jurisoo_file_when_available() -> None:
     assert "home_team_won" in df.columns
     assert len(df) > 100
     assert df["date"].dtype.kind == "M"
+
+
+# --- save / load round-trip --------------------------------------------------
+
+
+def test_shootout_model_save_load_round_trip(tmp_path) -> None:
+    """A round-tripped model must yield identical predictions."""
+    original = ShootoutModel(
+        slope=0.00123,
+        elo_lookup={"Argentina": 2100.5, "France": 2050.25, "Atlantis": 1500.0},
+        n_train=312,
+    )
+    path = tmp_path / "shootout" / "latest.json"
+    original.save(path)
+    assert path.exists()
+    loaded = load_shootout_model(path)
+    assert loaded.slope == pytest.approx(original.slope)
+    assert loaded.n_train == original.n_train
+    assert loaded.elo_lookup == original.elo_lookup
+    # Equality of predictions for an Elo pair the model has.
+    assert loaded.predict_home_win("Argentina", "France") == pytest.approx(
+        original.predict_home_win("Argentina", "France")
+    )
+
+
+def test_shootout_model_save_creates_missing_parent_dirs(tmp_path) -> None:
+    """save() must mkdir its parent (mirroring PoissonDC.save semantics)."""
+    deep_path = tmp_path / "data" / "artifacts" / "shootout" / "latest.json"
+    ShootoutModel(slope=0.001, elo_lookup={"A": 1500.0}, n_train=10).save(deep_path)
+    assert deep_path.exists()

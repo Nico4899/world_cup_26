@@ -32,7 +32,8 @@ mirrored locally.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
@@ -100,6 +101,21 @@ class ShootoutModel:
             return 0.5
         z = self.slope * (home_elo - away_elo)
         return float(1.0 / (1.0 + np.exp(-z)))
+
+    def save(self, path: Path) -> None:
+        """Persist as JSON — small (~20 KB) and human-inspectable for an audit log."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(asdict(self)))
+
+
+def load_shootout_model(path: Path) -> ShootoutModel:
+    """Inverse of :meth:`ShootoutModel.save`."""
+    payload = json.loads(path.read_text())
+    return ShootoutModel(
+        slope=float(payload["slope"]),
+        elo_lookup={str(k): float(v) for k, v in payload["elo_lookup"].items()},
+        n_train=int(payload["n_train"]),
+    )
 
 
 def fit_shootout_model(

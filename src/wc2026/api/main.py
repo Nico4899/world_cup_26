@@ -22,11 +22,13 @@ from wc2026.models.poisson_dc import PoissonDC, PoissonDCParams
 from wc2026.models.shootout import (
     fit_shootout_model,
     load_historical_shootouts,
+    load_shootout_model,
     simulate_shootout,
 )
 from wc2026.sim.fixtures import load_group_assignment, parse_wc2026_fixtures
 
 ARTEFACT_PATH = Path("data/artifacts/poisson_dc/latest.npz")
+SHOOTOUT_ARTEFACT_PATH = Path("data/artifacts/shootout/latest.json")
 GROUP_ASSIGNMENT_PATH = Path("data/wc2026_group_assignment.json")
 
 # Match Stage 0.6's tuned defaults.
@@ -74,27 +76,44 @@ def _load_or_fit_model(df: pd.DataFrame) -> tuple[PoissonDC, str, datetime]:
 
 
 def _build_shootout_strategy():
-    """Try to fit the Elo-based shootout submodel; return a strategy + metadata.
+    """Resolve the Elo-based shootout submodel; return a strategy + metadata.
 
-    If the elo snapshot or the shootouts.csv are missing — or if the fit fails
-    (too few overlapping teams) — we silently fall back to ``(None, None, None)``
-    and the knockout simulator's built-in 50/50 coin flip takes over.
+    Resolution order:
+        1. ``data/artifacts/shootout/latest.json`` — fresh from the daily refit.
+        2. In-process fit against the on-disk Elo snapshot + shootouts CSV.
+        3. None (knockout simulator's 50/50 coin flip takes over).
 
     Returns ``(strategy, fitted_model, elo_snapshot_date)``. The snapshot date is
     surfaced on /health so operators can spot a stale Elo file.
     """
-    try:
-        elo = load_latest_snapshot()
-        shootouts = load_historical_shootouts()
-        model = fit_shootout_model(shootouts, elo)
-    except (FileNotFoundError, ValueError):
-        return None, None, None
+    model = None
+    if SHOOTOUT_ARTEFACT_PATH.exists():
+        try:
+            model = load_shootout_model(SHOOTOUT_ARTEFACT_PATH)
+        except (OSError, ValueError, KeyError):
+            model = None
+
+    elo = None
+    if model is None:
+        try:
+            elo = load_latest_snapshot()
+            shootouts = load_historical_shootouts()
+            model = fit_shootout_model(shootouts, elo)
+        except (FileNotFoundError, ValueError):
+            return None, None, None
+    else:
+        # Still load the snapshot to surface its freshness on /health, but don't
+        # let a snapshot-read failure invalidate an already-loaded artefact.
+        try:
+            elo = load_latest_snapshot()
+        except (FileNotFoundError, ValueError):
+            elo = None
 
     def strategy(home: str, away: str, rng) -> str:
         return simulate_shootout(home, away, model, None, rng)
 
     snapshot_date = None
-    if "snapshot_date" in elo.columns and not elo["snapshot_date"].empty:
+    if elo is not None and "snapshot_date" in elo.columns and not elo["snapshot_date"].empty:
         snapshot_date = pd.to_datetime(elo["snapshot_date"].iloc[0]).date()
     return strategy, model, snapshot_date
 

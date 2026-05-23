@@ -8,13 +8,19 @@ Used by the daily scheduler job; can also be run manually:
 Writes ``data/artifacts/poisson_dc/latest.npz`` (overwriting) plus a dated copy
 ``data/artifacts/poisson_dc/YYYY-MM-DD.npz`` for audit history.
 
-The API picks up the latest artefact on lifespan startup; restart the API
+Also re-fits the Elo-based shootout submodel against the freshest eloratings
+snapshot and persists it to ``data/artifacts/shootout/latest.json`` (with a
+dated copy). If the snapshot or historical-shootouts CSV are missing, the
+shootout refit is skipped with a warning — the Poisson refit still succeeds.
+
+The API picks up the latest artefacts on lifespan startup; restart the API
 service to use a freshly-refitted model.
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 import time
 from datetime import UTC, datetime
@@ -23,23 +29,56 @@ from pathlib import Path
 import pandas as pd
 
 from wc2026.features.match_weights import combined_weight
+from wc2026.ingest.eloratings_scraper import load_latest_snapshot
 from wc2026.ingest.kaggle_intl import load_played
 from wc2026.models.poisson_dc import PoissonDC
+from wc2026.models.shootout import fit_shootout_model, load_historical_shootouts
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_ARTEFACT_DIR = Path("data/artifacts/poisson_dc")
+DEFAULT_SHOOTOUT_DIR = Path("data/artifacts/shootout")
 DEFAULT_HALF_LIFE_DAYS = 3650.0
 DEFAULT_HISTORY_YEARS = 10
+
+
+def _refit_shootout(
+    ref_date: pd.Timestamp,
+    shootout_dir: Path = DEFAULT_SHOOTOUT_DIR,
+) -> Path | None:
+    """Best-effort: refit the Elo-based shootout model from the latest snapshot.
+
+    Returns the written latest.json path, or None if inputs are missing / the
+    fit could not converge. Never raises — the daily job should still succeed
+    if eloratings.net was briefly unreachable.
+    """
+    try:
+        elo = load_latest_snapshot()
+        shootouts = load_historical_shootouts()
+        model = fit_shootout_model(shootouts, elo)
+    except (FileNotFoundError, ValueError) as exc:
+        logger.warning("shootout refit skipped: %s", exc)
+        return None
+    dated = shootout_dir / f"{ref_date:%Y-%m-%d}.json"
+    latest = shootout_dir / "latest.json"
+    model.save(dated)
+    model.save(latest)
+    print(f"shootout refit: slope={model.slope:+.6f} n_train={model.n_train} → {latest}")
+    return latest
 
 
 def refit_and_save(
     ref_date: pd.Timestamp,
     *,
     artefact_dir: Path = DEFAULT_ARTEFACT_DIR,
+    shootout_dir: Path = DEFAULT_SHOOTOUT_DIR,
     half_life_days: float = DEFAULT_HALF_LIFE_DAYS,
     history_years: int = DEFAULT_HISTORY_YEARS,
 ) -> Path:
     """Fit a PoissonDC on the last ``history_years`` and persist to artefact_dir.
 
+    Also re-fits the shootout submodel and writes it to ``shootout_dir``
+    (best-effort: skipped silently if Elo or shootouts inputs are missing).
     Returns the path of the written latest.npz.
     """
     cutoff = ref_date - pd.Timedelta(days=int(history_years * 365.25))
@@ -62,6 +101,7 @@ def refit_and_save(
         f"rho={model.params_.rho:.4f} · "
         f"written to {latest_path} (+ {dated_path.name})"
     )
+    _refit_shootout(ref_date, shootout_dir=shootout_dir)
     return latest_path
 
 
