@@ -218,6 +218,89 @@ def test_strong_prior_recovers_centres_on_tiny_data() -> None:
     assert np.allclose(model.params_.defence, expected_defence, atol=0.05)
 
 
+def test_init_rejects_negative_prior_strength() -> None:
+    with pytest.raises(ValueError, match="prior_strength must be >= 0"):
+        PoissonDCWithPrior(
+            attack_centres=np.zeros(3),
+            defence_centres=np.zeros(3),
+            teams=["A", "B", "C"],
+            prior_strength=-0.1,
+        )
+
+
+def test_init_rejects_mismatched_centre_shapes() -> None:
+    with pytest.raises(ValueError, match="centre shapes"):
+        PoissonDCWithPrior(
+            attack_centres=np.zeros(3),
+            defence_centres=np.zeros(2),  # wrong length
+            teams=["A", "B", "C"],
+        )
+    with pytest.raises(ValueError, match="centre shapes"):
+        PoissonDCWithPrior(
+            attack_centres=np.zeros(4),  # wrong length
+            defence_centres=np.zeros(3),
+            teams=["A", "B", "C"],
+        )
+
+
+def test_fit_treats_missing_team_centre_as_zero() -> None:
+    """A team absent from the prior must behave identically to a team given an
+    explicit (0, 0) centre — i.e. the fallback path is a no-op for that team."""
+    rng = np.random.default_rng(99)
+    teams = ["A", "B", "C"]
+    df = _simulate_matches(
+        teams=teams,
+        true_attack=np.array([0.3, 0.0, -0.3]),
+        true_defence=np.array([-0.2, 0.0, 0.2]),
+        home_advantage=0.25,
+        n_matches=600,
+        rng=rng,
+    )
+    # Variant 1: prior covers all three teams, with C explicitly at (0, 0).
+    explicit = PoissonDCWithPrior(
+        attack_centres=np.array([0.2, -0.1, 0.0]),
+        defence_centres=np.array([-0.1, 0.0, 0.0]),
+        teams=["A", "B", "C"],
+        prior_strength=1.5,
+    ).fit(df)
+    # Variant 2: prior omits C entirely; should fall back to (0, 0).
+    implicit = PoissonDCWithPrior(
+        attack_centres=np.array([0.2, -0.1]),
+        defence_centres=np.array([-0.1, 0.0]),
+        teams=["A", "B"],
+        prior_strength=1.5,
+    ).fit(df)
+    assert explicit.params_.teams == implicit.params_.teams
+    assert np.allclose(explicit.params_.attack, implicit.params_.attack, atol=1e-5)
+    assert np.allclose(explicit.params_.defence, implicit.params_.defence, atol=1e-5)
+    assert explicit.params_.home_advantage == pytest.approx(
+        implicit.params_.home_advantage, abs=1e-5
+    )
+    assert explicit.params_.rho == pytest.approx(implicit.params_.rho, abs=1e-5)
+
+
+def test_fit_records_convergence_metadata() -> None:
+    rng = np.random.default_rng(2)
+    teams = ["A", "B", "C"]
+    df = _simulate_matches(
+        teams=teams,
+        true_attack=np.zeros(3),
+        true_defence=np.zeros(3),
+        home_advantage=0.2,
+        n_matches=200,
+        rng=rng,
+    )
+    model = PoissonDCWithPrior(
+        attack_centres=np.zeros(3),
+        defence_centres=np.zeros(3),
+        teams=teams,
+        prior_strength=1.0,
+    ).fit(df)
+    assert model.converged_ is True
+    assert model.n_iter_ > 0
+    assert model.final_nll_ is not None and model.final_nll_ > 0
+
+
 def test_zero_prior_strength_matches_base_poisson_dc() -> None:
     """prior_strength=0 should reproduce the unpenalised PoissonDC fit closely."""
     rng = np.random.default_rng(55)

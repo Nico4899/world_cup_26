@@ -86,6 +86,43 @@ def test_fit_drops_rows_with_unknown_teams() -> None:
     assert m.n_train == 5  # the "Unknown" row dropped
 
 
+def test_fit_raises_on_single_class_data() -> None:
+    """All-home-wins (or all-home-losses) data has no logistic signal — surface
+    a clear error rather than the cryptic sklearn message."""
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-01"] * 6),
+            "home_team": ["A", "A", "B", "A", "B", "A"],
+            "away_team": ["B", "B", "A", "B", "A", "B"],
+            "winner": ["A", "A", "B", "A", "B", "A"],  # home always wins
+        }
+    )
+    snap = pd.DataFrame({"team_name": ["A", "B"], "rating": [1800.0, 1700.0]})
+    with pytest.raises(ValueError, match="both classes"):
+        fit_shootout_model(df, snap)
+
+
+def test_fit_raises_on_missing_elo_columns() -> None:
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2020-01-01"] * 6),
+            "home_team": ["A"] * 6,
+            "away_team": ["B"] * 6,
+            "winner": ["A", "B", "A", "B", "A", "B"],
+        }
+    )
+    bad_snap = pd.DataFrame({"team_name": ["A", "B"]})  # rating missing
+    with pytest.raises(ValueError, match="elo snapshot missing columns"):
+        fit_shootout_model(df, bad_snap)
+
+
+def test_loader_raises_when_file_missing(tmp_path) -> None:
+    from wc2026.models.shootout import load_historical_shootouts
+
+    with pytest.raises(FileNotFoundError, match=r"shootouts\.csv"):
+        load_historical_shootouts(target_dir=tmp_path)
+
+
 def test_fit_raises_when_insufficient_overlap() -> None:
     df = pd.DataFrame(
         {

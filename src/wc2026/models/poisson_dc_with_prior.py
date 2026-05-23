@@ -21,7 +21,9 @@ unpenalised MLE bit-for-bit.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -34,6 +36,64 @@ from wc2026.models.poisson_dc import (
     _neg_log_lik_and_grad,
     _unpack_theta,
 )
+
+
+@dataclass(frozen=True)
+class _FitInputs:
+    """Preprocessed match arrays + team list, ready for the optimizer closure."""
+
+    teams: list[str]
+    h_idx: np.ndarray
+    a_idx: np.ndarray
+    h_score: np.ndarray
+    a_score: np.ndarray
+    not_neutral: np.ndarray
+    w: np.ndarray
+
+    @property
+    def n_teams(self) -> int:
+        return len(self.teams)
+
+
+def _prepare_fit_inputs(
+    matches: pd.DataFrame, weights: pd.Series | np.ndarray | None
+) -> _FitInputs:
+    """Validate ``matches``/``weights`` and pack into numpy arrays for fit().
+
+    Mirrors the data-prep half of :meth:`PoissonDC.fit`. Extracted here so the
+    wrapper's fit() does not have to duplicate the logic verbatim. (We cannot
+    refactor the base class itself per the Stage-1 boundary rules.)
+    """
+    required = ("home_team", "away_team", "home_score", "away_score", "neutral")
+    missing = [c for c in required if c not in matches.columns]
+    if missing:
+        raise ValueError(f"matches is missing required columns: {missing}")
+    if matches.empty:
+        raise ValueError("matches is empty")
+
+    teams = sorted(set(matches["home_team"]).union(matches["away_team"]))
+    if len(teams) < 2:
+        raise ValueError(f"need >= 2 distinct teams, got {len(teams)}")
+    team_idx = {t: i for i, t in enumerate(teams)}
+
+    h_idx = matches["home_team"].map(team_idx).to_numpy(dtype=np.int64)
+    a_idx = matches["away_team"].map(team_idx).to_numpy(dtype=np.int64)
+    h_score = matches["home_score"].to_numpy(dtype=int)
+    a_score = matches["away_score"].to_numpy(dtype=int)
+    not_neutral = (~matches["neutral"].astype(bool).to_numpy()).astype(float)
+    w = np.ones(len(matches), dtype=float) if weights is None else np.asarray(weights, float)
+    if w.shape != (len(matches),):
+        raise ValueError(f"weights shape {w.shape} != ({len(matches)},)")
+
+    return _FitInputs(
+        teams=teams,
+        h_idx=h_idx,
+        a_idx=a_idx,
+        h_score=h_score,
+        a_score=a_score,
+        not_neutral=not_neutral,
+        w=w,
+    )
 
 
 def _penalised_objective(
@@ -108,25 +168,25 @@ class PoissonDCWithPrior(PoissonDC):
         dfc = np.asarray(defence_centres, dtype=float)
         if atk.shape != (len(teams_t),) or dfc.shape != (len(teams_t),):
             raise ValueError(f"centre shapes {atk.shape}/{dfc.shape} != ({len(teams_t)},)")
-        self._prior_teams: tuple[str, ...] = teams_t
-        self._prior_attack: np.ndarray = atk
-        self._prior_defence: np.ndarray = dfc
+        # Internally store as a dict so the alignment helper is a simple lookup
+        # and the instance state survives team-set changes between fits.
+        self._prior_map: dict[str, tuple[float, float]] = {
+            t: (float(atk[i]), float(dfc[i])) for i, t in enumerate(teams_t)
+        }
         self.prior_strength: float = float(prior_strength)
 
     def _aligned_centres(self, fit_teams: Sequence[str]) -> tuple[np.ndarray, np.ndarray]:
-        """Reorder ``self._prior_*`` to match the team order used inside fit().
+        """Reorder the stored prior to match the team order used inside fit().
 
         Teams present in the fit but missing from the supplied prior get 0.0.
         """
-        prior_index: dict[str, int] = {t: i for i, t in enumerate(self._prior_teams)}
         n = len(fit_teams)
         atk = np.zeros(n, dtype=float)
         dfc = np.zeros(n, dtype=float)
         for i, t in enumerate(fit_teams):
-            j = prior_index.get(t)
-            if j is not None:
-                atk[i] = self._prior_attack[j]
-                dfc[i] = self._prior_defence[j]
+            pair = self._prior_map.get(t)
+            if pair is not None:
+                atk[i], dfc[i] = pair
         return atk, dfc
 
     def fit(
@@ -139,47 +199,28 @@ class PoissonDCWithPrior(PoissonDC):
         max_iter: int = 500,
         tol: float = 1e-6,
     ) -> PoissonDCWithPrior:
-        required = ("home_team", "away_team", "home_score", "away_score", "neutral")
-        missing = [c for c in required if c not in matches.columns]
-        if missing:
-            raise ValueError(f"matches is missing required columns: {missing}")
-        if matches.empty:
-            raise ValueError("matches is empty")
+        inputs = _prepare_fit_inputs(matches, weights)
+        self._team_idx = {t: i for i, t in enumerate(inputs.teams)}
+        attack_centres, defence_centres = self._aligned_centres(inputs.teams)
 
-        teams = sorted(set(matches["home_team"]).union(matches["away_team"]))
-        n = len(teams)
-        if n < 2:
-            raise ValueError(f"need >= 2 distinct teams, got {n}")
-        self._team_idx = {t: i for i, t in enumerate(teams)}
-
-        h_idx = matches["home_team"].map(self._team_idx).to_numpy(dtype=np.int64)
-        a_idx = matches["away_team"].map(self._team_idx).to_numpy(dtype=np.int64)
-        h_score = matches["home_score"].to_numpy(dtype=int)
-        a_score = matches["away_score"].to_numpy(dtype=int)
-        not_neutral = (~matches["neutral"].astype(bool).to_numpy()).astype(float)
-        w = np.ones(len(matches), dtype=float) if weights is None else np.asarray(weights, float)
-        if w.shape != (len(matches),):
-            raise ValueError(f"weights shape {w.shape} != ({len(matches)},)")
-
-        attack_centres, defence_centres = self._aligned_centres(teams)
-
+        n = inputs.n_teams
         n_free = 2 * (n - 1) + 2
         x0 = np.zeros(n_free)
         x0[2 * (n - 1)] = 0.3  # plausible home advantage prior
-
-        bounds: list[tuple[float | None, float | None]] = [(None, None)] * (2 * (n - 1))
-        bounds.append(home_advantage_bounds)
-        bounds.append(rho_bounds)
+        bounds: list[tuple[float | None, float | None]] = [(None, None)] * (2 * (n - 1)) + [
+            home_advantage_bounds,
+            rho_bounds,
+        ]
 
         def closure(theta: np.ndarray) -> tuple[float, np.ndarray]:
             return _penalised_objective(
                 theta,
-                h_idx=h_idx,
-                a_idx=a_idx,
-                h_score=h_score,
-                a_score=a_score,
-                not_neutral=not_neutral,
-                w=w,
+                h_idx=inputs.h_idx,
+                a_idx=inputs.a_idx,
+                h_score=inputs.h_score,
+                a_score=inputs.a_score,
+                not_neutral=inputs.not_neutral,
+                w=inputs.w,
                 n_teams=n,
                 attack_centres=attack_centres,
                 defence_centres=defence_centres,
@@ -194,9 +235,16 @@ class PoissonDCWithPrior(PoissonDC):
             bounds=bounds,
             options={"maxiter": max_iter, "ftol": tol, "gtol": tol},
         )
+        if not result.success:
+            warnings.warn(
+                f"PoissonDCWithPrior.fit did not converge: {result.message!r} "
+                f"(n_iter={result.nit}, nll={result.fun:.4f})",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         atk, dfc, ha, rho = _unpack_theta(result.x, n)
         self.params_ = PoissonDCParams(
-            teams=tuple(teams), attack=atk, defence=dfc, home_advantage=ha, rho=rho
+            teams=tuple(inputs.teams), attack=atk, defence=dfc, home_advantage=ha, rho=rho
         )
         self.converged_ = bool(result.success)
         self.n_iter_ = int(result.nit)

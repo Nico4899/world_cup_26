@@ -129,6 +129,11 @@ def fit_shootout_model(
         - used["away_team"].map(elo_lookup).astype(float).to_numpy()
     ).reshape(-1, 1)
     y = used["home_team_won"].astype(int).to_numpy()
+    if len(np.unique(y)) < 2:
+        raise ValueError(
+            "shootout fit needs both classes (home wins AND home loses) in the training data; "
+            f"got only {np.unique(y).tolist()}"
+        )
     clf = LogisticRegression(fit_intercept=False, C=1.0, solver="lbfgs")
     clf.fit(x, y)
     return ShootoutModel(slope=float(clf.coef_[0, 0]), elo_lookup=elo_lookup, n_train=len(used))
