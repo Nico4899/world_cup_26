@@ -20,7 +20,7 @@ Personal / educational project. Honesty about uncertainty is the headline featur
 - [x] Stage 0.5 — WC 2018 & WC 2022 day-by-day hindcasts
 - [x] Stage 0.6 — half-life sweep on WC 2022 → tuned to 10 years (was 730 days)
 - [x] Stage 0.7 — decision-gate analysis (see below)
-- [x] Stage 1.C — FastAPI app + Streamlit dashboard (this branch: `agent/frontend`)
+- [x] Stage 1.C — FastAPI app + Streamlit dashboard (merged from `agent/frontend`)
 - [ ] Stage 1.A — DB layer, football-data.org ingester, scheduler, Dockerfile.app, CI (parallel branch: `agent/backend`)
 - [ ] Stage 1.B — Elo prior, real shootout model, isotonic recalibration (parallel branch: `agent/models`)
 
@@ -99,8 +99,8 @@ Then open http://localhost:8501. Dashboard pages:
 |---|---|
 | `GET /health` | model + fixtures load status |
 | `GET /api/v1/matches?date=YYYY-MM-DD&group=A` | filtered fixture list |
-| `GET /api/v1/matches/{id}` | one fixture + prediction (top-3 scorelines) |
-| `GET /api/v1/predictions/{home}/{away}?neutral=true` | 1X2 + xG + top-5 scorelines |
+| `GET /api/v1/matches/{id}` | one fixture + prediction (top-5 scorelines + full 11×11 score matrix) |
+| `GET /api/v1/predictions/{home}/{away}?neutral=true` | 1X2 + xG + top-5 scorelines + full 11×11 score matrix |
 | `GET /api/v1/tournament/standings?n_sims=2000&seed=42` | 12-group MC probabilities + top-10 champion table |
 | `GET /api/v1/tournament/bracket?seed=42` | one sampled 31-match knockout realisation |
 
@@ -122,7 +122,6 @@ A `Dockerfile.app` for the API/scheduler is provided on the `agent/backend` bran
 
 - **Local MVP only.** No live polling of football-data.org; no scheduler running by default (those land on `agent/backend`). The dashboard reads from the FastAPI app, which reads from the bundled Stage 0 model fit at startup — no DB, no live updates.
 - **Isotonic recalibration and Elo prior** are on the parallel `agent/models` branch; until merged, predictions are the pre-Stage-1 Poisson+Dixon-Coles output (WC 2022 log-loss 1.0379).
-- **Score heatmap** on the Match Detail page renders only the top-5 scorelines (other cells suppressed); a full-matrix endpoint is a Stage 2 candidate.
 
 ## Repo layout
 
