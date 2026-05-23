@@ -11,8 +11,18 @@ Run locally:
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
-import streamlit as st
+# Streamlit prepends the script's own directory (dashboard/) to sys.path, not the
+# project root, so `from dashboard.components.api_client import ...` in pages would
+# raise ModuleNotFoundError. Insert the project root explicitly before any other
+# imports so the package path resolves the same way pytest/uvicorn already use it.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+import streamlit as st  # noqa: E402
 
 API_URL = os.environ.get("WC2026_API_URL", "http://localhost:8000")
 
