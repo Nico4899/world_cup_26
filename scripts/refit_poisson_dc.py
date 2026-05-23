@@ -5,8 +5,8 @@ Used by the daily scheduler job; can also be run manually:
     uv run python scripts/refit_poisson_dc.py
     uv run python scripts/refit_poisson_dc.py --ref-date 2026-06-15
 
-Writes ``data/artefacts/poisson_dc/latest.npz`` (overwriting) plus a dated copy
-``data/artefacts/poisson_dc/YYYY-MM-DD.npz`` for audit history.
+Writes ``data/artifacts/poisson_dc/latest.npz`` (overwriting) plus a dated copy
+``data/artifacts/poisson_dc/YYYY-MM-DD.npz`` for audit history.
 
 The API picks up the latest artefact on lifespan startup; restart the API
 service to use a freshly-refitted model.
@@ -26,7 +26,7 @@ from wc2026.features.match_weights import combined_weight
 from wc2026.ingest.kaggle_intl import load_played
 from wc2026.models.poisson_dc import PoissonDC
 
-DEFAULT_ARTEFACT_DIR = Path("data/artefacts/poisson_dc")
+DEFAULT_ARTEFACT_DIR = Path("data/artifacts/poisson_dc")
 DEFAULT_HALF_LIFE_DAYS = 3650.0
 DEFAULT_HISTORY_YEARS = 10
 

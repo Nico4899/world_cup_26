@@ -4,13 +4,13 @@ Schedule (UTC)
     04:00  Jürisoo Kaggle dataset refresh
     04:15  Elo ratings snapshot
     04:30  football-data.org WC fixtures refresh
-    05:00  Poisson + Dixon-Coles model refit → data/artefacts/poisson_dc/latest.npz
+    05:00  Poisson + Dixon-Coles model refit → data/artifacts/poisson_dc/latest.npz
 
 Each job writes a row to ``scheduler_job_runs`` so the run history is visible
 in Postgres. If the DB is unavailable, the failure is logged but does not
 abort the scheduler process — the next tick will retry.
 
-The model refit overwrites ``data/artefacts/poisson_dc/latest.npz``; the API
+The model refit overwrites ``data/artifacts/poisson_dc/latest.npz``; the API
 loads that on the next lifespan startup. Restart the API container (or the
 ``api`` service in docker-compose) to pick up a freshly-refitted model.
 

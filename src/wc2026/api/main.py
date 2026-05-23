@@ -26,7 +26,7 @@ from wc2026.models.shootout import (
 )
 from wc2026.sim.fixtures import parse_wc2026_fixtures
 
-ARTEFACT_PATH = Path("data/artefacts/poisson_dc/latest.npz")
+ARTEFACT_PATH = Path("data/artifacts/poisson_dc/latest.npz")
 
 # Match Stage 0.6's tuned defaults.
 MODEL_HALF_LIFE_DAYS = 3650.0
