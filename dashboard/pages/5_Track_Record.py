@@ -140,5 +140,5 @@ st.caption("Per-bin counts (size of marker above):")
 st.dataframe(
     pd.DataFrame(bins).round(3),
     hide_index=True,
-    use_container_width=True,
+    width="stretch",
 )

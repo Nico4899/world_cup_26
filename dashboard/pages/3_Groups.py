@@ -119,5 +119,5 @@ st.dataframe(
         for h in data["headline"]
     ],
     hide_index=True,
-    use_container_width=True,
+    width="stretch",
 )

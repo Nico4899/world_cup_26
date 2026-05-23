@@ -39,4 +39,4 @@ for r in round_order:
     if sub.empty:
         continue
     with st.expander(f"{r} — {len(sub)} match(es)", expanded=(r in ("SF", "Final"))):
-        st.dataframe(sub.drop(columns=["Round"]), hide_index=True, use_container_width=True)
+        st.dataframe(sub.drop(columns=["Round"]), hide_index=True, width="stretch")

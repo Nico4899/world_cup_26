@@ -38,10 +38,10 @@ def build_prediction(
         outcome = model.outcome_probs(home, away, neutral=neutral)
         score_matrix = model.score_probs(home, away, neutral=neutral)
     except KeyError as exc:
-        raise HTTPException(
-            status_code=STATUS_UNPROCESSABLE,
-            detail=f"unknown team: {exc.args[0] if exc.args else exc!s}",
-        ) from exc
+        # PoissonDC already raises KeyError("unknown team: <name>"); surface as-is
+        # to avoid duplicating the "unknown team:" prefix in the response detail.
+        detail = exc.args[0] if exc.args else "unknown team"
+        raise HTTPException(status_code=STATUS_UNPROCESSABLE, detail=detail) from exc
 
     flat = score_matrix.ravel()
     cap = min(top_n, flat.size)

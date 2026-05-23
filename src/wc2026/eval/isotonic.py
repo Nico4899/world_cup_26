@@ -15,8 +15,16 @@ also used by 538's NFL ELO model).
 
 We use scikit-learn's :class:`sklearn.isotonic.IsotonicRegression` with
 ``y_min=0``, ``y_max=1``, ``out_of_bounds="clip"``. We also add a small floor
-(``1e-6``) before re-normalisation so a calibrated probability of 0 cannot
+(``EPS_PROB``) before re-normalisation so a calibrated probability of 0 cannot
 kill log-loss for the held-out match.
+
+The floor is intentionally generous (``0.01`` = 1%). A sub-1% machine-epsilon
+floor (the previous ``1e-6``) made LOO log-loss EXPLODE on small samples like
+WC 2022 (N=64): the isotonic step function would map some inputs to near-zero,
+and a single "wrong-side" actual outcome contributed ``-log(1e-6) ≈ 13.8`` to
+the mean log-loss — a +0.20 hit per match. 1% caps that per-match contribution
+at ``-log(0.01) = 4.6``, which is the realistic "any team can beat any other
+team about 1 in 100 times" floor for international football.
 
 Leave-one-out evaluation: for an N-row dataset, fit on N-1 and apply to the
 held-out row, repeated for every row. Used by the hindcast script so the
@@ -29,7 +37,7 @@ import numpy as np
 import pandas as pd
 from sklearn.isotonic import IsotonicRegression
 
-EPS_PROB: float = 1e-6
+EPS_PROB: float = 0.01
 
 
 class IsotonicCalibrator:
