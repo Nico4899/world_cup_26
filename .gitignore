@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# uv / venv
+.venv/
+.python-version.local
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# macOS
+.DS_Store
+
+# Claude harness
+.claude/settings.local.json
+
+# Local secrets
+.env
+.env.local
+*.secret
+
+# Data (anything large stays out of git; placeholders kept via .gitkeep)
+data/raw/*
+data/interim/*
+data/processed/*
+data/artifacts/*
+!data/**/.gitkeep
+
+# Notebook outputs
+notebooks/*.ipynb_checkpoints/
+
+# Build artifacts
+dist/
+build/
