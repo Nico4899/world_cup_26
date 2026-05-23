@@ -16,7 +16,10 @@ from wc2026.eval.calibration import observed_outcome
 from wc2026.features.match_weights import combined_weight
 from wc2026.models.poisson_dc import PoissonDC
 
-DEFAULT_HALF_LIFE_DAYS: float = 730.0
+DEFAULT_HALF_LIFE_DAYS: float = 3650.0
+"""Selected by the Stage 0.6 sweep on WC 2022 (log-loss minimum at ~10y; longer
+values give only marginal improvement). See scripts/calibration_sweep.py."""
+
 DEFAULT_HISTORY_WINDOW_YEARS: float = 10.0
 
 

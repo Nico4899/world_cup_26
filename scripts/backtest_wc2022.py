@@ -37,11 +37,7 @@ def main() -> int:
     print(f"predicting {len(target)} WC 2022 matches")
 
     t0 = time.time()
-    preds = hindcast(
-        target,
-        history,
-        cfg=HindcastConfig(half_life_days=730, history_window_years=10),
-    )
+    preds = hindcast(target, history, cfg=HindcastConfig())  # defaults
     dt = time.time() - t0
     print(f"hindcast complete in {dt:.1f}s ({dt / len(preds) * 1000:.0f}ms/match)")
     n_skipped = int(preds["skipped_reason"].notna().sum())
