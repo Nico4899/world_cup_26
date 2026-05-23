@@ -285,3 +285,70 @@ def test_scheduler_status_returns_503_or_empty_without_db(client: TestClient) ->
         # 503 body must be informative without leaking internals.
         body = r.json()
         assert "Scheduler-status DB query failed" in body["detail"]
+
+
+# --- /api/v1/_ops/available-jobs + /run-job --------------------------------
+
+
+def test_available_jobs_lists_all_registered_jobs(client: TestClient) -> None:
+    r = client.get("/api/v1/_ops/available-jobs")
+    assert r.status_code == 200
+    body = r.json()
+    assert "jobs" in body
+    # The Phase 2 additions plus the originals must all be there.
+    expected_subset = {
+        "db_backup",
+        "kaggle_refresh",
+        "elo_refresh",
+        "poisson_refit",
+        "thesportsdb_refresh",
+        "openfootball_refresh",
+        "fifa_ranking_refresh",
+        "wikipedia_squads_refresh",
+    }
+    assert expected_subset.issubset(set(body["jobs"]))
+
+
+def test_run_job_404_on_unknown_name(client: TestClient, monkeypatch) -> None:
+    monkeypatch.delenv("WC2026_OPS_TOKEN", raising=False)
+    r = client.post("/api/v1/_ops/run-job/nope")
+    assert r.status_code == 404
+    assert "unknown job" in r.json()["detail"]
+
+
+def test_run_job_enqueues_known_job_when_token_unset(
+    client: TestClient, monkeypatch
+) -> None:
+    """With WC2026_OPS_TOKEN unset, manual runs are open and return 202."""
+    from wc2026.api.routes import ops as ops_mod
+
+    monkeypatch.delenv("WC2026_OPS_TOKEN", raising=False)
+    monkeypatch.setattr(ops_mod, "_run_job_safely", lambda name: None)
+    r = client.post("/api/v1/_ops/run-job/openfootball_refresh")
+    assert r.status_code == 202
+    body = r.json()
+    assert body["job_name"] == "openfootball_refresh"
+    assert body["status"] == "enqueued"
+
+
+def test_run_job_rejects_bad_token_when_required(
+    client: TestClient, monkeypatch
+) -> None:
+    monkeypatch.setenv("WC2026_OPS_TOKEN", "secret")
+    r = client.post(
+        "/api/v1/_ops/run-job/openfootball_refresh",
+        headers={"X-Ops-Token": "wrong"},
+    )
+    assert r.status_code == 403
+
+
+def test_run_job_accepts_matching_token(client: TestClient, monkeypatch) -> None:
+    from wc2026.api.routes import ops as ops_mod
+
+    monkeypatch.setenv("WC2026_OPS_TOKEN", "secret")
+    monkeypatch.setattr(ops_mod, "_run_job_safely", lambda name: None)
+    r = client.post(
+        "/api/v1/_ops/run-job/openfootball_refresh",
+        headers={"X-Ops-Token": "secret"},
+    )
+    assert r.status_code == 202

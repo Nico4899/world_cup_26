@@ -57,6 +57,9 @@ from wc2026.ingest.football_data_org import (
     fetch_competition_matches,
 )
 from wc2026.ingest.kaggle_intl import download_dataset
+from wc2026.ingest.openfootball import fetch_cup_txt
+from wc2026.ingest.thesportsdb import fetch_team_assets
+from wc2026.ingest.wikipedia import fetch_all_squads, fetch_fifa_ranking
 
 DEFAULT_BACKUP_DIR = Path("data/backups")
 BACKUP_RETENTION_DAYS = 14
@@ -70,10 +73,26 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class JobSpec:
+    """Cron-triggered job.
+
+    ``hour``/``minute`` are always set. ``day_of_week`` and ``day`` are optional
+    APScheduler CronTrigger fields:
+
+    * ``day_of_week="sun"`` → weekly on Sundays
+    * ``day=1``             → monthly on the 1st
+    * both unset            → daily
+
+    Manual-only jobs (the squad ingest) use a sentinel ``hour=-1`` and are
+    listed in :data:`MANUAL_ONLY_JOB_SPECS` rather than :data:`JOB_SPECS`. They
+    can be invoked via ``/api/v1/_ops/run-job/{name}``.
+    """
+
     name: str
     hour: int
     minute: int
     func: Callable[..., Any]
+    day_of_week: str | None = None
+    day: int | str | None = None
 
 
 def _job_kaggle_refresh() -> None:
@@ -89,6 +108,52 @@ def _job_football_data_refresh() -> None:
         logger.warning("FOOTBALL_DATA_ORG_KEY not set — skipping WC fixtures refresh")
         return
     fetch_competition_matches(WC_COMPETITION_CODE)
+
+
+def _job_thesportsdb_refresh() -> None:
+    """Refresh crest/kit/stadium metadata for the WC 2026 teams.
+
+    Resolves the team list from the latest Jürisoo fixtures so we always
+    cover the 48 qualified teams without hard-coding them.
+    """
+    from wc2026.ingest.kaggle_intl import load_scheduled  # noqa: PLC0415
+    from wc2026.sim.fixtures import parse_wc2026_fixtures  # noqa: PLC0415
+
+    try:
+        scheduled = load_scheduled()
+        fixtures = parse_wc2026_fixtures(scheduled)
+        team_names = list(fixtures.teams)
+    except Exception:
+        logger.exception("TheSportsDB refresh: could not resolve WC 2026 team list")
+        return
+    fetch_team_assets(team_names)
+
+
+def _job_openfootball_refresh() -> None:
+    """Pull the canonical group letters from openfootball/world-cup."""
+    fetch_cup_txt()
+
+
+def _job_fifa_ranking_refresh() -> None:
+    fetch_fifa_ranking()
+
+
+def _job_wikipedia_squads_refresh() -> None:
+    """One-shot squad pull — invoked manually via /_ops/run-job.
+
+    The team→page-title map lives in ``data/wc2026_squad_pages.json``; we keep
+    it out of code so the operator can edit it without a deploy when Wikipedia
+    renames a page mid-tournament.
+    """
+    import json  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    cfg = Path("data/wc2026_squad_pages.json")
+    if not cfg.exists():
+        logger.warning("data/wc2026_squad_pages.json missing — skipping squad ingest")
+        return
+    team_pages = json.loads(cfg.read_text(encoding="utf-8"))
+    fetch_all_squads(team_pages)
 
 
 def _prune_backups(backup_dir: Path, retention_days: int = BACKUP_RETENTION_DAYS) -> int:
@@ -174,7 +239,47 @@ JOB_SPECS: tuple[JobSpec, ...] = (
         func=_job_football_data_refresh,
     ),
     JobSpec(name="poisson_refit", hour=5, minute=0, func=_job_poisson_refit),
+    # Weekly Sunday 03:00 — TheSportsDB metadata + openfootball cup.txt.
+    JobSpec(
+        name="thesportsdb_refresh",
+        hour=3,
+        minute=0,
+        func=_job_thesportsdb_refresh,
+        day_of_week="sun",
+    ),
+    JobSpec(
+        name="openfootball_refresh",
+        hour=3,
+        minute=30,
+        func=_job_openfootball_refresh,
+        day_of_week="sun",
+    ),
+    # Monthly 1st 06:00 — FIFA Men's World Ranking snapshot.
+    JobSpec(
+        name="fifa_ranking_refresh",
+        hour=6,
+        minute=0,
+        func=_job_fifa_ranking_refresh,
+        day=1,
+    ),
 )
+
+
+MANUAL_ONLY_JOB_SPECS: tuple[JobSpec, ...] = (
+    # Squads update on no regular cadence; coaches finalise rosters at irregular
+    # intervals before the tournament. Triggered manually from the Operator page.
+    JobSpec(
+        name="wikipedia_squads_refresh",
+        hour=-1,
+        minute=-1,
+        func=_job_wikipedia_squads_refresh,
+    ),
+)
+
+
+JOB_REGISTRY: dict[str, JobSpec] = {
+    spec.name: spec for spec in (*JOB_SPECS, *MANUAL_ONLY_JOB_SPECS)
+}
 
 
 def is_tournament_window(today: date | None = None) -> bool:
@@ -231,9 +336,16 @@ def register_jobs(
     cache-warm job. The ``today`` arg lets tests pin the window decision.
     """
     for spec in specs:
+        trigger = CronTrigger(
+            hour=spec.hour,
+            minute=spec.minute,
+            day_of_week=spec.day_of_week,
+            day=spec.day,
+            timezone="UTC",
+        )
         scheduler.add_job(
             _wrap_with_tracking(spec),
-            trigger=CronTrigger(hour=spec.hour, minute=spec.minute, timezone="UTC"),
+            trigger=trigger,
             id=spec.name,
             name=spec.name,
             replace_existing=True,
@@ -272,7 +384,9 @@ if __name__ == "__main__":
 
 
 __all__ = [
+    "JOB_REGISTRY",
     "JOB_SPECS",
+    "MANUAL_ONLY_JOB_SPECS",
     "STANDINGS_WARM_INTERVAL_MINUTES",
     "WC_TOURNAMENT_END",
     "WC_TOURNAMENT_START",

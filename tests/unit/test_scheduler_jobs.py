@@ -11,10 +11,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 from wc2026.scheduler import jobs as job_mod
 
 
-def test_job_specs_have_five_entries_at_distinct_times():
-    times = {(s.hour, s.minute) for s in job_mod.JOB_SPECS}
-    assert len(job_mod.JOB_SPECS) == 5
-    assert len(times) == 5, "expected five distinct (hour, minute) slots"
+def test_job_specs_have_eight_entries_at_distinct_slots():
+    slots = {(s.hour, s.minute, s.day_of_week, s.day) for s in job_mod.JOB_SPECS}
+    assert len(job_mod.JOB_SPECS) == 8
+    assert len(slots) == 8, "expected eight distinct (hour, minute, day_of_week, day) slots"
 
 
 def test_job_specs_use_expected_names_and_window():
@@ -25,11 +25,41 @@ def test_job_specs_use_expected_names_and_window():
         "elo_refresh",
         "football_data_org_refresh",
         "poisson_refit",
+        "thesportsdb_refresh",
+        "openfootball_refresh",
+        "fifa_ranking_refresh",
     }
     for spec in job_mod.JOB_SPECS:
-        # Backup at 02:xx UTC (before ingest); ingest at 04:xx; refit at 05:00.
-        assert spec.hour in (2, 4, 5)
+        # 02:xx backup, 03:xx weekly metadata, 04:xx ingest, 05:00 refit, 06:00 monthly ranking.
+        assert spec.hour in (2, 3, 4, 5, 6)
         assert spec.minute in {0, 15, 30}
+
+
+def test_weekly_jobs_are_marked_with_day_of_week():
+    by_name = {s.name: s for s in job_mod.JOB_SPECS}
+    assert by_name["thesportsdb_refresh"].day_of_week == "sun"
+    assert by_name["openfootball_refresh"].day_of_week == "sun"
+    # Daily jobs leave both fields as None.
+    assert by_name["db_backup"].day_of_week is None
+    assert by_name["db_backup"].day is None
+
+
+def test_monthly_fifa_ranking_job_pins_day_one():
+    by_name = {s.name: s for s in job_mod.JOB_SPECS}
+    assert by_name["fifa_ranking_refresh"].day == 1
+    assert by_name["fifa_ranking_refresh"].day_of_week is None
+
+
+def test_manual_only_specs_include_squads_refresh():
+    names = {s.name for s in job_mod.MANUAL_ONLY_JOB_SPECS}
+    assert names == {"wikipedia_squads_refresh"}
+
+
+def test_job_registry_covers_cron_and_manual_jobs():
+    expected = {s.name for s in job_mod.JOB_SPECS} | {
+        s.name for s in job_mod.MANUAL_ONLY_JOB_SPECS
+    }
+    assert set(job_mod.JOB_REGISTRY) == expected
 
 
 def test_register_jobs_attaches_all_cron_triggers():
@@ -60,6 +90,10 @@ def test_register_jobs_uses_expected_cron_fields():
         fields = {f.name: str(f) for f in trig.fields}
         assert fields["hour"] == str(spec.hour)
         assert fields["minute"] == str(spec.minute)
+        if spec.day_of_week is not None:
+            assert fields["day_of_week"] == spec.day_of_week
+        if spec.day is not None:
+            assert fields["day"] == str(spec.day)
 
 
 def test_wrap_with_tracking_records_ok_when_func_succeeds(monkeypatch):
