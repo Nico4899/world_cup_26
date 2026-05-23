@@ -20,6 +20,9 @@ Personal / educational project. Honesty about uncertainty is the headline featur
 - [x] Stage 0.5 — WC 2018 & WC 2022 day-by-day hindcasts
 - [x] Stage 0.6 — half-life sweep on WC 2022 → tuned to 10 years (was 730 days)
 - [x] Stage 0.7 — decision-gate analysis (see below)
+- [x] Stage 1.C — FastAPI app + Streamlit dashboard (this branch: `agent/frontend`)
+- [ ] Stage 1.A — DB layer, football-data.org ingester, scheduler, Dockerfile.app, CI (parallel branch: `agent/backend`)
+- [ ] Stage 1.B — Elo prior, real shootout model, isotonic recalibration (parallel branch: `agent/models`)
 
 ## Decision-gate results (Stage 0.7)
 
@@ -67,6 +70,59 @@ uv run pytest                 # run tests
 uv run ruff check .           # lint
 uv run ruff format .          # format
 ```
+
+## Stage 1 — Running locally
+
+The app is a thin **Streamlit** dashboard over a **FastAPI** model server.
+
+```bash
+# 1. Start the API (fits a PoissonDC on startup — first request takes ~1s for warmup):
+uv run uvicorn wc2026.api.main:app --port 8000
+
+# 2. In another terminal, start the dashboard:
+WC2026_API_URL=http://localhost:8000 uv run streamlit run dashboard/streamlit_app.py
+```
+
+Then open http://localhost:8501. Dashboard pages:
+
+| Page | Purpose |
+|---|---|
+| **Today** | Prediction cards for any matchday between 2026-06-11 and 2026-06-27 |
+| **Match Detail** | Per-match 1X2 + scoreline heatmap + plain-language "why" |
+| **Groups** | 12 group blocks with stacked-bar advancement probabilities (1st / 2nd / 3rd→R32 / out) |
+| **Bracket** | One sampled knockout realisation; resampleable by seed |
+| **Track Record** | WC 2022 + WC 2018 hindcast reliability diagrams + Brier / log-loss / RPS |
+
+### API endpoints
+
+| Path | Returns |
+|---|---|
+| `GET /health` | model + fixtures load status |
+| `GET /api/v1/matches?date=YYYY-MM-DD&group=A` | filtered fixture list |
+| `GET /api/v1/matches/{id}` | one fixture + prediction (top-3 scorelines) |
+| `GET /api/v1/predictions/{home}/{away}?neutral=true` | 1X2 + xG + top-5 scorelines |
+| `GET /api/v1/tournament/standings?n_sims=2000&seed=42` | 12-group MC probabilities + top-10 champion table |
+| `GET /api/v1/tournament/bracket?seed=42` | one sampled 31-match knockout realisation |
+
+## Deploying with Docker
+
+```bash
+# Build the dashboard image:
+docker build -f Dockerfile.dashboard -t wc2026-dashboard .
+
+# Run the dashboard, pointing at the API on the host:
+docker run --rm -p 8501:8501 \
+    -e WC2026_API_URL=http://host.docker.internal:8000 \
+    wc2026-dashboard
+```
+
+A `Dockerfile.app` for the API/scheduler is provided on the `agent/backend` branch (Stage 1.A).
+
+## Known limitations (Stage 1)
+
+- **Local MVP only.** No live polling of football-data.org; no scheduler running by default (those land on `agent/backend`). The dashboard reads from the FastAPI app, which reads from the bundled Stage 0 model fit at startup — no DB, no live updates.
+- **Isotonic recalibration and Elo prior** are on the parallel `agent/models` branch; until merged, predictions are the pre-Stage-1 Poisson+Dixon-Coles output (WC 2022 log-loss 1.0379).
+- **Score heatmap** on the Match Detail page renders only the top-5 scorelines (other cells suppressed); a full-matrix endpoint is a Stage 2 candidate.
 
 ## Repo layout
 
