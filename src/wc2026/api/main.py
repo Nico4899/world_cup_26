@@ -7,6 +7,7 @@ Run locally with:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import pandas as pd
 from fastapi import FastAPI
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
     app.state.model = _fit_model()
     app.state.fixtures = parse_wc2026_fixtures(load_scheduled())
     app.state.model_version = MODEL_VERSION
+    app.state.model_fit_at = datetime.now(UTC)
     yield
 
 

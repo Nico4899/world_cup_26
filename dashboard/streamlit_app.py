@@ -24,6 +24,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
+from dashboard.components.api_client import APIUnreachable, get_json  # noqa: E402
+
 API_URL = os.environ.get("WC2026_API_URL", "http://localhost:8000")
 
 st.set_page_config(
@@ -43,11 +45,12 @@ st.markdown(
 
     Use the **pages in the sidebar** to navigate:
 
-    - **Today** — predictions for fixtures on the current/selected matchday
+    - **Today** — prediction cards for the selected matchday
     - **Match Detail** — per-match probability + score heatmap + plain-language reasoning
-    - **Groups** — group-stage advancement probabilities *(coming in Phase C.3)*
-    - **Bracket** — knockout bracket and championship odds *(coming in Phase C.3)*
-    - **Track Record** — historical calibration on WC 2018 / WC 2022 *(coming in Phase C.3)*
+    - **Groups** — group-stage advancement probabilities for all 12 groups
+    - **Bracket Realisation** — one sampled knockout realisation (resampleable by seed)
+    - **Track Record** — historical calibration on WC 2018 / WC 2022
+    - **About** — model methodology, citations, and known limitations
     """
 )
 
@@ -60,4 +63,11 @@ with st.sidebar:
         "on high-upset tournaments — it cannot see injuries, news, or live market signal."
     )
     st.caption(f"API: `{API_URL}`")
-    st.caption("Model: weighted Poisson + Dixon–Coles (Stage 0.6 tuned).")
+    try:
+        health = get_json("/health")
+        fit_at = health.get("model_fit_at")
+        version = health.get("model_version") or "unknown"
+        fit_at_display = fit_at[:19].replace("T", " ") + " UTC" if fit_at else "unknown"
+        st.caption(f"Model: `{version}` · fit at **{fit_at_display}**")
+    except APIUnreachable:
+        st.caption("Model: status unavailable (API not reachable).")

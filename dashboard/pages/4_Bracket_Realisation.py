@@ -1,4 +1,11 @@
-"""Bracket — read-only visualisation of one sampled knockout realisation."""
+"""Bracket Realisation — one sampled knockout outcome from the Monte Carlo.
+
+This page is intentionally **not** an interactive bracket simulator. The blueprint
+specified a click-to-set re-simulation UI; we decided not to build that (see
+docs/methodology.md). Per-team round probabilities across all simulations are
+shown on the Groups page; what you get here is one representative sample, picked
+deterministically by the seed.
+"""
 
 from __future__ import annotations
 

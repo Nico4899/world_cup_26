@@ -1,5 +1,14 @@
 """Per-outcome isotonic recalibration of 1X2 forecasts.
 
+.. warning::
+    **Experimental — not recommended for default use on small samples.** LOO
+    isotonic on WC 2022 (N=64) degrades log-loss by +0.077 vs. the raw
+    PoissonDC (1.0379 → 1.1148), even after the EPS_PROB floor was raised to
+    0.01 to cap the per-match contribution. The step-function nature of
+    isotonic regression is small-sample fragile; we expect this to help with
+    N≥250 (e.g., a multi-WC training set, qualifiers + euros + WCs). Kept as
+    a research artefact. See ``scripts/backtest_with_isotonic.py``.
+
 The Poisson-DC model is reasonably sharp but the reliability diagram on WC
 hindcasts shows a stretching effect — predicted probabilities near 0 and 1
 are systematically too extreme. Isotonic regression is the textbook

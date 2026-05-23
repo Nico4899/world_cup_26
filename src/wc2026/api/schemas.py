@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -11,6 +11,14 @@ class HealthResponse(BaseModel):
     status: str
     model_fitted: bool
     model_teams_n: int
+    model_fit_at: datetime | None = Field(
+        default=None,
+        description="UTC timestamp the in-memory model was fit (lifespan startup time).",
+    )
+    model_version: str | None = Field(
+        default=None,
+        description="Identifier of the currently-loaded model (e.g. 'poisson_dc.v1').",
+    )
 
 
 class FixtureSummary(BaseModel):

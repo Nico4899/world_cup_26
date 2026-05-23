@@ -120,8 +120,25 @@ A `Dockerfile.app` for the API/scheduler is provided on the `agent/backend` bran
 
 ## Known limitations (Stage 1)
 
-- **Local MVP only.** No live polling of football-data.org; no scheduler running by default (those land on `agent/backend`). The dashboard reads from the FastAPI app, which reads from the bundled Stage 0 model fit at startup — no DB, no live updates.
-- **Isotonic recalibration and Elo prior** are on the parallel `agent/models` branch; until merged, predictions are the pre-Stage-1 Poisson+Dixon-Coles output (WC 2022 log-loss 1.0379).
+- **Local-only by default.** The Dockerfiles build, but no deploy target is wired up; you run the stack with `uv run uvicorn …` + `uv run streamlit …` (or via `docker compose`). The scheduler is coded but not running as a persistent process.
+- **No live polling / no in-match updates.** The dashboard shows pre-match predictions; updates require a scheduler refresh.
+- **Two model add-ons are experimental, not used by default**:
+  - `PoissonDCWithPrior` (Elo prior) monotonically degrades WC 2022 log-loss across `prior_strength ∈ [0, 5]` — the base model already extracts team strength from match history.
+  - `IsotonicCalibrator` (LOO recalibration) degrades WC 2022 log-loss by +0.077 — isotonic on N=64 is small-sample fragile; likely useful with N≥250.
+  Both are kept as research artefacts; see `scripts/backtest_with_elo_prior.py` and `scripts/backtest_with_isotonic.py`.
+
+## Out of scope
+
+The original blueprint specified the items below; we explicitly decided NOT to build them. See `/Users/nico/.claude/plans/extensively-review-and-understand-iterative-fern.md` for the reasoning per item.
+
+- **XGBoost secondary classifier + SHAP explanations + geometric-mean blend** — the pure Poisson model on WC 2018 (log-loss 0.9585) is already competitive with bookmaker closing odds (~0.97–1.00); the academic Poisson + RF hybrid improves by ~0.01–0.03 at significant complexity cost.
+- **xG-based features** (StatsBomb open data, FBref) — requires building an xG model from event data; ~2 weeks of work for an unverified gain.
+- **In-match live win-probability** (SSE, 30-second polling, score+minute+red-card logistic) — the platform isn't deployed and no live-UI consumer exists.
+- **Interactive click-to-set bracket simulator** — Streamlit is the wrong tool for that interaction model; the Bracket Realisation page shows one sampled realisation per seed instead.
+- **Team Profile page** — would duplicate information already split across Groups, Match Detail, and Track Record.
+- **PyDeck host-city map** — eye candy.
+- **TheSportsDB / openfootball / Wikipedia / FIFA.com ingesters** — we don't show logos/kits, and the model doesn't use squad metadata.
+- **Sentry / Prometheus monitoring** — not deployed yet; YAGNI.
 
 ## Repo layout
 

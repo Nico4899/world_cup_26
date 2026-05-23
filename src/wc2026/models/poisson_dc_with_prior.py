@@ -1,5 +1,14 @@
 """PoissonDC with an L2 prior pulling attack/defence toward Elo-derived centres.
 
+.. warning::
+    **Experimental — not recommended for default use.** Empirically degrades
+    WC 2022 log-loss monotonically across ``prior_strength ∈ [0, 5]`` (1.0379
+    baseline → 1.0518 at λ=5.0). The base PoissonDC already extracts team
+    strength from match history; adding an Elo prior is redundant for
+    international football on this dataset. Kept as a research artefact and a
+    template for "what an L2 strength prior looks like" if a future dataset
+    benefits from it. See ``scripts/backtest_with_elo_prior.py``.
+
 We extend :class:`wc2026.models.poisson_dc.PoissonDC` by overriding ``fit`` to
 add a quadratic penalty to the negative log-likelihood:
 
