@@ -17,6 +17,8 @@ dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
     "python-dateutil>=2.9.0.post0",
+    "requests>=2.34.2",
+    "requests-cache>=1.3.2",
     "scipy>=1.17.1",
     "sqlalchemy>=2.0.49",
     "statsmodels>=0.14.6",
@@ -45,6 +47,10 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+    # Skip integration tests (network / Docker / live services) by default.
+    # Run them with: uv run pytest -m integration
+    "-m",
+    "not integration",
 ]
 markers = [
     "integration: requires Postgres or external services (deselect with '-m \"not integration\"')",
