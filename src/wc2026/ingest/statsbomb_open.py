@@ -34,7 +34,6 @@ import logging
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,9 +57,9 @@ USER_AGENT = (
 # StatsBomb pitch dimensions (https://github.com/statsbomb/open-data/blob/master/doc/StatsBomb%20Open%20Data%20Specification%20v1.1.pdf)
 PITCH_LENGTH = 120.0
 PITCH_WIDTH = 80.0
-GOAL_X = PITCH_LENGTH        # right-end goal centre (x=120, y=40)
+GOAL_X = PITCH_LENGTH  # right-end goal centre (x=120, y=40)
 GOAL_Y = PITCH_WIDTH / 2.0
-GOAL_WIDTH = 8.0              # standard 8-yard goal — used for angle feature
+GOAL_WIDTH = 8.0  # standard 8-yard goal — used for angle feature
 
 # Curated list of men's competitions we care about. Override via the optional
 # `competitions_filter` argument to fetch_all_shots.
@@ -282,10 +281,8 @@ def aggregate_match_xg(shots: pd.DataFrame) -> pd.DataFrame:
                     "team": shooting_team,
                     "xg_for": xg_for,
                     "xg_against": xg_against,
-                    "shots": int(len(team_shots)),
-                    "shots_on_target": int(
-                        team_shots["statsbomb_xg"].notna().sum()
-                    ),
+                    "shots": len(team_shots),
+                    "shots_on_target": int(team_shots["statsbomb_xg"].notna().sum()),
                 }
             )
         _ = match_id  # silence unused-loop-variable; we use it via groupby
@@ -362,11 +359,7 @@ def fetch_competition_shots(
         )
         if not shots.empty:
             frames.append(shots)
-    df = (
-        pd.concat(frames, ignore_index=True)
-        if frames
-        else pd.DataFrame(columns=["match_id"])
-    )
+    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=["match_id"])
     out_dir = target_dir / str(competition_id) / str(season_id)
     out_dir.mkdir(parents=True, exist_ok=True)
     out = out_dir / "shots.parquet"
@@ -389,7 +382,9 @@ def fetch_all_tournament_shots(
                 fetch_competition_shots(comp_id, season_id, session=sess, target_dir=target_dir)
             )
         except requests.HTTPError as exc:
-            logger.warning("StatsBomb fetch for %s (%d/%d) failed: %s", name, comp_id, season_id, exc)
+            logger.warning(
+                "StatsBomb fetch for %s (%d/%d) failed: %s", name, comp_id, season_id, exc
+            )
     return paths
 
 

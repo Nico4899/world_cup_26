@@ -35,9 +35,7 @@ def upgrade() -> None:
         sa.Column("shots", sa.Integer(), nullable=True),
         sa.Column("shots_on_target", sa.Integer(), nullable=True),
         sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint(
-            "match_date", "home_team", "away_team", "team", "source"
-        ),
+        sa.PrimaryKeyConstraint("match_date", "home_team", "away_team", "team", "source"),
     )
     op.create_index("ix_raw_match_xg_team", "raw_match_xg", ["team"])
     op.create_index("ix_raw_match_xg_match_date", "raw_match_xg", ["match_date"])

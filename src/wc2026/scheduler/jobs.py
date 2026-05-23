@@ -52,12 +52,15 @@ from apscheduler.triggers.interval import IntervalTrigger
 from wc2026.db.models import SchedulerJobRun
 from wc2026.db.session import session_scope
 from wc2026.ingest.eloratings_scraper import fetch_current_ratings
+from wc2026.ingest.fbref import fetch_team_match_logs
+from wc2026.ingest.football_data_co_uk import fetch_calibration_corpus
 from wc2026.ingest.football_data_org import (
     WC_COMPETITION_CODE,
     fetch_competition_matches,
 )
 from wc2026.ingest.kaggle_intl import download_dataset
 from wc2026.ingest.openfootball import fetch_cup_txt
+from wc2026.ingest.statsbomb_open import fetch_all_tournament_shots
 from wc2026.ingest.thesportsdb import fetch_team_assets
 from wc2026.ingest.wikipedia import fetch_all_squads, fetch_fifa_ranking
 
@@ -154,6 +157,50 @@ def _job_wikipedia_squads_refresh() -> None:
         return
     team_pages = json.loads(cfg.read_text(encoding="utf-8"))
     fetch_all_squads(team_pages)
+
+
+def _job_football_data_co_uk_refresh() -> None:
+    """Pull the default club-league closing-odds calibration corpus."""
+    fetch_calibration_corpus()
+
+
+def _job_fbref_refresh() -> None:
+    """Pull FBref match-log xG for the 48 WC teams.
+
+    The team→URL map lives in ``data/wc2026_fbref_pages.json`` (same operator-
+    editable pattern as the Wikipedia squad pages).
+    """
+    import json  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    cfg = Path("data/wc2026_fbref_pages.json")
+    if not cfg.exists():
+        logger.warning("data/wc2026_fbref_pages.json missing — skipping FBref ingest")
+        return
+    raw = json.loads(cfg.read_text(encoding="utf-8"))
+    team_pages = [(team, url) for team, url in raw.items()]
+    fetch_team_match_logs(team_pages)
+
+
+def _job_statsbomb_refresh() -> None:
+    """Pull StatsBomb open-data shots for the 4 men's tournaments + refit xG model.
+
+    StatsBomb open data is effectively immutable once a tournament is in the
+    archive, so this job is manual-only — re-fetching daily would waste
+    bandwidth. After the corpus is on disk it also refits the xG shot model.
+    """
+    paths = fetch_all_tournament_shots()
+    if not paths:
+        logger.warning("statsbomb refresh: no shots fetched, skipping xG refit")
+        return
+    from wc2026.ingest.statsbomb_open import load_shots_corpus  # noqa: PLC0415
+    from wc2026.models.xg_shot_model import fit_and_save  # noqa: PLC0415
+
+    corpus = load_shots_corpus()
+    if corpus.empty:
+        logger.warning("statsbomb refresh: empty corpus on disk, skipping xG refit")
+        return
+    fit_and_save(corpus)
 
 
 def _prune_backups(backup_dir: Path, retention_days: int = BACKUP_RETENTION_DAYS) -> int:
@@ -262,6 +309,22 @@ JOB_SPECS: tuple[JobSpec, ...] = (
         func=_job_fifa_ranking_refresh,
         day=1,
     ),
+    # Weekly Sunday 03:45 — football-data.co.uk closing-odds calibration corpus.
+    JobSpec(
+        name="football_data_co_uk_refresh",
+        hour=3,
+        minute=45,
+        func=_job_football_data_co_uk_refresh,
+        day_of_week="sun",
+    ),
+    # Weekly Sunday 05:30 — FBref match-log xG for the 48 WC teams.
+    JobSpec(
+        name="fbref_refresh",
+        hour=5,
+        minute=30,
+        func=_job_fbref_refresh,
+        day_of_week="sun",
+    ),
 )
 
 
@@ -273,6 +336,13 @@ MANUAL_ONLY_JOB_SPECS: tuple[JobSpec, ...] = (
         hour=-1,
         minute=-1,
         func=_job_wikipedia_squads_refresh,
+    ),
+    # StatsBomb open data is effectively immutable per-tournament; manual-only.
+    JobSpec(
+        name="statsbomb_refresh",
+        hour=-1,
+        minute=-1,
+        func=_job_statsbomb_refresh,
     ),
 )
 

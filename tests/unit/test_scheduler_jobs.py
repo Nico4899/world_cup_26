@@ -11,10 +11,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 from wc2026.scheduler import jobs as job_mod
 
 
-def test_job_specs_have_eight_entries_at_distinct_slots():
+def test_job_specs_have_ten_entries_at_distinct_slots():
     slots = {(s.hour, s.minute, s.day_of_week, s.day) for s in job_mod.JOB_SPECS}
-    assert len(job_mod.JOB_SPECS) == 8
-    assert len(slots) == 8, "expected eight distinct (hour, minute, day_of_week, day) slots"
+    assert len(job_mod.JOB_SPECS) == 10
+    assert len(slots) == 10, "expected ten distinct (hour, minute, day_of_week, day) slots"
 
 
 def test_job_specs_use_expected_names_and_window():
@@ -28,11 +28,14 @@ def test_job_specs_use_expected_names_and_window():
         "thesportsdb_refresh",
         "openfootball_refresh",
         "fifa_ranking_refresh",
+        "football_data_co_uk_refresh",
+        "fbref_refresh",
     }
     for spec in job_mod.JOB_SPECS:
-        # 02:xx backup, 03:xx weekly metadata, 04:xx ingest, 05:00 refit, 06:00 monthly ranking.
+        # 02:xx backup, 03:xx weekly metadata + odds, 04:xx ingest, 05:00 refit
+        # (+ 05:30 weekly FBref), 06:00 monthly ranking.
         assert spec.hour in (2, 3, 4, 5, 6)
-        assert spec.minute in {0, 15, 30}
+        assert spec.minute in {0, 15, 30, 45}
 
 
 def test_weekly_jobs_are_marked_with_day_of_week():
@@ -50,9 +53,9 @@ def test_monthly_fifa_ranking_job_pins_day_one():
     assert by_name["fifa_ranking_refresh"].day_of_week is None
 
 
-def test_manual_only_specs_include_squads_refresh():
+def test_manual_only_specs_include_squads_and_statsbomb():
     names = {s.name for s in job_mod.MANUAL_ONLY_JOB_SPECS}
-    assert names == {"wikipedia_squads_refresh"}
+    assert names == {"wikipedia_squads_refresh", "statsbomb_refresh"}
 
 
 def test_job_registry_covers_cron_and_manual_jobs():

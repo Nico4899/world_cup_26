@@ -210,9 +210,7 @@ def test_fetch_competition_shots_writes_parquet_under_comp_season(tmp_path: Path
         "https://raw.githubusercontent.com/statsbomb/open-data/master/data/events/1.json": _events(),
     }
     session = _StubSession(responses)
-    out = fetch_competition_shots(
-        43, 106, session=session, target_dir=tmp_path
-    )
+    out = fetch_competition_shots(43, 106, session=session, target_dir=tmp_path)
     assert out == tmp_path / "43" / "106" / "shots.parquet"
     df = pd.read_parquet(out)
     assert (df["match_id"] == 1).all()

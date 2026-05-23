@@ -125,14 +125,13 @@ def _find_match_log_table(html: str) -> pd.DataFrame | None:
         tables = pd.read_html(StringIO(cleaned))
     except (ValueError, ImportError):
         return None
-    for tbl in tables:
+    for original in tables:
         # FBref tables use MultiIndex columns when they have category groups;
         # flatten before testing.
+        tbl = original
         if isinstance(tbl.columns, pd.MultiIndex):
             tbl = tbl.copy()
-            tbl.columns = [
-                col[-1] if isinstance(col, tuple) else col for col in tbl.columns
-            ]
+            tbl.columns = [col[-1] if isinstance(col, tuple) else col for col in tbl.columns]
         cols = {str(c).strip().lower() for c in tbl.columns}
         if {"date", "xg", "xga"}.issubset(cols):
             return tbl
