@@ -1,0 +1,208 @@
+"""Top-level Monte Carlo simulator for the 2026 World Cup.
+
+Runs N full tournaments end-to-end (group stage → third-place ranking →
+R32 → R16 → QF → SF → final), and aggregates per-team probabilities of
+reaching each round.
+
+For the bracket structure see ``bracket.py``; for group tiebreakers see
+``groups.py``; for the third-place ranker see ``third_place.py``; for the
+knockout single-match simulator see ``knockout.py``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
+
+from wc2026.models.poisson_dc import PoissonDC
+from wc2026.sim.bracket import (
+    FINAL_PAIR,
+    QF_PAIRS,
+    R16_PAIRS,
+    SF_PAIRS,
+    resolve_r32_matchups,
+)
+from wc2026.sim.fixtures import GROUP_LETTERS, WC2026Fixtures
+from wc2026.sim.groups import GroupResult, simulate_group
+from wc2026.sim.knockout import KnockoutOutcome, simulate_knockout_match
+from wc2026.sim.third_place import ThirdPlacedEntry, rank_third_placed
+
+# Columns of the aggregated probability table.
+ROUND_COLUMNS: tuple[str, ...] = (
+    "group_winner",
+    "runner_up",
+    "third_advance",
+    "r32_reached",
+    "r16_reached",
+    "qf_reached",
+    "sf_reached",
+    "final_reached",
+    "champion",
+)
+
+
+@dataclass(frozen=True)
+class TournamentResult:
+    """One full tournament simulation."""
+
+    group_results: dict[str, GroupResult]
+    third_place_ranking: tuple[ThirdPlacedEntry, ...]
+    r32_matchups: dict[int, tuple[str, str]]
+    knockout_results: dict[int, KnockoutOutcome]
+    champion: str
+
+
+def simulate_tournament(
+    fixtures: WC2026Fixtures,
+    model: PoissonDC,
+    rng: np.random.Generator,
+    *,
+    fifa_ranking: dict[str, int] | None = None,
+) -> TournamentResult:
+    """Run a single tournament simulation end-to-end."""
+    # --- group stage ---
+    group_results: dict[str, GroupResult] = {}
+    for letter in GROUP_LETTERS:
+        group_results[letter] = simulate_group(
+            letter,
+            fixtures.groups[letter],
+            fixtures.matches_in_group(letter),
+            model,
+            rng,
+            fifa_ranking=fifa_ranking,
+        )
+
+    winners = {letter: gr.standings[0].team for letter, gr in group_results.items()}
+    runners = {letter: gr.standings[1].team for letter, gr in group_results.items()}
+
+    # --- third-place ranking + select top 8 ---
+    third_ranking = rank_third_placed(group_results, rng, fifa_ranking=fifa_ranking)
+    advancing_thirds = {entry.group: entry.team for entry in third_ranking[:8]}
+
+    # --- resolve R32 matchups ---
+    r32_matchups = resolve_r32_matchups(winners, runners, advancing_thirds)
+
+    # --- knockout rounds ---
+    knockout_results: dict[int, KnockoutOutcome] = {}
+    winners_by_match: dict[int, str] = {}
+
+    # R32
+    for mid, (a, b) in r32_matchups.items():
+        out = simulate_knockout_match(a, b, model, rng, neutral=True)
+        knockout_results[mid] = out
+        winners_by_match[mid] = out.winner
+
+    # R16, QF, SF
+    for mid, ma, mb in R16_PAIRS:
+        out = simulate_knockout_match(
+            winners_by_match[ma], winners_by_match[mb], model, rng, neutral=True
+        )
+        knockout_results[mid] = out
+        winners_by_match[mid] = out.winner
+    for mid, ma, mb in QF_PAIRS:
+        out = simulate_knockout_match(
+            winners_by_match[ma], winners_by_match[mb], model, rng, neutral=True
+        )
+        knockout_results[mid] = out
+        winners_by_match[mid] = out.winner
+    for mid, ma, mb in SF_PAIRS:
+        out = simulate_knockout_match(
+            winners_by_match[ma], winners_by_match[mb], model, rng, neutral=True
+        )
+        knockout_results[mid] = out
+        winners_by_match[mid] = out.winner
+
+    # Final
+    final_id, sf1, sf2 = FINAL_PAIR
+    out = simulate_knockout_match(
+        winners_by_match[sf1], winners_by_match[sf2], model, rng, neutral=True
+    )
+    knockout_results[final_id] = out
+    champion = out.winner
+
+    return TournamentResult(
+        group_results=group_results,
+        third_place_ranking=third_ranking,
+        r32_matchups=r32_matchups,
+        knockout_results=knockout_results,
+        champion=champion,
+    )
+
+
+@dataclass(frozen=True)
+class TournamentSummary:
+    """Aggregated per-team advancement probabilities across N tournament sims."""
+
+    n_sims: int
+    probabilities: pd.DataFrame  # index=team, columns=ROUND_COLUMNS
+
+    def top(self, column: str, n: int = 10) -> pd.DataFrame:
+        return self.probabilities.sort_values(column, ascending=False).head(n)
+
+
+def simulate_tournament_monte_carlo(
+    fixtures: WC2026Fixtures,
+    model: PoissonDC,
+    *,
+    n_sims: int = 10_000,
+    seed: int = 42,
+    fifa_ranking: dict[str, int] | None = None,
+) -> TournamentSummary:
+    """Run ``n_sims`` simulations; return per-team advancement probabilities."""
+    if n_sims <= 0:
+        raise ValueError(f"n_sims must be positive, got {n_sims}")
+    teams = list(fixtures.teams)
+    counters: dict[str, dict[str, int]] = {t: {col: 0 for col in ROUND_COLUMNS} for t in teams}
+
+    rng = np.random.default_rng(seed)
+    for _ in range(n_sims):
+        result = simulate_tournament(fixtures, model, rng, fifa_ranking=fifa_ranking)
+        _update_counters_from_result(counters, result)
+
+    df = pd.DataFrame.from_dict(counters, orient="index", columns=list(ROUND_COLUMNS))
+    df = df / n_sims
+    df.index.name = "team"
+    return TournamentSummary(n_sims=n_sims, probabilities=df)
+
+
+# Bracket-progression mapping: each round records which match_ids are "reached"
+# by which team. A team is in R16 iff they won their R32 match; QF iff they won
+# their R16; etc.
+_R32_MATCH_IDS = tuple(range(73, 89))
+_R16_MATCH_IDS = tuple(mid for mid, _, _ in R16_PAIRS)
+_QF_MATCH_IDS = tuple(mid for mid, _, _ in QF_PAIRS)
+_SF_MATCH_IDS = tuple(mid for mid, _, _ in SF_PAIRS)
+
+
+def _update_counters_from_result(
+    counters: dict[str, dict[str, int]],
+    result: TournamentResult,
+) -> None:
+    advancing_thirds_set = {e.team for e in result.third_place_ranking[:8]}
+
+    # Group-stage finishing positions
+    for gr in result.group_results.values():
+        counters[gr.standings[0].team]["group_winner"] += 1
+        counters[gr.standings[1].team]["runner_up"] += 1
+        third_team = gr.standings[2].team
+        if third_team in advancing_thirds_set:
+            counters[third_team]["third_advance"] += 1
+
+    # R32 reached: every team in an R32 matchup
+    for a, b in result.r32_matchups.values():
+        counters[a]["r32_reached"] += 1
+        counters[b]["r32_reached"] += 1
+
+    # R16/QF/SF/Final reached: the winners of the previous round
+    for mid in _R32_MATCH_IDS:
+        counters[result.knockout_results[mid].winner]["r16_reached"] += 1
+    for mid in _R16_MATCH_IDS:
+        counters[result.knockout_results[mid].winner]["qf_reached"] += 1
+    for mid in _QF_MATCH_IDS:
+        counters[result.knockout_results[mid].winner]["sf_reached"] += 1
+    for mid in _SF_MATCH_IDS:
+        counters[result.knockout_results[mid].winner]["final_reached"] += 1
+
+    counters[result.champion]["champion"] += 1
