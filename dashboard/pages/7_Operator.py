@@ -13,7 +13,6 @@ from datetime import UTC, datetime
 
 import httpx
 import streamlit as st
-
 from dashboard.components.api_client import APIUnreachable, get_json
 
 st.title("Operator")

@@ -34,8 +34,16 @@ GROUP_ASSIGNMENT_PATH = Path("data/wc2026_group_assignment.json")
 # Match Stage 0.6's tuned defaults.
 MODEL_HALF_LIFE_DAYS = 3650.0
 MODEL_HISTORY_YEARS = 10
-MODEL_REF_DATE = pd.Timestamp("2026-05-23")
 MODEL_VERSION = "poisson_dc.v1"
+
+
+def _today_utc_ts() -> pd.Timestamp:
+    """Reference date for the cold-start lifespan fit.
+
+    Kept as a function (not a module constant) so each `uvicorn` boot uses the
+    current day, not a date frozen at import time. Tests can monkey-patch this.
+    """
+    return pd.Timestamp(datetime.now(UTC).date())
 
 CORS_ORIGINS = (
     "http://localhost:8501",
@@ -46,9 +54,10 @@ CORS_ORIGINS = (
 
 
 def _fit_model(df: pd.DataFrame) -> PoissonDC:
-    cutoff = MODEL_REF_DATE - pd.Timedelta(days=int(MODEL_HISTORY_YEARS * 365.25))
+    ref_date = _today_utc_ts()
+    cutoff = ref_date - pd.Timedelta(days=int(MODEL_HISTORY_YEARS * 365.25))
     train = df[df["date"] >= cutoff].reset_index(drop=True)
-    weights = combined_weight(train, ref_date=MODEL_REF_DATE, half_life_days=MODEL_HALF_LIFE_DAYS)
+    weights = combined_weight(train, ref_date=ref_date, half_life_days=MODEL_HALF_LIFE_DAYS)
     return PoissonDC().fit(train, weights=weights)
 
 

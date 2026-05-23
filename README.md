@@ -186,4 +186,4 @@ notebooks/   # exploratory; not under test
 
 ## Licence
 
-MIT for code. Data files retain their upstream licences; see source notes in `src/wc2026/ingest/`.
+MIT for code. Data files retain their upstream licences — see [`docs/LICENSES.md`](docs/LICENSES.md) for the per-source breakdown (Jürisoo Kaggle: CC0; eloratings.net: derivative facts; football-data.org: free-tier ToS).
