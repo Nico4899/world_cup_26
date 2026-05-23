@@ -1,0 +1,111 @@
+{
+  "filters": {
+    "season": "2026",
+    "competitionId": 2000
+  },
+  "resultSet": {
+    "count": 3,
+    "first": "2026-06-11",
+    "last": "2026-07-19",
+    "played": 1
+  },
+  "competition": {
+    "id": 2000,
+    "name": "FIFA World Cup",
+    "code": "WC",
+    "type": "CUP",
+    "emblem": "https://crests.football-data.org/qatar.png"
+  },
+  "matches": [
+    {
+      "id": 537543,
+      "utcDate": "2026-06-11T18:00:00Z",
+      "status": "FINISHED",
+      "matchday": null,
+      "stage": "GROUP_STAGE",
+      "group": "GROUP_A",
+      "lastUpdated": "2026-06-11T20:00:00Z",
+      "homeTeam": {
+        "id": 769,
+        "name": "Mexico",
+        "shortName": "Mexico",
+        "tla": "MEX",
+        "crest": "https://crests.football-data.org/mex.svg"
+      },
+      "awayTeam": {
+        "id": 794,
+        "name": "Senegal",
+        "shortName": "Senegal",
+        "tla": "SEN",
+        "crest": "https://crests.football-data.org/sen.svg"
+      },
+      "score": {
+        "winner": "HOME_TEAM",
+        "duration": "REGULAR",
+        "fullTime": {"home": 2, "away": 1},
+        "halfTime": {"home": 1, "away": 0}
+      },
+      "venue": "Estadio Azteca"
+    },
+    {
+      "id": 537544,
+      "utcDate": "2026-06-12T19:00:00Z",
+      "status": "SCHEDULED",
+      "matchday": null,
+      "stage": "GROUP_STAGE",
+      "group": "GROUP_A",
+      "lastUpdated": "2026-04-01T12:00:00Z",
+      "homeTeam": {
+        "id": 770,
+        "name": "Canada",
+        "shortName": "Canada",
+        "tla": "CAN",
+        "crest": "https://crests.football-data.org/can.svg"
+      },
+      "awayTeam": {
+        "id": 760,
+        "name": "Morocco",
+        "shortName": "Morocco",
+        "tla": "MAR",
+        "crest": "https://crests.football-data.org/mar.svg"
+      },
+      "score": {
+        "winner": null,
+        "duration": "REGULAR",
+        "fullTime": {"home": null, "away": null},
+        "halfTime": {"home": null, "away": null}
+      },
+      "venue": "BMO Field"
+    },
+    {
+      "id": 537545,
+      "utcDate": "2026-07-19T19:00:00Z",
+      "status": "TIMED",
+      "matchday": null,
+      "stage": "FINAL",
+      "group": null,
+      "lastUpdated": "2026-04-01T12:00:00Z",
+      "homeTeam": {
+        "id": null,
+        "name": null,
+        "shortName": null,
+        "tla": null,
+        "crest": null
+      },
+      "awayTeam": {
+        "id": null,
+        "name": null,
+        "shortName": null,
+        "tla": null,
+        "crest": null
+      },
+      "score": {
+        "winner": null,
+        "duration": "REGULAR",
+        "fullTime": {"home": null, "away": null},
+        "halfTime": {"home": null, "away": null}
+      },
+      "venue": "MetLife Stadium"
+    }
+  ]
+}
