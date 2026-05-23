@@ -53,7 +53,7 @@ The 5 most-surprising WC 2022 results the model flagged as long-shots (each give
 - **Calibration**: every backtest run produces reliability diagrams, Brier score, log-loss, and Ranked Probability Score.
 - **Known limitations** (see also the plan file):
   - Group letters A-L are derived from fixture dates, not FIFA's published assignment.
-  - FIFA tiebreaker order is the 2022 procedure; the 2026 regulations document should be cross-checked before public launch.
+  - FIFA tiebreaker chain follows the 2026 regulations (H2H before overall GD/GS, no drawing of lots); a deterministic rng-seeded fallback is used inside the simulator when FIFA ranking is unavailable for the tied teams.
   - Penalty shootout is a 50/50 placeholder; a proper Dawson-style submodel is a Stage 1 candidate.
   - No Elo prior, no injury/suspension override, no XGBoost ensemble layer (deferred).
 

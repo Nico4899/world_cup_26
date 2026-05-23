@@ -172,6 +172,16 @@ def test_health_exposes_model_fit_at_and_version(client: TestClient) -> None:
     assert "T" in body["model_fit_at"]
 
 
+def test_health_exposes_group_assignment_source(client: TestClient) -> None:
+    """/health surfaces whether group letters came from the FIFA draw or from
+    fixture-date clique ordering. Without the JSON override on disk it should
+    report 'derived'."""
+    body = client.get("/health").json()
+    assert "group_assignment_source" in body
+    # The JSON override file is not committed; fresh test env uses derivation.
+    assert body["group_assignment_source"] == "derived"
+
+
 def test_health_exposes_elo_snapshot_freshness(client: TestClient) -> None:
     """If the eloratings snapshot is on disk, /health should surface its date +
     age + the shootout-model loaded flag."""

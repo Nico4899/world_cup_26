@@ -8,15 +8,25 @@ on the match graph: each group of 4 forms a K_4 (every team plays every other te
 the group exactly once), so the 4 teams that share matches with each other are the
 group.
 
-Group letters A-L are then assigned by ordering on each group's earliest fixture date,
-which matches the FIFA convention (Group A opens the tournament on day 1, Group B
-typically opens on day 2, and so on).
+Group letters A-L are then assigned by one of:
+    1. an explicit official-draw override loaded from
+       ``data/wc2026_group_assignment.json`` (preferred when present), or
+    2. ordering on each group's earliest fixture date, which matches the FIFA
+       convention (Group A opens the tournament on day 1, Group B typically opens
+       on day 2, and so on) — used as the fallback before the FIFA draw is wired
+       in.
+
+Whichever path was used is recorded on the returned ``WC2026Fixtures.assignment_source``
+so the dashboard can display "letters from FIFA assignment" vs "letters derived from
+fixture dates".
 """
 
 from __future__ import annotations
 
+import json
 import string
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pandas as pd
 
@@ -46,6 +56,7 @@ class WC2026Fixtures:
 
     groups: dict[str, tuple[str, ...]]  # {"A": (team1, team2, team3, team4), ...}
     matches: tuple[FixtureMatch, ...] = field()
+    assignment_source: str = field(default="derived")  # "derived" | "official:<citation>"
 
     @property
     def teams(self) -> tuple[str, ...]:
@@ -61,12 +72,94 @@ class WC2026Fixtures:
         return tuple(m for m in self.matches if m.group == group)
 
 
-def parse_wc2026_fixtures(scheduled: pd.DataFrame) -> WC2026Fixtures:
+@dataclass(frozen=True)
+class GroupAssignment:
+    """Official FIFA draw assignment of teams to group letters."""
+
+    groups: dict[str, tuple[str, ...]]  # {"A": (team1, ..., team4), ...}
+    citation: str  # human-readable provenance (e.g. URL + draw date)
+
+
+def load_group_assignment(path: Path) -> GroupAssignment:
+    """Load an official-draw group assignment from JSON.
+
+    Expected schema:
+        {"source": "FIFA Final Draw 2025-12-05",
+         "url": "https://www.fifa.com/...",
+         "groups": {"A": ["Mexico", "Team2", "Team3", "Team4"], ...}}
+
+    All 48 teams across exactly 12 groups of 4 must be present.
+    """
+    payload = json.loads(path.read_text())
+    raw_groups = payload.get("groups")
+    if not isinstance(raw_groups, dict) or set(raw_groups.keys()) != set(GROUP_LETTERS):
+        raise ValueError(f"group assignment must contain keys A..L; got {sorted(raw_groups or [])}")
+    groups: dict[str, tuple[str, ...]] = {}
+    seen: set[str] = set()
+    for letter in GROUP_LETTERS:
+        members = raw_groups[letter]
+        if not isinstance(members, list) or len(members) != EXPECTED_TEAMS_PER_GROUP:
+            raise ValueError(f"group {letter} must have {EXPECTED_TEAMS_PER_GROUP} teams")
+        for t in members:
+            if t in seen:
+                raise ValueError(f"team {t!r} appears in more than one group")
+            seen.add(t)
+        groups[letter] = tuple(members)
+    citation_bits = [payload.get("source", "official"), payload.get("url", "")]
+    citation = " ".join(b for b in citation_bits if b).strip()
+    return GroupAssignment(groups=groups, citation=citation or "official")
+
+
+def _label_groups(
+    df: pd.DataFrame,
+    groups_raw: list[tuple[str, ...]],
+    override_assignment: GroupAssignment | None,
+) -> tuple[dict[str, tuple[str, ...]], str]:
+    """Apply either an override assignment or the date-derived fallback."""
+    if override_assignment is not None:
+        derived_clique_sets = {frozenset(g) for g in groups_raw}
+        override_clique_sets = {frozenset(g) for g in override_assignment.groups.values()}
+        if derived_clique_sets != override_clique_sets:
+            raise ValueError(
+                "override_assignment groups do not match the cliques recovered from the "
+                "fixture schedule — the JSON file is stale or the schedule has changed."
+            )
+        groups = {
+            letter: tuple(sorted(members)) for letter, members in override_assignment.groups.items()
+        }
+        return groups, f"official:{override_assignment.citation}"
+
+    # Date-derived fallback: Group A opens the tournament, B opens the next-earliest, etc.
+    first_date = {}
+    for group_members in groups_raw:
+        members_set = set(group_members)
+        earliest = df[df["home_team"].isin(members_set) & df["away_team"].isin(members_set)][
+            "date"
+        ].min()
+        first_date[group_members] = earliest
+    groups_raw_sorted = sorted(groups_raw, key=lambda g: (first_date[g], g))
+    groups = {
+        letter: members for letter, members in zip(GROUP_LETTERS, groups_raw_sorted, strict=True)
+    }
+    return groups, "derived"
+
+
+def parse_wc2026_fixtures(
+    scheduled: pd.DataFrame,
+    *,
+    override_assignment: GroupAssignment | None = None,
+) -> WC2026Fixtures:
     """Build a WC2026Fixtures from the Jürisoo NULL-scored rows.
 
     Expects ``scheduled`` to be the output of ``load_scheduled()`` filtered to
     WC 2026 (tournament == "FIFA World Cup"). Validates that exactly 72 matches
     yield exactly 12 four-team cliques and that every team plays exactly 3 group games.
+
+    If ``override_assignment`` is provided (typically loaded from
+    ``data/wc2026_group_assignment.json``), its team→letter mapping wins;
+    we still verify that the override's groups match the cliques recovered from
+    the schedule (so we catch a stale JSON file that no longer matches the
+    fixtures).
     """
     df = scheduled[scheduled["tournament"] == "FIFA World Cup"].copy()
     if len(df) != EXPECTED_MATCHES:
@@ -111,19 +204,7 @@ def parse_wc2026_fixtures(scheduled: pd.DataFrame) -> WC2026Fixtures:
     if len(groups_raw) != EXPECTED_GROUPS:
         raise ValueError(f"derived {len(groups_raw)} groups, expected {EXPECTED_GROUPS}")
 
-    # Label groups A-L by earliest fixture date (FIFA convention: Group A opens the
-    # tournament). Ties are broken by the canonical sorted-tuple of team names.
-    first_date = {}
-    for group_members in groups_raw:
-        members_set = set(group_members)
-        earliest = df[df["home_team"].isin(members_set) & df["away_team"].isin(members_set)][
-            "date"
-        ].min()
-        first_date[group_members] = earliest
-    groups_raw_sorted = sorted(groups_raw, key=lambda g: (first_date[g], g))
-    groups: dict[str, tuple[str, ...]] = {
-        letter: members for letter, members in zip(GROUP_LETTERS, groups_raw_sorted, strict=True)
-    }
+    groups, assignment_source = _label_groups(df, groups_raw, override_assignment)
 
     # Build FixtureMatch list with group letter populated.
     team_to_group: dict[str, str] = {
@@ -148,4 +229,6 @@ def parse_wc2026_fixtures(scheduled: pd.DataFrame) -> WC2026Fixtures:
             )
         )
 
-    return WC2026Fixtures(groups=groups, matches=tuple(matches))
+    return WC2026Fixtures(
+        groups=groups, matches=tuple(matches), assignment_source=assignment_source
+    )

@@ -14,6 +14,8 @@ from wc2026.sim.fixtures import (
     EXPECTED_MATCHES_PER_TEAM,
     EXPECTED_TEAMS_PER_GROUP,
     GROUP_LETTERS,
+    GroupAssignment,
+    load_group_assignment,
     parse_wc2026_fixtures,
 )
 
@@ -153,3 +155,82 @@ def test_parse_rejects_team_with_wrong_degree() -> None:
     df.loc[mexico_row, "home_team"] = "Brazil"  # now Mexico plays 2, Brazil plays 4
     with pytest.raises(ValueError, match="must play 3 opponents"):
         parse_wc2026_fixtures(df)
+
+
+# --- override_assignment -----------------------------------------------------
+
+
+def test_parse_default_reports_derived_assignment_source() -> None:
+    fixtures = parse_wc2026_fixtures(load_scheduled())
+    assert fixtures.assignment_source == "derived"
+
+
+def test_override_assignment_relabels_groups_and_reports_official_source() -> None:
+    """A FIFA-draw override should reassign letters while preserving the cliques."""
+    fixtures_derived = parse_wc2026_fixtures(load_scheduled())
+    # Build an override that permutes the derived letters (A↔L, B↔K, …) so we can
+    # detect that the override actually wins.
+    permuted_keys = list(GROUP_LETTERS[::-1])
+    override = GroupAssignment(
+        groups={
+            new_letter: fixtures_derived.groups[old_letter]
+            for new_letter, old_letter in zip(permuted_keys, GROUP_LETTERS, strict=True)
+        },
+        citation="FIFA Final Draw — synthetic test",
+    )
+    fixtures = parse_wc2026_fixtures(load_scheduled(), override_assignment=override)
+    assert fixtures.assignment_source.startswith("official:")
+    assert "FIFA Final Draw" in fixtures.assignment_source
+    # Mexico's group letter should now be the LAST letter (L), not A.
+    assert fixtures.group_of("Mexico") == "L"
+
+
+def test_override_assignment_rejects_mismatched_cliques() -> None:
+    """If the override's groups don't match the fixture cliques, raise."""
+    fixtures_derived = parse_wc2026_fixtures(load_scheduled())
+    # Take the first two derived groups and swap one team between them — this makes
+    # the override's group sets no longer match the cliques.
+    g_a = list(fixtures_derived.groups["A"])
+    g_b = list(fixtures_derived.groups["B"])
+    g_a[0], g_b[0] = g_b[0], g_a[0]
+    bad_groups = dict(fixtures_derived.groups)
+    bad_groups["A"] = tuple(g_a)
+    bad_groups["B"] = tuple(g_b)
+    override = GroupAssignment(groups=bad_groups, citation="bad")
+    with pytest.raises(ValueError, match="do not match the cliques"):
+        parse_wc2026_fixtures(load_scheduled(), override_assignment=override)
+
+
+def test_load_group_assignment_round_trips(tmp_path) -> None:
+    fixtures = parse_wc2026_fixtures(load_scheduled())
+    payload = {
+        "source": "Unit test",
+        "url": "https://example.com",
+        "groups": {letter: list(members) for letter, members in fixtures.groups.items()},
+    }
+    path = tmp_path / "assignment.json"
+    path.write_text(__import__("json").dumps(payload))
+    loaded = load_group_assignment(path)
+    assert set(loaded.groups.keys()) == set(GROUP_LETTERS)
+    assert "Unit test" in loaded.citation
+    assert "https://example.com" in loaded.citation
+
+
+def test_load_group_assignment_rejects_missing_letter(tmp_path) -> None:
+    payload = {"source": "broken", "groups": {"A": ["X1", "X2", "X3", "X4"]}}
+    path = tmp_path / "bad.json"
+    path.write_text(__import__("json").dumps(payload))
+    with pytest.raises(ValueError, match=r"A\.\.L"):
+        load_group_assignment(path)
+
+
+def test_load_group_assignment_rejects_duplicate_team(tmp_path) -> None:
+    fixtures = parse_wc2026_fixtures(load_scheduled())
+    groups = {letter: list(members) for letter, members in fixtures.groups.items()}
+    # Inject Mexico into Group B as well — duplicate across A and B.
+    groups["B"][0] = "Mexico"
+    payload = {"source": "dupe", "groups": groups}
+    path = tmp_path / "dupe.json"
+    path.write_text(__import__("json").dumps(payload))
+    with pytest.raises(ValueError, match="more than one group"):
+        load_group_assignment(path)

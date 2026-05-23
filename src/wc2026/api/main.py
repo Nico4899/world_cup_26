@@ -24,9 +24,10 @@ from wc2026.models.shootout import (
     load_historical_shootouts,
     simulate_shootout,
 )
-from wc2026.sim.fixtures import parse_wc2026_fixtures
+from wc2026.sim.fixtures import load_group_assignment, parse_wc2026_fixtures
 
 ARTEFACT_PATH = Path("data/artifacts/poisson_dc/latest.npz")
+GROUP_ASSIGNMENT_PATH = Path("data/wc2026_group_assignment.json")
 
 # Match Stage 0.6's tuned defaults.
 MODEL_HALF_LIFE_DAYS = 3650.0
@@ -108,7 +109,14 @@ async def lifespan(app: FastAPI):
     app.state.model = model
     app.state.model_source = source
     app.state.model_fit_at = fit_at
-    app.state.fixtures = parse_wc2026_fixtures(load_scheduled())
+    override = None
+    if GROUP_ASSIGNMENT_PATH.exists():
+        try:
+            override = load_group_assignment(GROUP_ASSIGNMENT_PATH)
+        except (OSError, ValueError):
+            # Bad/stale JSON — fall back to derived-from-dates labelling.
+            override = None
+    app.state.fixtures = parse_wc2026_fixtures(load_scheduled(), override_assignment=override)
     app.state.model_version = MODEL_VERSION
     # Optional Elo-based shootout model; None falls back to the 50/50 placeholder.
     (

@@ -25,6 +25,8 @@ def health(request: Request) -> HealthResponse:
     fitted = bool(model is not None and model.fitted)
     n_teams = len(model.params_.teams) if fitted else 0
     snapshot_date = getattr(state, "elo_snapshot_date", None)
+    fixtures = getattr(state, "fixtures", None)
+    assignment_source = getattr(fixtures, "assignment_source", "derived")
     return HealthResponse(
         status="ok",
         model_fitted=fitted,
@@ -34,4 +36,5 @@ def health(request: Request) -> HealthResponse:
         elo_snapshot_date=snapshot_date,
         elo_snapshot_age_days=_age_days(snapshot_date),
         shootout_model_loaded=getattr(state, "shootout_model", None) is not None,
+        group_assignment_source=assignment_source,
     )

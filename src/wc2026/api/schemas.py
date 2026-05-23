@@ -34,6 +34,14 @@ class HealthResponse(BaseModel):
         description="True if the Elo-based shootout submodel was loaded at startup; "
         "False means knockouts fall back to 50/50.",
     )
+    group_assignment_source: str = Field(
+        default="derived",
+        description=(
+            "'derived' = group letters A-L came from fixture-date clique ordering; "
+            "'official:<citation>' = letters came from the JSON file at "
+            "data/wc2026_group_assignment.json (FIFA draw)."
+        ),
+    )
 
 
 class FixtureSummary(BaseModel):

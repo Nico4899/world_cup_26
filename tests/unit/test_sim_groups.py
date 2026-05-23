@@ -125,38 +125,52 @@ def test_rank_teams_tie_on_points_uses_overall_gd() -> None:
     assert ranked[1].team == "B"
 
 
-def test_rank_teams_tie_on_points_and_gd_uses_overall_goals_scored() -> None:
+def test_rank_teams_h2h_tied_falls_through_to_overall_goals_scored() -> None:
+    """2026 chain: H2H tied → overall GD tied → overall GS breaks the tie."""
     teams = ["A", "B", "C", "D"]
-    # Construct: A & B both 6 pts, both +1 GD, but A scored more
+    # A vs B drew 2-2 (H2H stats identical). A's and B's overall GD also tied at +1,
+    # but B's overall GS (6) > A's overall GS (4) → B finishes first.
     matches = _matches_from_pairs(
         [
-            ("A", "B", 0, 0),  # draw; will fix below
+            ("A", "B", 2, 2),  # H2H draw — H2H pts/GD/GS identical for A and B
             ("C", "D", 0, 0),
-            ("A", "C", 4, 3),  # A wins, GD +1
-            ("B", "D", 2, 1),  # B wins, GD +1
-            ("A", "D", 0, 0),  # draw
-            ("B", "C", 0, 0),  # draw
+            ("A", "C", 2, 0),  # A wins
+            ("B", "C", 3, 1),  # B wins
+            ("A", "D", 0, 1),  # D wins
+            ("B", "D", 1, 2),  # D wins
         ]
     )
-    # A: D-W-D = 5 pts (not 6). Hmm let me recompute.
-    # Better construction:
-    matches = _matches_from_pairs(
-        [
-            ("A", "B", 1, 0),  # A wins; A 3
-            ("C", "D", 0, 0),  # draw
-            ("A", "C", 3, 1),  # A 6, GF=4, GA=1
-            ("B", "D", 2, 0),  # B 3, GF=2, GA=1
-            ("A", "D", 0, 1),  # D wins, A 6 still
-            ("B", "C", 2, 0),  # B 6
-        ]
-    )
-    # A: W-W-L = 6 pts; GF=4, GA=2 → GD +2
-    # B: L-W-W = 6 pts; GF=4, GA=1 → GD +3
+    # D: D-W-W = 7 pts (group winner; not what the test cares about)
+    # A: D-W-L = 4 pts; GF=2+2+0=4, GA=2+0+1=3, GD+1, GS=4
+    # B: D-W-L = 4 pts; GF=2+3+1=6, GA=2+1+2=5, GD+1, GS=6
+    # C: D-L-L = 1 pt
     rng = np.random.default_rng(0)
     ranked = rank_teams(teams, matches, rng)
-    # B has higher GD, so B finishes first (not A)
-    assert ranked[0].team == "B"
-    assert ranked[1].team == "A"
+    assert ranked[1].team == "B"
+    assert ranked[2].team == "A"
+
+
+def test_rank_teams_h2h_decides_before_overall_gd_in_2026() -> None:
+    """2026 chain: H2H is applied BEFORE overall GD (reversed from 2022)."""
+    teams = ["A", "B", "C", "D"]
+    # A and B tied on 6 pts. B has the bigger overall GD/GS, but A beat B head-to-head.
+    # Under 2026 rules, A finishes first via H2H precedence.
+    matches = _matches_from_pairs(
+        [
+            ("A", "B", 1, 0),  # H2H: A wins
+            ("C", "D", 0, 0),
+            ("A", "C", 1, 0),  # A 6 pts, GF=2, GA=0
+            ("B", "C", 5, 0),  # B 3 pts, GF=5, GA=0
+            ("A", "D", 0, 1),  # D wins; A 6 pts still, GF=2, GA=1
+            ("B", "D", 2, 0),  # B 6 pts, GF=7, GA=0
+        ]
+    )
+    # A: 6 pts, GD+1, GS=2. B: 6 pts, GD+7, GS=7. Overall favours B by a wide margin.
+    # H2H: A beat B 1-0 → A wins.
+    rng = np.random.default_rng(0)
+    ranked = rank_teams(teams, matches, rng)
+    assert ranked[0].team == "A"
+    assert ranked[1].team == "B"
 
 
 def test_rank_teams_tied_on_all_overall_uses_h2h() -> None:
@@ -250,9 +264,11 @@ def test_rank_teams_tied_on_all_overall_uses_h2h() -> None:
     assert a_idx < b_idx, f"A should finish above B via H2H; got order {[s.team for s in ranked]}"
 
 
-def test_rank_teams_total_tie_uses_random_lots() -> None:
-    """If two teams are tied on every criterion, draw lots determines order; over
-    many seeds, each team should finish 1st about half the time."""
+def test_rank_teams_total_tie_falls_through_to_rng_when_fifa_ranking_missing() -> None:
+    """The 2026 regulations have no drawing of lots, but the simulator must still
+    produce a total order when teams are tied on points/H2H/overall AND no FIFA
+    ranking is supplied. We use a deterministic rng-seeded fallback; over many
+    seeds, each team should finish 1st about half the time."""
     teams = ["A", "B"]
     matches: list[GroupMatchResult] = [GroupMatchResult("A", "B", 0, 0)]
     n_a_first = 0

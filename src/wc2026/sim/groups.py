@@ -1,24 +1,25 @@
 """Group-stage simulation: draw scorelines from the model, apply FIFA tiebreakers.
 
-Tiebreaker order
-----------------
+Tiebreaker order (2026)
+-----------------------
 Implemented order, used here for ranking the four teams in each group:
 
     1. Points (3 W, 1 D, 0 L)
-    2. Overall goal difference
-    3. Overall goals scored
-    4. Head-to-head points (among the currently tied subset only)
-    5. Head-to-head goal difference
-    6. Head-to-head goals scored
+    2. Head-to-head points (among the currently tied subset only)
+    3. Head-to-head goal difference
+    4. Head-to-head goals scored
+    5. Overall goal difference
+    6. Overall goals scored
     7. Conduct score      — NOT IMPLEMENTED; needs yellow/red-card data
     8. FIFA ranking       — used if provided, else skipped
-    9. Drawing of lots    — random, seeded by the rng argument
+    9. Drawing of lots    — NOT in the 2026 regulations; kept as a deterministic
+       rng-seeded fallback so the simulator always produces a total order even
+       when FIFA ranking is unavailable for the tied teams.
 
-This matches the official Russia 2018 and Qatar 2022 procedures. The 2026
-regulations document should be cross-checked before public launch — earlier
-World Cup formats put H2H criteria BEFORE overall GD/GS, and FIFA has been
-known to vary the order across competitions. Once verified, the
-``TIEBREAKER_VERIFIED_FOR`` constant below should be bumped to 2026.
+This matches FIFA's published 2026 procedure: head-to-head criteria are applied
+BEFORE overall GD/GS (reversed from 2018/2022), and drawing of lots is removed.
+Sources:
+    https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/groups-how-teams-qualify-tie-breakers
 """
 
 from __future__ import annotations
@@ -34,8 +35,7 @@ from wc2026.sim.fixtures import FixtureMatch
 POINTS_WIN = 3
 POINTS_DRAW = 1
 
-# Bump to "2026" once the official regulations have been cross-checked.
-TIEBREAKER_VERIFIED_FOR: str = "2022"
+TIEBREAKER_VERIFIED_FOR: str = "2026"
 
 
 @dataclass(frozen=True)
@@ -166,17 +166,12 @@ def compute_standings(
     }
 
 
-def _primary_key(standing: TeamStanding) -> tuple[int, int, int]:
-    """Sort key for the first three FIFA tiebreakers (negate for descending)."""
-    return (-standing.points, -standing.goal_difference, -standing.goals_for)
-
-
 def _h2h_key(
     team: str,
     matches: Iterable[GroupMatchResult],
     among: set[str],
 ) -> tuple[int, int, int]:
-    """Compute the head-to-head key restricted to matches between `among` teams."""
+    """Head-to-head sort key restricted to matches between `among` teams."""
     relevant = [
         m
         for m in matches
@@ -187,6 +182,11 @@ def _h2h_key(
     return (-s.points, -s.goal_difference, -s.goals_for)
 
 
+def _overall_key(standing: TeamStanding) -> tuple[int, int]:
+    """Overall GD then GS (post-H2H, post-points)."""
+    return (-standing.goal_difference, -standing.goals_for)
+
+
 def rank_teams(
     teams: Sequence[str],
     matches: Sequence[GroupMatchResult],
@@ -194,28 +194,25 @@ def rank_teams(
     *,
     fifa_ranking: dict[str, int] | None = None,
 ) -> tuple[TeamStanding, ...]:
-    """Apply the tiebreaker chain and return standings in finishing order (1st first)."""
+    """Apply the 2026 tiebreaker chain; return standings in finishing order (1st first)."""
     standings = compute_standings(teams, matches)
     fifa = fifa_ranking or {}
 
-    # First pass: sort by primary key. Then group by ties and break them.
-    primary_sorted = sorted(teams, key=lambda t: _primary_key(standings[t]))
-
-    # Group consecutive equal-primary-key teams.
+    # Step 1: group by points.
+    by_points = sorted(teams, key=lambda t: -standings[t].points)
     out: list[str] = []
     i = 0
-    while i < len(primary_sorted):
+    while i < len(by_points):
         j = i + 1
-        key_i = _primary_key(standings[primary_sorted[i]])
-        while j < len(primary_sorted) and _primary_key(standings[primary_sorted[j]]) == key_i:
+        pts_i = standings[by_points[i]].points
+        while j < len(by_points) and standings[by_points[j]].points == pts_i:
             j += 1
-        tied = primary_sorted[i:j]
+        tied = by_points[i:j]
         if len(tied) == 1:
             out.append(tied[0])
         else:
             out.extend(_break_ties(tied, matches, standings, fifa, rng))
         i = j
-
     return tuple(standings[t] for t in out)
 
 
@@ -226,10 +223,8 @@ def _break_ties(
     fifa_ranking: dict[str, int],
     rng: np.random.Generator,
 ) -> list[str]:
-    """Break ties among `tied` using H2H → FIFA ranking → drawing of lots."""
+    """2026 chain after points-tie: H2H (pts, GD, GS) → overall (GD, GS) → FIFA → rng."""
     among = set(tied)
-
-    # H2H sub-ranking
     h2h_sorted = sorted(tied, key=lambda t: _h2h_key(t, all_matches, among))
     out: list[str] = []
     i = 0
@@ -241,14 +236,38 @@ def _break_ties(
         still_tied = h2h_sorted[i:j]
         if len(still_tied) == 1:
             out.append(still_tied[0])
+        elif len(still_tied) < len(tied):
+            # H2H separated a strict subset → recompute H2H within the smaller subset
+            # (matches between the remaining tied teams may shift the H2H standings).
+            out.extend(_break_ties(still_tied, all_matches, standings, fifa_ranking, rng))
         else:
-            # FIFA ranking (lower = better; teams without an entry sort last)
-            fifa_sorted = sorted(still_tied, key=lambda t: fifa_ranking.get(t, 10**9))
-            # If FIFA also tied or unavailable, draw lots (random)
-            out.extend(
-                sorted(fifa_sorted, key=lambda t: (fifa_ranking.get(t, 10**9), rng.random()))
-            )
-            _ = standings  # silence unused-arg if FIFA path doesn't read it
+            # H2H made no progress (everyone tied on H2H too) → fall through to overall.
+            out.extend(_break_remaining(still_tied, standings, fifa_ranking, rng))
+        i = j
+    return out
+
+
+def _break_remaining(
+    tied: Sequence[str],
+    standings: dict[str, TeamStanding],
+    fifa_ranking: dict[str, int],
+    rng: np.random.Generator,
+) -> list[str]:
+    """Post-H2H chain: overall GD → overall GS → FIFA ranking → rng fallback."""
+    overall_sorted = sorted(tied, key=lambda t: _overall_key(standings[t]))
+    out: list[str] = []
+    i = 0
+    while i < len(overall_sorted):
+        j = i + 1
+        key_i = _overall_key(standings[overall_sorted[i]])
+        while j < len(overall_sorted) and _overall_key(standings[overall_sorted[j]]) == key_i:
+            j += 1
+        still_tied = overall_sorted[i:j]
+        if len(still_tied) == 1:
+            out.append(still_tied[0])
+        else:
+            # FIFA ranking (lower = better; missing → 10**9). rng decides if still tied.
+            out.extend(sorted(still_tied, key=lambda t: (fifa_ranking.get(t, 10**9), rng.random())))
         i = j
     return out
 
