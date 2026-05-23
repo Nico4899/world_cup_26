@@ -15,29 +15,41 @@ from wc2026.ingest.kaggle_intl import (
     RESULTS_COLUMNS,
     DatasetPaths,
     basic_stats,
+    load_played,
     load_results,
+    load_scheduled,
 )
 
 
 def _write_synthetic_results(target: Path) -> Path:
-    """Drop a 4-row synthetic results.csv at target/results.csv."""
+    """Drop a 5-row synthetic results.csv at target/results.csv.
+
+    Last row is a NULL-scored fixture (mimics Kaggle's pre-listed WC 2026 group games).
+    """
     target.mkdir(parents=True, exist_ok=True)
     df = pd.DataFrame(
         {
-            "date": ["1872-11-30", "2018-07-15", "2022-12-18", "2026-06-11"],
-            "home_team": ["Scotland", "France", "Argentina", "Mexico"],
-            "away_team": ["England", "Croatia", "France", "Poland"],
-            "home_score": [0, 4, 3, 2],
-            "away_score": [0, 2, 3, 1],
+            "date": [
+                "1872-11-30",
+                "2018-07-15",
+                "2022-12-18",
+                "2026-03-31",
+                "2026-06-11",
+            ],
+            "home_team": ["Scotland", "France", "Argentina", "Kosovo", "Mexico"],
+            "away_team": ["England", "Croatia", "France", "Turkey", "Poland"],
+            "home_score": [0, 4, 3, 0, pd.NA],
+            "away_score": [0, 2, 3, 1, pd.NA],
             "tournament": [
                 "Friendly",
                 "FIFA World Cup",
                 "FIFA World Cup",
+                "FIFA World Cup qualification",
                 "FIFA World Cup",
             ],
-            "city": ["Glasgow", "Moscow", "Lusail", "Mexico City"],
-            "country": ["Scotland", "Russia", "Qatar", "Mexico"],
-            "neutral": [False, True, True, False],
+            "city": ["Glasgow", "Moscow", "Lusail", "Pristina", "Mexico City"],
+            "country": ["Scotland", "Russia", "Qatar", "Kosovo", "Mexico"],
+            "neutral": [False, True, True, False, False],
         }
     )
     csv = target / "results.csv"
@@ -56,14 +68,35 @@ def test_dataset_paths_from_root(tmp_path: Path) -> None:
 def test_load_results_happy_path(tmp_path: Path) -> None:
     _write_synthetic_results(tmp_path)
     df = load_results(tmp_path)
-    assert len(df) == 4
+    assert len(df) == 5
     for col in RESULTS_COLUMNS:
         assert col in df.columns, f"missing {col}"
     assert pd.api.types.is_datetime64_any_dtype(df["date"])
     assert df["neutral"].dtype == bool
     assert df["home_score"].dtype == "Int64"
-    assert df.loc[3, "home_team"] == "Mexico"
-    assert df.loc[3, "date"].year == 2026
+    assert df.loc[4, "home_team"] == "Mexico"
+    assert df.loc[4, "date"].year == 2026
+
+
+def test_load_played_strips_null_scored_fixtures(tmp_path: Path) -> None:
+    _write_synthetic_results(tmp_path)
+    played = load_played(tmp_path)
+    assert len(played) == 4
+    assert played["home_score"].notna().all()
+    assert played["away_score"].notna().all()
+    # the future Mexico-Poland fixture must be dropped
+    assert "Poland" not in played["away_team"].to_numpy()
+
+
+def test_load_scheduled_keeps_only_null_scored_fixtures(tmp_path: Path) -> None:
+    _write_synthetic_results(tmp_path)
+    scheduled = load_scheduled(tmp_path)
+    assert len(scheduled) == 1
+    row = scheduled.iloc[0]
+    assert row["home_team"] == "Mexico"
+    assert row["away_team"] == "Poland"
+    assert pd.isna(row["home_score"])
+    assert pd.isna(row["away_score"])
 
 
 def test_load_results_missing_file(tmp_path: Path) -> None:
@@ -80,13 +113,13 @@ def test_load_results_missing_column(tmp_path: Path) -> None:
 def test_basic_stats(tmp_path: Path) -> None:
     _write_synthetic_results(tmp_path)
     stats = basic_stats(load_results(tmp_path))
-    assert stats["n_matches"] == 4
+    assert stats["n_matches"] == 5
     assert stats["date_min"] == "1872-11-30"
     assert stats["date_max"] == "2026-06-11"
-    # France appears in both row 1 (home) and row 2 (away) → 7 unique teams across 4 matches.
-    assert stats["n_teams"] == 7
-    assert stats["n_tournaments"] == 2
-    assert stats["neutral_pct"] == 50.0
+    # France appears as home (row 1) and away (row 2) → 9 distinct teams across 5 matches.
+    assert stats["n_teams"] == 9
+    assert stats["n_tournaments"] == 3
+    assert stats["neutral_pct"] == 40.0
 
 
 def test_basic_stats_empty() -> None:

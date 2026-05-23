@@ -120,6 +120,27 @@ def load_results(target_dir: Path = DEFAULT_TARGET) -> pd.DataFrame:
     return df
 
 
+def load_played(target_dir: Path = DEFAULT_TARGET) -> pd.DataFrame:
+    """Return only matches with both scores recorded (i.e. actually played).
+
+    The upstream CSV mixes played matches with pre-listed future fixtures (notably the
+    WC 2026 group-stage draw, where venues are known but scores are NULL). Almost all
+    training/feature code wants only the played subset.
+    """
+    df = load_results(target_dir)
+    return df.dropna(subset=["home_score", "away_score"]).reset_index(drop=True)
+
+
+def load_scheduled(target_dir: Path = DEFAULT_TARGET) -> pd.DataFrame:
+    """Return only matches with NULL scores (pre-listed future fixtures).
+
+    For WC 2026 this is the 72 group-stage matches with venues filled in; knockout
+    matches cannot be pre-listed because opponents depend on group outcomes.
+    """
+    df = load_results(target_dir)
+    return df[df["home_score"].isna() | df["away_score"].isna()].reset_index(drop=True)
+
+
 def basic_stats(df: pd.DataFrame) -> dict[str, object]:
     """Tiny summary used by the CLI/smoke checks; not a test target."""
     return {
