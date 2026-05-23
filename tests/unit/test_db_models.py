@@ -18,7 +18,10 @@ from wc2026.db.models import (
     Base,
     ModelPrediction,
     RawEloSnapshot,
+    RawFifaRanking,
     RawMatch,
+    RawSquad,
+    RawTeamAsset,
     SchedulerJobRun,
     TournamentSimRun,
     TournamentSimTeamOutcome,
@@ -45,6 +48,9 @@ def test_all_expected_tables_are_registered(sqlite_engine):
         "tournament_sim_runs",
         "tournament_sim_team_outcomes",
         "scheduler_job_runs",
+        "raw_team_assets",
+        "raw_squads",
+        "raw_fifa_rankings",
     }
     assert expected.issubset(tables), f"missing tables: {expected - tables}"
 
@@ -178,3 +184,66 @@ def test_elo_snapshot_round_trip(sqlite_engine):
         loaded = s.scalar(select(RawEloSnapshot))
         assert loaded.team_code == "ARG"
         assert loaded.rating == 2147.0
+
+
+def test_raw_team_asset_round_trip(sqlite_engine):
+    with Session(sqlite_engine) as s:
+        a = RawTeamAsset(
+            team="Argentina",
+            thesportsdb_id=133602,
+            crest_url="https://example.test/argentina.png",
+            kit_home_color="#75AADB",
+            kit_away_color="#000080",
+            stadium_name="Estadio Monumental",
+            stadium_capacity=83214,
+            stadium_city="Buenos Aires",
+            stadium_country="Argentina",
+            fetched_at=datetime.now(UTC),
+        )
+        s.add(a)
+        s.commit()
+        loaded = s.scalar(select(RawTeamAsset))
+        assert loaded.team == "Argentina"
+        assert loaded.stadium_capacity == 83214
+
+
+def test_raw_squad_composite_pk_allows_history(sqlite_engine):
+    """Same player across two snapshot_dates inserts two rows, not a conflict."""
+    with Session(sqlite_engine) as s:
+        for snap_date in (date(2026, 5, 1), date(2026, 6, 1)):
+            s.add(
+                RawSquad(
+                    tournament="FIFA World Cup 2026",
+                    team="Argentina",
+                    player_name="Lionel Messi",
+                    snapshot_date=snap_date,
+                    shirt_number=10,
+                    position="FWD",
+                    birth_date=date(1987, 6, 24),
+                    club="Inter Miami",
+                    caps=190,
+                    goals=109,
+                    ingested_at=datetime.now(UTC),
+                )
+            )
+        s.commit()
+        rows = s.scalars(select(RawSquad)).all()
+        assert len(rows) == 2
+        assert {r.snapshot_date for r in rows} == {date(2026, 5, 1), date(2026, 6, 1)}
+
+
+def test_raw_fifa_ranking_round_trip(sqlite_engine):
+    with Session(sqlite_engine) as s:
+        r = RawFifaRanking(
+            ranking_date=date(2026, 4, 4),
+            team="Argentina",
+            rank=1,
+            points=1886.16,
+            previous_rank=1,
+            ingested_at=datetime.now(UTC),
+        )
+        s.add(r)
+        s.commit()
+        loaded = s.scalar(select(RawFifaRanking))
+        assert loaded.rank == 1
+        assert loaded.points == 1886.16

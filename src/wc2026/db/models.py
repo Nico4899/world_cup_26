@@ -133,11 +133,78 @@ class SchedulerJobRun(Base):
     error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class RawTeamAsset(Base):
+    """TheSportsDB-sourced crest / kit / stadium metadata, one row per team.
+
+    ``team`` is the canonical name as it appears in ``raw_matches.home_team`` —
+    the ingester is responsible for resolving TheSportsDB's spelling back to it
+    via a hand-maintained alias map.
+    """
+
+    __tablename__ = "raw_team_assets"
+
+    team: Mapped[str] = mapped_column(String(128), primary_key=True)
+    thesportsdb_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    crest_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    kit_home_color: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    kit_away_color: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    stadium_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    stadium_capacity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stadium_city: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    stadium_country: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
+class RawSquad(Base):
+    """Tournament squad row (one per player per snapshot_date).
+
+    Squads change frequently in the months before a tournament; the
+    (tournament, team, player_name, snapshot_date) PK lets us keep a history
+    of how each roster evolved instead of a single mutable row.
+    """
+
+    __tablename__ = "raw_squads"
+
+    tournament: Mapped[str] = mapped_column(String(128), primary_key=True)
+    team: Mapped[str] = mapped_column(String(128), primary_key=True)
+    player_name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    snapshot_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    shirt_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    position: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    club: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    caps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    goals: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
+class RawFifaRanking(Base):
+    """FIFA Men's Ranking row (one per (date, team))."""
+
+    __tablename__ = "raw_fifa_rankings"
+
+    ranking_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    team: Mapped[str] = mapped_column(String(128), primary_key=True)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    points: Mapped[float | None] = mapped_column(Float, nullable=True)
+    previous_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
 __all__ = [
     "Base",
     "ModelPrediction",
     "RawEloSnapshot",
+    "RawFifaRanking",
     "RawMatch",
+    "RawSquad",
+    "RawTeamAsset",
     "SchedulerJobRun",
     "TournamentSimRun",
     "TournamentSimTeamOutcome",
