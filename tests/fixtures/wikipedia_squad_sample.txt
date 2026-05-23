@@ -1,0 +1,13 @@
+==Squad==
+Head coach: {{flagicon|ARG}} [[Lionel Scaloni]]
+
+Caps and goals are correct as of XX month XXXX, after the match against XYZ.
+
+{{nat fs g start}}
+{{nat fs g player|no=1|pos=GK|name=[[Emiliano Martínez]]|age={{Birth date and age2|2026|6|11|1992|9|2|df=y}}|caps=45|goals=0|club=[[Aston Villa F.C.|Aston Villa]]|clubnat=ENG}}
+{{nat fs mid}}
+{{nat fs g player|no=10|pos=FW|name=[[Lionel Messi]]|age={{Birth date and age2|2026|6|11|1987|6|24|df=y}}|caps=190|goals=109|club=[[Inter Miami CF|Inter Miami]]|clubnat=USA}}
+{{nat fs g player|no=22|pos=FW|name=[[Lautaro Martínez]]|age={{Birth date and age2|2026|6|11|1997|8|22|df=y}}|caps=70|goals=30|club=[[Inter Milan|Internazionale]]|clubnat=ITA}}
+{{nat fs end}}
+
+==See also==
