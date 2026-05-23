@@ -1,10 +1,12 @@
 """APScheduler entry point: daily refresh jobs for ingest sources.
 
 Schedule (UTC)
+    02:00  Postgres backup → data/backups/wc2026-YYYY-MM-DD.sql.gz (14-day retention)
     04:00  Jürisoo Kaggle dataset refresh
     04:15  Elo ratings snapshot
     04:30  football-data.org WC fixtures refresh
     05:00  Poisson + Dixon-Coles model refit → data/artifacts/poisson_dc/latest.npz
+           (also refits the Elo-based shootout submodel → data/artifacts/shootout/latest.json)
 
 Each job writes a row to ``scheduler_job_runs`` so the run history is visible
 in Postgres. If the DB is unavailable, the failure is logged but does not
@@ -20,11 +22,15 @@ Run with:
 
 from __future__ import annotations
 
+import gzip
 import logging
 import os
+import shutil
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -40,6 +46,9 @@ from wc2026.ingest.football_data_org import (
     fetch_competition_matches,
 )
 from wc2026.ingest.kaggle_intl import download_dataset
+
+DEFAULT_BACKUP_DIR = Path("data/backups")
+BACKUP_RETENTION_DAYS = 14
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +76,51 @@ def _job_football_data_refresh() -> None:
     fetch_competition_matches(WC_COMPETITION_CODE)
 
 
+def _prune_backups(backup_dir: Path, retention_days: int = BACKUP_RETENTION_DAYS) -> int:
+    """Delete .sql.gz backups older than ``retention_days``. Returns count removed."""
+    if not backup_dir.exists():
+        return 0
+    cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+    removed = 0
+    for f in backup_dir.glob("wc2026-*.sql.gz"):
+        mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=UTC)
+        if mtime < cutoff:
+            f.unlink()
+            removed += 1
+    return removed
+
+
+def _job_db_backup(
+    backup_dir: Path = DEFAULT_BACKUP_DIR,
+    retention_days: int = BACKUP_RETENTION_DAYS,
+) -> Path | None:
+    """Dump DATABASE_URL to a gzipped .sql file; prune older than retention.
+
+    Returns the written path, or None if skipped (no DATABASE_URL, pg_dump missing).
+    Errors during dump propagate so the job-runs row records the failure.
+    """
+    db_url = os.environ.get("DATABASE_URL")
+    if not db_url:
+        logger.warning("DATABASE_URL not set — skipping DB backup")
+        return None
+    if shutil.which("pg_dump") is None:
+        logger.warning("pg_dump not on PATH — skipping DB backup (install postgresql-client)")
+        return None
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    today = datetime.now(UTC).date()
+    out_path = backup_dir / f"wc2026-{today.isoformat()}.sql.gz"
+    with gzip.open(out_path, "wb") as fout:
+        proc = subprocess.run(
+            ["pg_dump", "--no-owner", "--no-privileges", db_url],
+            capture_output=True,
+            check=True,
+        )
+        fout.write(proc.stdout)
+    removed = _prune_backups(backup_dir, retention_days)
+    logger.info("DB backup written to %s (pruned %d old)", out_path, removed)
+    return out_path
+
+
 def _job_poisson_refit() -> None:
     # Local import: keeps the scheduler module importable without scipy/sklearn
     # at parse time, and matches the lazy-import pattern used by ingesters.
@@ -76,6 +130,7 @@ def _job_poisson_refit() -> None:
 
 
 JOB_SPECS: tuple[JobSpec, ...] = (
+    JobSpec(name="db_backup", hour=2, minute=0, func=_job_db_backup),
     JobSpec(name="kaggle_refresh", hour=4, minute=0, func=_job_kaggle_refresh),
     JobSpec(name="elo_refresh", hour=4, minute=15, func=_job_elo_refresh),
     JobSpec(
