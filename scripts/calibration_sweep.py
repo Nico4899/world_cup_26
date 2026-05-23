@@ -36,7 +36,9 @@ def main() -> int:
     best = (float("inf"), None)
     for hl in half_lives:
         t0 = time.time()
-        preds = hindcast(target, history, cfg=HindcastConfig(half_life_days=hl, history_window_years=10))
+        preds = hindcast(
+            target, history, cfg=HindcastConfig(half_life_days=hl, history_window_years=10)
+        )
         clean = preds.dropna(subset=["p_home", "p_draw", "p_away", "observed"])
         m = aggregate(clean)
         dt = time.time() - t0
