@@ -20,6 +20,7 @@ from wc2026.db.models import (
     RawEloSnapshot,
     RawFifaRanking,
     RawMatch,
+    RawMatchXg,
     RawSquad,
     RawTeamAsset,
     SchedulerJobRun,
@@ -51,6 +52,7 @@ def test_all_expected_tables_are_registered(sqlite_engine):
         "raw_team_assets",
         "raw_squads",
         "raw_fifa_rankings",
+        "raw_match_xg",
     }
     assert expected.issubset(tables), f"missing tables: {expected - tables}"
 
@@ -247,3 +249,27 @@ def test_raw_fifa_ranking_round_trip(sqlite_engine):
         loaded = s.scalar(select(RawFifaRanking))
         assert loaded.rank == 1
         assert loaded.points == 1886.16
+
+
+def test_raw_match_xg_composite_pk_allows_multiple_sources(sqlite_engine):
+    """Same match, same team, two different xG sources insert as two rows."""
+    with Session(sqlite_engine) as s:
+        for src in ("statsbomb_open", "fbref"):
+            s.add(
+                RawMatchXg(
+                    match_date=date(2022, 12, 18),
+                    home_team="Argentina",
+                    away_team="France",
+                    team="Argentina",
+                    source=src,
+                    xg_for=1.9,
+                    xg_against=2.7,
+                    shots=21,
+                    shots_on_target=8,
+                    ingested_at=datetime.now(UTC),
+                )
+            )
+        s.commit()
+        rows = s.scalars(select(RawMatchXg)).all()
+        assert len(rows) == 2
+        assert {r.source for r in rows} == {"statsbomb_open", "fbref"}

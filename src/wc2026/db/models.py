@@ -197,12 +197,40 @@ class RawFifaRanking(Base):
     )
 
 
+class RawMatchXg(Base):
+    """Per-match, per-team expected-goals aggregate.
+
+    The shot-level StatsBomb events live as Parquet snapshots under
+    ``data/raw/statsbomb/`` (too many rows to hold in Postgres efficiently).
+    This table is the **summary** used by feature engineering — one row per
+    ``(match_date, home_team, away_team, team, source)`` so we can blend
+    multiple xG sources (StatsBomb open data vs FBref) without overwriting
+    each other.
+    """
+
+    __tablename__ = "raw_match_xg"
+
+    match_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    home_team: Mapped[str] = mapped_column(String(128), primary_key=True)
+    away_team: Mapped[str] = mapped_column(String(128), primary_key=True)
+    team: Mapped[str] = mapped_column(String(128), primary_key=True)
+    source: Mapped[str] = mapped_column(String(32), primary_key=True)
+    xg_for: Mapped[float] = mapped_column(Float, nullable=False)
+    xg_against: Mapped[float] = mapped_column(Float, nullable=False)
+    shots: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shots_on_target: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
 __all__ = [
     "Base",
     "ModelPrediction",
     "RawEloSnapshot",
     "RawFifaRanking",
     "RawMatch",
+    "RawMatchXg",
     "RawSquad",
     "RawTeamAsset",
     "SchedulerJobRun",
