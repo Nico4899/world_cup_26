@@ -1,0 +1,161 @@
+"""Tests for the FastAPI app routes (no external deps; uses TestClient + lifespan)."""
+
+from __future__ import annotations
+
+from collections.abc import Generator
+
+import pytest
+from fastapi.testclient import TestClient
+
+from wc2026.api.main import app
+
+
+@pytest.fixture(scope="module")
+def client() -> Generator[TestClient, None, None]:
+    """One TestClient per module — lifespan-loaded model + fixtures stay cached."""
+    with TestClient(app) as c:
+        yield c
+
+
+# --- /health ----------------------------------------------------------------
+
+
+def test_health_returns_ok_with_loaded_model(client: TestClient) -> None:
+    r = client.get("/health")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["status"] == "ok"
+    assert data["model_fitted"] is True
+    # ~291 teams from the 10-year fit; allow generous range so test isn't brittle.
+    assert data["model_teams_n"] > 100
+
+
+# --- /api/v1/matches --------------------------------------------------------
+
+
+def test_list_matches_returns_72_wc_2026_fixtures(client: TestClient) -> None:
+    r = client.get("/api/v1/matches")
+    assert r.status_code == 200
+    matches = r.json()
+    assert len(matches) == 72
+    first = matches[0]
+    assert first["match_id"] == 0
+    assert first["home_team"] == "Mexico"
+    assert first["group"] == "A"
+
+
+def test_list_matches_filter_by_group(client: TestClient) -> None:
+    r = client.get("/api/v1/matches", params={"group": "A"})
+    assert r.status_code == 200
+    matches = r.json()
+    # group A has 4 teams → 6 matches
+    assert len(matches) == 6
+    assert all(m["group"] == "A" for m in matches)
+
+
+def test_list_matches_filter_by_date(client: TestClient) -> None:
+    r = client.get("/api/v1/matches", params={"date": "2026-06-11"})
+    assert r.status_code == 200
+    matches = r.json()
+    # June 11 is the opener: 2 matches (both Group A)
+    assert len(matches) == 2
+    assert all(m["date"] == "2026-06-11" for m in matches)
+
+
+def test_get_match_by_id_includes_prediction_with_full_matrix(client: TestClient) -> None:
+    r = client.get("/api/v1/matches/0")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["fixture"]["match_id"] == 0
+    pred = body["prediction"]
+    s = pred["outcome"]["home_win"] + pred["outcome"]["draw"] + pred["outcome"]["away_win"]
+    assert abs(s - 1.0) < 1e-6
+    # /api/v1/matches/{id} now returns top-5 + the full score_matrix in one call
+    assert len(pred["top_scorelines"]) == 5
+    matrix = pred["score_matrix"]
+    assert matrix is not None
+    assert len(matrix) == 11  # 0..10 goals (max_goals=10)
+    assert all(len(row) == 11 for row in matrix)
+    total_mass = sum(p for row in matrix for p in row)
+    assert abs(total_mass - 1.0) < 1e-6
+
+
+def test_get_match_by_id_404_on_out_of_range(client: TestClient) -> None:
+    r = client.get("/api/v1/matches/999")
+    assert r.status_code == 404
+
+
+# --- /api/v1/predictions ----------------------------------------------------
+
+
+def test_pairwise_prediction_known_teams(client: TestClient) -> None:
+    r = client.get("/api/v1/predictions/Argentina/France", params={"neutral": "true"})
+    assert r.status_code == 200
+    data = r.json()
+    s = data["outcome"]["home_win"] + data["outcome"]["draw"] + data["outcome"]["away_win"]
+    assert abs(s - 1.0) < 1e-6
+    assert data["expected_home_goals"] > 0
+    assert data["expected_away_goals"] > 0
+    assert len(data["top_scorelines"]) == 5
+    # top scoreline probabilities should be monotonically non-increasing
+    probs = [sc["probability"] for sc in data["top_scorelines"]]
+    assert probs == sorted(probs, reverse=True)
+    # /api/v1/predictions/... ships the full score_matrix
+    matrix = data["score_matrix"]
+    assert matrix is not None
+    assert len(matrix) == 11
+    # The top-1 scoreline's matrix cell should equal its reported probability.
+    top = data["top_scorelines"][0]
+    assert abs(matrix[top["home_goals"]][top["away_goals"]] - top["probability"]) < 1e-9
+
+
+def test_pairwise_prediction_422_on_unknown_team(client: TestClient) -> None:
+    r = client.get("/api/v1/predictions/Atlantis/France")
+    assert r.status_code == 422
+    assert "Atlantis" in r.json()["detail"]
+
+
+# --- /api/v1/tournament -----------------------------------------------------
+
+
+def test_standings_returns_12_groups_with_per_team_probabilities(client: TestClient) -> None:
+    # Use a small n_sims to keep the test fast.
+    r = client.get("/api/v1/tournament/standings", params={"n_sims": 100, "seed": 0})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["n_sims"] == 100
+    assert len(body["groups"]) == 12
+    for g in body["groups"]:
+        assert len(g["teams"]) == 4
+        for row in g["teams"]:
+            for k in ("p_first", "p_second", "p_third_advance", "p_eliminated"):
+                assert 0.0 <= row[k] <= 1.0
+    # Headline has 10 teams sorted by p_champion descending
+    assert len(body["headline"]) == 10
+    ps = [t["p_champion"] for t in body["headline"]]
+    assert ps == sorted(ps, reverse=True)
+
+
+def test_bracket_returns_31_knockout_matches_and_champion(client: TestClient) -> None:
+    r = client.get("/api/v1/tournament/bracket", params={"seed": 0})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["seed"] == 0
+    # 16 R32 + 8 R16 + 4 QF + 2 SF + 1 Final = 31 matches
+    assert len(body["matches"]) == 31
+    rounds = {m["round"] for m in body["matches"]}
+    assert rounds == {"R32", "R16", "QF", "SF", "Final"}
+    # Champion is one of the teams in the final
+    final_match = next(m for m in body["matches"] if m["round"] == "Final")
+    assert body["champion"] in (final_match["home_team"], final_match["away_team"])
+
+
+def test_bracket_is_cached_by_seed(client: TestClient) -> None:
+    """Two calls with the same seed must return byte-identical brackets (cache hit)."""
+    r1 = client.get("/api/v1/tournament/bracket", params={"seed": 7})
+    r2 = client.get("/api/v1/tournament/bracket", params={"seed": 7})
+    assert r1.status_code == r2.status_code == 200
+    assert r1.json() == r2.json()
+    # different seed gives a different realisation (almost surely)
+    r3 = client.get("/api/v1/tournament/bracket", params={"seed": 8})
+    assert r3.json()["matches"] != r1.json()["matches"]
