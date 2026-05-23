@@ -250,6 +250,24 @@ def test_h2h_unknown_team_returns_422(client: TestClient) -> None:
 # --- /api/v1/_ops/scheduler-status -----------------------------------------
 
 
+def test_model_ref_date_is_dynamic_not_hardcoded() -> None:
+    """Regression: the API's lifespan fit-reference date must follow today's
+    UTC date, not a constant pinned at module-import time."""
+    from datetime import UTC, date, datetime
+
+    import pandas as pd
+
+    from wc2026.api.main import _today_utc_ts
+
+    today = pd.Timestamp(datetime.now(UTC).date())
+    got = _today_utc_ts()
+    assert isinstance(got, pd.Timestamp)
+    # Allow a small window in case the test crosses midnight UTC mid-run.
+    assert got.date() in (today.date() - pd.Timedelta(days=1).to_pytimedelta(), today.date())
+    # Must NOT be the old 2026-05-23 hardcode.
+    assert got.date() != date(2026, 5, 23) or today.date() == date(2026, 5, 23)
+
+
 def test_scheduler_status_returns_503_or_empty_without_db(client: TestClient) -> None:
     """In the unit-test env we have no Postgres. The endpoint must either:
     - return 503 (DB unreachable), or

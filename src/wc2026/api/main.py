@@ -45,6 +45,7 @@ def _today_utc_ts() -> pd.Timestamp:
     """
     return pd.Timestamp(datetime.now(UTC).date())
 
+
 CORS_ORIGINS = (
     "http://localhost:8501",
     "http://localhost:3000",
