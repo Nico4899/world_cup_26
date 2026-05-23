@@ -91,6 +91,10 @@ def _record_job_run(name: str, started_at: datetime, status: str, error_text: st
 
 
 def _wrap_with_tracking(spec: JobSpec) -> Callable[[], None]:
+    # The returned closure captures `spec`, so it can only be used with
+    # APScheduler's MemoryJobStore (the default). Switching to a persistent
+    # store (SQLAlchemyJobStore etc.) would require a top-level function and
+    # passing spec.name via the job's args kwarg instead.
     def runner() -> None:
         started = datetime.now(UTC)
         try:

@@ -200,6 +200,28 @@ def parse_competition_matches(payload: dict[str, Any]) -> pd.DataFrame:
     return df
 
 
+@retry(
+    reraise=True,
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    retry=retry_if_exception_type(RateLimitError),
+)
+def _cached_get_json(
+    session: requests_cache.CachedSession,
+    url: str,
+    *,
+    api_key: str,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    """Rate-limited cached GET that surfaces 429 as a retryable RateLimitError."""
+    _RATE_LIMITER.acquire()
+    resp = session.get(url, params=params, headers=_build_headers(api_key), timeout=30)
+    if resp.status_code == 429:
+        raise RateLimitError(f"429 Too Many Requests from {url}")
+    resp.raise_for_status()
+    return resp.json()
+
+
 def fetch_competition_matches(
     competition_id: str = WC_COMPETITION_CODE,
     season: int | None = None,
@@ -217,12 +239,8 @@ def fetch_competition_matches(
     params: dict[str, Any] = {}
     if season is not None:
         params["season"] = season
-    _RATE_LIMITER.acquire()
-    resp = sess.get(url, params=params, headers=_build_headers(key), timeout=30)
-    if resp.status_code == 429:
-        raise RateLimitError(f"429 Too Many Requests from {url}")
-    resp.raise_for_status()
-    return parse_competition_matches(resp.json())
+    payload = _cached_get_json(sess, url, api_key=key, params=params)
+    return parse_competition_matches(payload)
 
 
 def fetch_match(match_id: int, *, api_key: str | None = None) -> dict[str, Any]:

@@ -10,11 +10,12 @@ for the same source, so the script is safe to re-run nightly.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from wc2026.db.models import RawEloSnapshot, RawMatch
@@ -25,6 +26,11 @@ from wc2026.ingest.kaggle_intl import load_results
 
 JURISOO_SOURCE = "jurisoo_kaggle"
 
+# Postgres caps a single statement at 65535 bound parameters. raw_matches has 11
+# columns, raw_elo_snapshots has 5; 5000 rows * 11 = 55000 stays safely below the
+# limit and lets the same constant cover both tables.
+INSERT_BATCH_ROWS = 5000
+
 
 def _latest_elo_parquet(elo_dir: Path) -> Path:
     paths = sorted(elo_dir.glob("elo_current_*.parquet"))
@@ -33,68 +39,78 @@ def _latest_elo_parquet(elo_dir: Path) -> Path:
     return paths[-1]
 
 
-def _upsert_matches(df: pd.DataFrame, *, source: str = JURISOO_SOURCE) -> int:
-    """Insert raw_matches rows with ON CONFLICT DO NOTHING on the natural key.
+def _chunks(payload: list[dict], size: int) -> Iterable[list[dict]]:
+    for i in range(0, len(payload), size):
+        yield payload[i : i + size]
+
+
+def _row_to_match_payload(row, *, source: str, now: datetime) -> dict:
+    return {
+        "date": row.date.date() if hasattr(row.date, "date") else row.date,
+        "home_team": row.home_team,
+        "away_team": row.away_team,
+        "home_score": None if pd.isna(row.home_score) else int(row.home_score),
+        "away_score": None if pd.isna(row.away_score) else int(row.away_score),
+        "tournament": row.tournament,
+        "city": None if pd.isna(row.city) else row.city,
+        "country": None if pd.isna(row.country) else row.country,
+        "neutral": bool(row.neutral),
+        "source": source,
+        "ingested_at": now,
+    }
+
+
+def _row_to_elo_payload(row) -> dict:
+    snap = row.snapshot_date
+    if hasattr(snap, "date"):
+        snap = snap.date()
+    return {
+        "snapshot_date": snap,
+        "team_code": row.code,
+        "team_name": None if pd.isna(getattr(row, "team_name", None)) else row.team_name,
+        "rating": float(row.rating),
+        "global_rank": None if pd.isna(row.global_rank) else int(row.global_rank),
+    }
+
+
+def _upsert_matches(
+    df: pd.DataFrame, *, source: str = JURISOO_SOURCE, batch_size: int = INSERT_BATCH_ROWS
+) -> int:
+    """Insert raw_matches in batches with ON CONFLICT DO NOTHING on the natural key.
 
     Returns the number of rows attempted (not necessarily inserted, since duplicates
-    are quietly ignored). Postgres-specific; for SQLite fall back to the slower
-    SELECT-then-INSERT path via _upsert_matches_generic.
+    are quietly ignored). Postgres-specific.
     """
-    payload = []
     now = datetime.now(UTC)
-    for row in df.itertuples(index=False):
-        payload.append(
-            {
-                "date": row.date.date() if hasattr(row.date, "date") else row.date,
-                "home_team": row.home_team,
-                "away_team": row.away_team,
-                "home_score": None if pd.isna(row.home_score) else int(row.home_score),
-                "away_score": None if pd.isna(row.away_score) else int(row.away_score),
-                "tournament": row.tournament,
-                "city": None if pd.isna(row.city) else row.city,
-                "country": None if pd.isna(row.country) else row.country,
-                "neutral": bool(row.neutral),
-                "source": source,
-                "ingested_at": now,
-            }
-        )
+    payload = [
+        _row_to_match_payload(row, source=source, now=now) for row in df.itertuples(index=False)
+    ]
     if not payload:
         return 0
     with session_scope() as s:
-        stmt = pg_insert(RawMatch).values(payload)
-        stmt = stmt.on_conflict_do_nothing(constraint="uq_raw_matches_natural_key")
-        s.execute(stmt)
+        for chunk in _chunks(payload, batch_size):
+            stmt = pg_insert(RawMatch).values(chunk)
+            stmt = stmt.on_conflict_do_nothing(constraint="uq_raw_matches_natural_key")
+            s.execute(stmt)
     return len(payload)
 
 
-def _upsert_elo_snapshot(df: pd.DataFrame) -> int:
-    payload = []
-    for row in df.itertuples(index=False):
-        snap = row.snapshot_date
-        if hasattr(snap, "date"):
-            snap = snap.date()
-        payload.append(
-            {
-                "snapshot_date": snap,
-                "team_code": row.code,
-                "team_name": None if pd.isna(getattr(row, "team_name", None)) else row.team_name,
-                "rating": float(row.rating),
-                "global_rank": None if pd.isna(row.global_rank) else int(row.global_rank),
-            }
-        )
+def _upsert_elo_snapshot(df: pd.DataFrame, *, batch_size: int = INSERT_BATCH_ROWS) -> int:
+    payload = [_row_to_elo_payload(row) for row in df.itertuples(index=False)]
     if not payload:
         return 0
     with session_scope() as s:
-        stmt = pg_insert(RawEloSnapshot).values(payload)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["snapshot_date", "team_code"],
-            set_={
-                "team_name": stmt.excluded.team_name,
-                "rating": stmt.excluded.rating,
-                "global_rank": stmt.excluded.global_rank,
-            },
-        )
-        s.execute(stmt)
+        for chunk in _chunks(payload, batch_size):
+            stmt = pg_insert(RawEloSnapshot).values(chunk)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["snapshot_date", "team_code"],
+                set_={
+                    "team_name": stmt.excluded.team_name,
+                    "rating": stmt.excluded.rating,
+                    "global_rank": stmt.excluded.global_rank,
+                },
+            )
+            s.execute(stmt)
     return len(payload)
 
 
@@ -112,9 +128,9 @@ def load_all(results_dir: Path = JURISOO_DEFAULT, elo_dir: Path = ELO_DEFAULT) -
 
 def _verify_counts() -> dict[str, int]:
     with session_scope() as s:
-        n_matches = s.scalar(select(RawMatch.id).order_by(RawMatch.id.desc()).limit(1)) or 0
-        n_elo = s.scalar(select(RawEloSnapshot.team_code).limit(1))
-    return {"max_match_id": int(n_matches), "any_elo_row": str(n_elo) if n_elo else ""}
+        n_matches = s.scalar(select(func.count()).select_from(RawMatch)) or 0
+        n_elo = s.scalar(select(func.count()).select_from(RawEloSnapshot)) or 0
+    return {"raw_matches": int(n_matches), "raw_elo_snapshots": int(n_elo)}
 
 
 def main() -> None:

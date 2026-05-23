@@ -105,6 +105,65 @@ def test_rate_limiter_throttles_when_window_full():
     assert sleeps[0] > 0
 
 
+def test_cached_get_json_retries_on_429_then_succeeds(monkeypatch):
+    """fetch_competition_matches' HTTP path must retry transient rate-limit errors."""
+    monkeypatch.setattr(fdo, "_RATE_LIMITER", fdo._RateLimiter.make(limit=100, window=60.0))
+
+    class _Resp:
+        def __init__(self, status_code, payload=None):
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise RuntimeError(f"http {self.status_code}")
+
+    class _FlakySession:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, url, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                return _Resp(429)
+            return _Resp(200, payload={"matches": []})
+
+    sess = _FlakySession()
+    out = fdo._cached_get_json(sess, "http://example/url", api_key="k", params={})
+    assert sess.calls == 2
+    assert out == {"matches": []}
+
+
+def test_cached_get_json_gives_up_after_three_persistent_429s(monkeypatch):
+    monkeypatch.setattr(fdo, "_RATE_LIMITER", fdo._RateLimiter.make(limit=100, window=60.0))
+
+    class _AlwaysThrottled:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, url, **kwargs):
+            self.calls += 1
+
+            class R:
+                status_code = 429
+
+                def raise_for_status(self_inner):
+                    raise RuntimeError("should not be called")
+
+                def json(self_inner):
+                    return None
+
+            return R()
+
+    sess = _AlwaysThrottled()
+    with pytest.raises(fdo.RateLimitError):
+        fdo._cached_get_json(sess, "http://example/url", api_key="k", params={})
+    assert sess.calls == 3
+
+
 def test_rate_limiter_does_not_throttle_when_window_clears():
     limiter = fdo._RateLimiter.make(limit=2, window=1.0)
     sleeps: list[float] = []
