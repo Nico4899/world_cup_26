@@ -1,0 +1,144 @@
+"""SQLAlchemy 2.0 declarative models for the wc2026 Postgres warehouse.
+
+These tables hold raw ingest output, model predictions, and bookkeeping for the
+scheduler. The application code never writes to these tables directly except via
+the load scripts and scheduler jobs; the read paths in `wc2026.api` consume them.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, date, datetime
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+class Base(DeclarativeBase):
+    """Common declarative base for all wc2026 tables."""
+
+
+class RawMatch(Base):
+    __tablename__ = "raw_matches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    home_team: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    away_team: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    home_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    away_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tournament: Mapped[str] = mapped_column(String(128), nullable=False)
+    city: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    neutral: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    source: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "date", "home_team", "away_team", "source", name="uq_raw_matches_natural_key"
+        ),
+    )
+
+
+class RawEloSnapshot(Base):
+    __tablename__ = "raw_elo_snapshots"
+
+    snapshot_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    team_code: Mapped[str] = mapped_column(String(8), primary_key=True)
+    team_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    rating: Mapped[float] = mapped_column(Float, nullable=False)
+    global_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class ModelPrediction(Base):
+    __tablename__ = "model_predictions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    match_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    home_team: Mapped[str] = mapped_column(String(128), nullable=False)
+    away_team: Mapped[str] = mapped_column(String(128), nullable=False)
+    p_home: Mapped[float] = mapped_column(Float, nullable=False)
+    p_draw: Mapped[float] = mapped_column(Float, nullable=False)
+    p_away: Mapped[float] = mapped_column(Float, nullable=False)
+    score_matrix_json: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
+class TournamentSimRun(Base):
+    __tablename__ = "tournament_sim_runs"
+
+    run_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    n_sims: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    team_outcomes: Mapped[list[TournamentSimTeamOutcome]] = relationship(
+        "TournamentSimTeamOutcome",
+        back_populates="run",
+        cascade="all, delete-orphan",
+    )
+
+
+class TournamentSimTeamOutcome(Base):
+    __tablename__ = "tournament_sim_team_outcomes"
+
+    run_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("tournament_sim_runs.run_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    team: Mapped[str] = mapped_column(String(128), primary_key=True)
+    group_winner_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    group_runner_up_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    advance_r32_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    advance_r16_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    quarterfinal_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    semifinal_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    final_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    champion_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+
+    run: Mapped[TournamentSimRun] = relationship("TournamentSimRun", back_populates="team_outcomes")
+
+
+class SchedulerJobRun(Base):
+    __tablename__ = "scheduler_job_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    error_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+__all__ = [
+    "Base",
+    "ModelPrediction",
+    "RawEloSnapshot",
+    "RawMatch",
+    "SchedulerJobRun",
+    "TournamentSimRun",
+    "TournamentSimTeamOutcome",
+]
