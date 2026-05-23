@@ -116,7 +116,9 @@ def test_host_country_matches_are_marked_not_neutral() -> None:
         if m.home_team in host_team_to_country and m.country == host_team_to_country[m.home_team]:
             assert not m.neutral, f"{m.home_team} at home ({m.country}) should be non-neutral"
         else:
-            assert m.neutral, f"match {m.home_team} v {m.away_team} in {m.country} should be neutral"
+            assert m.neutral, (
+                f"match {m.home_team} v {m.away_team} in {m.country} should be neutral"
+            )
 
 
 def test_group_of_lookup() -> None:

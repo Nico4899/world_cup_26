@@ -80,11 +80,12 @@ def parse_wc2026_fixtures(scheduled: pd.DataFrame) -> WC2026Fixtures:
         opponents.setdefault(a, set()).add(h)
 
     # Each team must play exactly 3 opponents (the other 3 members of its group).
-    bad_degree = {t: len(opps) for t, opps in opponents.items() if len(opps) != EXPECTED_MATCHES_PER_TEAM}
+    bad_degree = {
+        t: len(opps) for t, opps in opponents.items() if len(opps) != EXPECTED_MATCHES_PER_TEAM
+    }
     if bad_degree:
         raise ValueError(
-            f"every team must play {EXPECTED_MATCHES_PER_TEAM} opponents; "
-            f"violations: {bad_degree}"
+            f"every team must play {EXPECTED_MATCHES_PER_TEAM} opponents; violations: {bad_degree}"
         )
 
     # Each team plus its 3 opponents forms a group of 4 — but we need to verify
@@ -115,9 +116,9 @@ def parse_wc2026_fixtures(scheduled: pd.DataFrame) -> WC2026Fixtures:
     first_date = {}
     for group_members in groups_raw:
         members_set = set(group_members)
-        earliest = df[
-            df["home_team"].isin(members_set) & df["away_team"].isin(members_set)
-        ]["date"].min()
+        earliest = df[df["home_team"].isin(members_set) & df["away_team"].isin(members_set)][
+            "date"
+        ].min()
         first_date[group_members] = earliest
     groups_raw_sorted = sorted(groups_raw, key=lambda g: (first_date[g], g))
     groups: dict[str, tuple[str, ...]] = {
