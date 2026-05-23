@@ -20,9 +20,10 @@ Personal / educational project. Honesty about uncertainty is the headline featur
 - [x] Stage 0.5 — WC 2018 & WC 2022 day-by-day hindcasts
 - [x] Stage 0.6 — half-life sweep on WC 2022 → tuned to 10 years (was 730 days)
 - [x] Stage 0.7 — decision-gate analysis (see below)
-- [x] Stage 1.C — FastAPI app + Streamlit dashboard (merged from `agent/frontend`)
-- [ ] Stage 1.A — DB layer, football-data.org ingester, scheduler, Dockerfile.app, CI (parallel branch: `agent/backend`)
-- [ ] Stage 1.B — Elo prior, real shootout model, isotonic recalibration (parallel branch: `agent/models`)
+- [x] Stage 1.A — DB layer (Postgres + Alembic), football-data.org ingester, APScheduler, Dockerfile.app, CI
+- [x] Stage 1.B — Elo prior + isotonic recalibration (research artefacts; degraded WC 2022 log-loss, kept for documentation), real Elo-weighted shootout submodel (integrated)
+- [x] Stage 1.C — FastAPI app + Streamlit dashboard
+- [ ] Stage 2 — revive every deferred blueprint item (XGBoost+SHAP blend, xG features, live win-prob+SSE, Team Profile, interactive bracket, PyDeck map, TheSportsDB assets, Sentry, Fly.io deploy). See [`/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md`](/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md).
 
 ## Decision-gate results (Stage 0.7)
 
