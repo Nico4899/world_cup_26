@@ -77,7 +77,9 @@ def test_assign_thirds_succeeds_for_all_groups_advancing() -> None:
     for mid, team in assignment.items():
         # team_X corresponds to advancing key X
         group = next(g for g, t in advancing.items() if t == team)
-        assert group in elig[mid], f"slot {mid} got team from group {group} (not in {sorted(elig[mid])})"
+        assert group in elig[mid], (
+            f"slot {mid} got team from group {group} (not in {sorted(elig[mid])})"
+        )
 
 
 def test_assign_thirds_succeeds_for_alternative_advancing_sets() -> None:

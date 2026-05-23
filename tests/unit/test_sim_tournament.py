@@ -79,9 +79,9 @@ def test_designated_winners_always_win_their_group(real_fixtures: WC2026Fixtures
     for _ in range(20):
         result = simulate_tournament(real_fixtures, model, rng)  # type: ignore[arg-type]
         for letter, expected_winner in designated_per_group.items():
-            assert (
-                result.group_results[letter].standings[0].team == expected_winner
-            ), f"in group {letter}, expected {expected_winner!r} to win"
+            assert result.group_results[letter].standings[0].team == expected_winner, (
+                f"in group {letter}, expected {expected_winner!r} to win"
+            )
 
 
 # --- monte-carlo tests -----------------------------------------------------

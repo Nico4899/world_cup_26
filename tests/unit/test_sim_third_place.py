@@ -119,7 +119,9 @@ def test_random_lots_when_fully_tied_over_many_seeds() -> None:
     """If FIFA ranking isn't provided AND primary is tied, drawing of lots decides;
     each team should land in 1st place roughly 1/N of the time across many seeds."""
     stats = [(4, 0, 3)] * N_THIRDS
-    first_counts: dict[str, int] = {f"third_{letter}": 0 for letter in string.ascii_uppercase[:N_THIRDS]}
+    first_counts: dict[str, int] = {
+        f"third_{letter}": 0 for letter in string.ascii_uppercase[:N_THIRDS]
+    }
     n_trials = 1200
     for seed in range(n_trials):
         ranking = rank_third_placed(_twelve_distinct_thirds(stats), np.random.default_rng(seed))

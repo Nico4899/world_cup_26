@@ -34,9 +34,9 @@ DecidedIn = Literal["regulation", "extra_time", "shootout"]
 class KnockoutOutcome:
     home_team: str
     away_team: str
-    regulation_score: tuple[int, int]            # (h, a) after 90 minutes
-    extra_time_score: tuple[int, int] | None     # additional goals in ET; None if not played
-    shootout_winner: str | None                  # team name; None if not played
+    regulation_score: tuple[int, int]  # (h, a) after 90 minutes
+    extra_time_score: tuple[int, int] | None  # additional goals in ET; None if not played
+    shootout_winner: str | None  # team name; None if not played
     winner: str
     decided_in: DecidedIn
 
