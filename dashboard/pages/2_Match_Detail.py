@@ -9,9 +9,10 @@ import streamlit as st
 from dashboard.components.api_client import (
     APIUnreachable,
     get_match,
-    get_prediction,
     render_unreachable_warning,
 )
+
+DISPLAY_GOALS = 7  # truncate the 11×11 matrix for visual clarity
 
 st.title("Match detail")
 
@@ -32,6 +33,8 @@ match_id = st.number_input(
     step=1,
 )
 
+# Single API call — the /api/v1/matches/{id} endpoint returns top-5 scorelines
+# AND the full 11×11 score_matrix, so the heatmap is the real distribution.
 try:
     detail = get_match(int(match_id))
 except APIUnreachable as exc:
@@ -75,40 +78,33 @@ bar.update_layout(
 )
 st.plotly_chart(bar, config={"displayModeBar": False})
 
-# Build a Plotly imshow heatmap of the score matrix (truncated 0..7 for display).
-DISPLAY_GOALS = 7
-# We need a fresh prediction call to recover the full top_scorelines; reuse the cached prediction.
-try:
-    full = get_prediction(fx["home_team"], fx["away_team"], neutral=fx["neutral"])
-except APIUnreachable as exc:
-    render_unreachable_warning(exc)
-    st.stop()
-
-# We only have the top 5 scorelines, not the full matrix from the API.
-# Reconstruct the visible portion of the heatmap from the top scorelines we DO have
-# (rest of the cells will read 0 — accurate enough for a visual cue and avoids needing
-# a separate endpoint that returns the full matrix).
-matrix = np.zeros((DISPLAY_GOALS + 1, DISPLAY_GOALS + 1))
-for sc in full["top_scorelines"]:
-    h = min(int(sc["home_goals"]), DISPLAY_GOALS)
-    a = min(int(sc["away_goals"]), DISPLAY_GOALS)
-    matrix[h, a] = sc["probability"]
-
-heatmap = px.imshow(
-    matrix,
-    labels={"x": f"{fx['away_team']} goals", "y": f"{fx['home_team']} goals", "color": "P"},
-    x=list(range(DISPLAY_GOALS + 1)),
-    y=list(range(DISPLAY_GOALS + 1)),
-    color_continuous_scale="Blues",
-    aspect="equal",
-    text_auto=".1%",
-)
-heatmap.update_layout(
-    title="Most likely scorelines (top-5 highlighted; other cells suppressed)",
-    height=420,
-    margin={"l": 40, "r": 10, "t": 50, "b": 40},
-)
-st.plotly_chart(heatmap, config={"displayModeBar": False})
+# Score heatmap from the full matrix returned by the API.
+full_matrix = pred.get("score_matrix")
+if full_matrix is None:
+    st.warning("score_matrix missing from API response — heatmap unavailable.")
+else:
+    arr = np.asarray(full_matrix, dtype=float)
+    # Crop to DISPLAY_GOALS; cells beyond are usually <0.1% combined.
+    crop = arr[: DISPLAY_GOALS + 1, : DISPLAY_GOALS + 1]
+    truncated_mass = float(arr.sum() - crop.sum())
+    heatmap = px.imshow(
+        crop,
+        labels={"x": f"{fx['away_team']} goals", "y": f"{fx['home_team']} goals", "color": "P"},
+        x=list(range(DISPLAY_GOALS + 1)),
+        y=list(range(DISPLAY_GOALS + 1)),
+        color_continuous_scale="Blues",
+        aspect="equal",
+        text_auto=".1%",
+        zmin=0,
+    )
+    heatmap.update_layout(
+        title=(
+            f"Joint score probability (0–{DISPLAY_GOALS} shown; {truncated_mass:.1%} mass beyond)"
+        ),
+        height=460,
+        margin={"l": 40, "r": 10, "t": 50, "b": 40},
+    )
+    st.plotly_chart(heatmap, config={"displayModeBar": False})
 
 st.divider()
 st.subheader("Why this prediction")
@@ -129,12 +125,12 @@ elif xg_diff > 0:
 else:
     edge = f"The model gives **{fx['away_team']} a +{-xg_diff:.2f} expected-goal edge**"
 
+top1 = pred["top_scorelines"][0]
 st.markdown(
     f"""
     - Expected goals: **{fx["home_team"]} {xg_h:.2f}** vs **{fx["away_team"]} {xg_a:.2f}**
     - {edge}, {home_adv_note}.
-    - Top scoreline: **{full["top_scorelines"][0]["home_goals"]}–{full["top_scorelines"][0]["away_goals"]}** at
-      {full["top_scorelines"][0]["probability"]:.1%}.
+    - Top scoreline: **{top1["home_goals"]}–{top1["away_goals"]}** at {top1["probability"]:.1%}.
     - Remember: a 60% favourite still loses 40% of the time. These are probabilities, not predictions.
     """
 )

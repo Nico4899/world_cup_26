@@ -8,9 +8,17 @@ import plotly.graph_objects as go
 import streamlit as st
 from dashboard.components.api_client import (
     APIUnreachable,
+    get_match,
     list_matches,
     render_unreachable_warning,
 )
+
+
+def _navigate_to_detail(match_id: int) -> None:
+    """on_click handler: stash match_id in URL params, then jump to Match Detail."""
+    st.query_params["match_id"] = str(match_id)
+    st.switch_page("pages/2_Match_Detail.py")
+
 
 st.title("Today's predictions")
 
@@ -98,8 +106,6 @@ for i in range(0, len(matches), 2):
                 + ("neutral" if m["neutral"] else "home advantage")
             )
             try:
-                from dashboard.components.api_client import get_match  # local import to share cache
-
                 detail = get_match(m["match_id"])
             except APIUnreachable as exc:
                 render_unreachable_warning(exc)
@@ -119,9 +125,11 @@ for i in range(0, len(matches), 2):
             xg_a = pred["expected_away_goals"]
             st.metric(label="Expected goals", value=f"{xg_h:.2f}  –  {xg_a:.2f}")
             st.caption("Most likely scorelines:")
-            for sc in pred["top_scorelines"]:
+            for sc in pred["top_scorelines"][:3]:
                 st.write(f"- **{sc['home_goals']}–{sc['away_goals']}** ({sc['probability']:.1%})")
-            st.page_link(
-                f"pages/2_Match_Detail.py?match_id={m['match_id']}",
-                label="View match detail →",
+            st.button(
+                "View match detail →",
+                key=f"view-{m['match_id']}",
+                on_click=_navigate_to_detail,
+                args=(m["match_id"],),
             )

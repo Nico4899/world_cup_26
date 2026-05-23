@@ -62,7 +62,7 @@ def test_list_matches_filter_by_date(client: TestClient) -> None:
     assert all(m["date"] == "2026-06-11" for m in matches)
 
 
-def test_get_match_by_id_includes_prediction(client: TestClient) -> None:
+def test_get_match_by_id_includes_prediction_with_full_matrix(client: TestClient) -> None:
     r = client.get("/api/v1/matches/0")
     assert r.status_code == 200
     body = r.json()
@@ -70,8 +70,14 @@ def test_get_match_by_id_includes_prediction(client: TestClient) -> None:
     pred = body["prediction"]
     s = pred["outcome"]["home_win"] + pred["outcome"]["draw"] + pred["outcome"]["away_win"]
     assert abs(s - 1.0) < 1e-6
-    # top_n=3 for the by-id endpoint
-    assert len(pred["top_scorelines"]) == 3
+    # /api/v1/matches/{id} now returns top-5 + the full score_matrix in one call
+    assert len(pred["top_scorelines"]) == 5
+    matrix = pred["score_matrix"]
+    assert matrix is not None
+    assert len(matrix) == 11  # 0..10 goals (max_goals=10)
+    assert all(len(row) == 11 for row in matrix)
+    total_mass = sum(p for row in matrix for p in row)
+    assert abs(total_mass - 1.0) < 1e-6
 
 
 def test_get_match_by_id_404_on_out_of_range(client: TestClient) -> None:
@@ -94,6 +100,13 @@ def test_pairwise_prediction_known_teams(client: TestClient) -> None:
     # top scoreline probabilities should be monotonically non-increasing
     probs = [sc["probability"] for sc in data["top_scorelines"]]
     assert probs == sorted(probs, reverse=True)
+    # /api/v1/predictions/... ships the full score_matrix
+    matrix = data["score_matrix"]
+    assert matrix is not None
+    assert len(matrix) == 11
+    # The top-1 scoreline's matrix cell should equal its reported probability.
+    top = data["top_scorelines"][0]
+    assert abs(matrix[top["home_goals"]][top["away_goals"]] - top["probability"]) < 1e-9
 
 
 def test_pairwise_prediction_422_on_unknown_team(client: TestClient) -> None:
@@ -135,3 +148,14 @@ def test_bracket_returns_31_knockout_matches_and_champion(client: TestClient) ->
     # Champion is one of the teams in the final
     final_match = next(m for m in body["matches"] if m["round"] == "Final")
     assert body["champion"] in (final_match["home_team"], final_match["away_team"])
+
+
+def test_bracket_is_cached_by_seed(client: TestClient) -> None:
+    """Two calls with the same seed must return byte-identical brackets (cache hit)."""
+    r1 = client.get("/api/v1/tournament/bracket", params={"seed": 7})
+    r2 = client.get("/api/v1/tournament/bracket", params={"seed": 7})
+    assert r1.status_code == r2.status_code == 200
+    assert r1.json() == r2.json()
+    # different seed gives a different realisation (almost surely)
+    r3 = client.get("/api/v1/tournament/bracket", params={"seed": 8})
+    assert r3.json()["matches"] != r1.json()["matches"]

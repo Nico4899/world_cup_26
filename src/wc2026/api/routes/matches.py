@@ -17,9 +17,10 @@ router = APIRouter(prefix="/api/v1/matches")
 
 def _fixture_summary(idx: int, fixtures: WC2026Fixtures) -> FixtureSummary:
     m = fixtures.matches[idx]
+    # FixtureMatch.date is always a pd.Timestamp per the dataclass; .date() yields a date.
     return FixtureSummary(
         match_id=idx,
-        date=m.date.date() if hasattr(m.date, "date") else m.date,
+        date=m.date.date(),
         home_team=m.home_team,
         away_team=m.away_team,
         group=m.group,
@@ -37,8 +38,7 @@ def list_matches(
 ) -> list[FixtureSummary]:
     out: list[FixtureSummary] = []
     for idx, m in enumerate(fixtures.matches):
-        m_date = m.date.date() if hasattr(m.date, "date") else m.date
-        if date is not None and m_date != date:
+        if date is not None and m.date.date() != date:
             continue
         if group is not None and m.group != group.upper():
             continue
@@ -59,5 +59,13 @@ def get_match(
         )
     summary = _fixture_summary(match_id, fixtures)
     fx = fixtures.matches[match_id]
-    pred = build_prediction(model, fx.home_team, fx.away_team, neutral=fx.neutral, top_n=3)
+    # Include the full score matrix so Match Detail can render the heatmap in one call.
+    pred = build_prediction(
+        model,
+        fx.home_team,
+        fx.away_team,
+        neutral=fx.neutral,
+        top_n=5,
+        include_matrix=True,
+    )
     return FixtureWithPrediction(fixture=summary, prediction=pred)

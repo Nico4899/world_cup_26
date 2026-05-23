@@ -21,9 +21,11 @@ st.caption(
 
 @st.cache_data(show_spinner="Running WC hindcasts…", ttl=3600)
 def run_hindcast(tournament: str) -> tuple[dict, list[dict]]:
-    """Returns (overall_metrics, reliability_bins). Cached for the session."""
-    import pandas as pd  # noqa: PLC0415
+    """Returns (overall_metrics, reliability_bins). Cached for the session.
 
+    Heavy imports live at module top; the cache TTL keeps the actual hindcast work
+    (~3s per tournament) from re-running per page visit.
+    """
     from wc2026.eval.backtest import HindcastConfig, hindcast  # noqa: PLC0415
     from wc2026.eval.calibration import (  # noqa: PLC0415
         aggregate,

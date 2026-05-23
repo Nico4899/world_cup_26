@@ -26,8 +26,13 @@ def build_prediction(
     *,
     neutral: bool,
     top_n: int = DEFAULT_TOP_SCORELINES,
+    include_matrix: bool = False,
 ) -> PredictionResponse:
-    """Compute a full prediction payload for (home, away). Raises 422 on unknown team."""
+    """Compute a full prediction payload for (home, away). Raises 422 on unknown team.
+
+    The full ``score_matrix`` (~121 floats) is only included when
+    ``include_matrix=True`` to keep list-endpoint payloads small.
+    """
     try:
         lh, la = model.expected_goals(home, away, neutral=neutral)
         outcome = model.outcome_probs(home, away, neutral=neutral)
@@ -63,6 +68,7 @@ def build_prediction(
             away_win=float(outcome["away_win"]),
         ),
         top_scorelines=top,
+        score_matrix=score_matrix.tolist() if include_matrix else None,
     )
 
 
@@ -73,4 +79,4 @@ def pairwise_prediction(
     neutral: bool = Query(default=True, description="Treat as neutral venue"),
     model: PoissonDC = Depends(get_model),
 ) -> PredictionResponse:
-    return build_prediction(model, home, away, neutral=neutral)
+    return build_prediction(model, home, away, neutral=neutral, include_matrix=True)

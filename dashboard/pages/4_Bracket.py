@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 from dashboard.components.api_client import (
     APIUnreachable,
-    _get,
+    get_json,
     render_unreachable_warning,
 )
 
@@ -20,7 +20,7 @@ st.caption(
 seed = st.number_input("Seed", min_value=0, max_value=1_000_000, value=42, step=1)
 
 try:
-    data = _get("/api/v1/tournament/bracket", params={"seed": int(seed)})
+    data = get_json("/api/v1/tournament/bracket", params={"seed": int(seed)})
 except APIUnreachable as exc:
     render_unreachable_warning(exc)
     st.stop()

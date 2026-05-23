@@ -16,7 +16,8 @@ class APIUnreachable(RuntimeError):
     pass
 
 
-def _get(path: str, params: dict[str, Any] | None = None) -> Any:
+def get_json(path: str, params: dict[str, Any] | None = None) -> Any:
+    """GET ``API_URL + path`` and return parsed JSON. Raises APIUnreachable on connection failure."""
     try:
         r = httpx.get(f"{API_URL}{path}", params=params, timeout=TIMEOUT_SECONDS)
     except httpx.HTTPError as exc:
@@ -42,14 +43,20 @@ def list_matches(date: str | None = None, group: str | None = None) -> list[dict
         params["date"] = date
     if group:
         params["group"] = group
-    return _get("/api/v1/matches", params=params or None)
+    return get_json("/api/v1/matches", params=params or None)
 
 
 @st.cache_data(ttl=300, show_spinner="Loading match…")
 def get_match(match_id: int) -> dict[str, Any]:
-    return _get(f"/api/v1/matches/{match_id}")
+    """Returns ``{"fixture": ..., "prediction": ...}`` for a single fixture.
+
+    The prediction includes the full score_matrix (top-5 scorelines + 11×11 joint matrix)
+    so callers don't need a separate ``/api/v1/predictions/...`` round-trip.
+    """
+    return get_json(f"/api/v1/matches/{match_id}")
 
 
 @st.cache_data(ttl=300, show_spinner="Computing prediction…")
 def get_prediction(home: str, away: str, neutral: bool = True) -> dict[str, Any]:
-    return _get(f"/api/v1/predictions/{home}/{away}", params={"neutral": str(neutral).lower()})
+    """Pairwise prediction with full score_matrix; useful for non-fixture matchups."""
+    return get_json(f"/api/v1/predictions/{home}/{away}", params={"neutral": str(neutral).lower()})

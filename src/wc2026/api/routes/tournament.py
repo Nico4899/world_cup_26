@@ -14,6 +14,8 @@ from wc2026.models.poisson_dc import PoissonDC
 from wc2026.sim.fixtures import WC2026Fixtures
 from wc2026.sim.tournament import (
     ROUND_COLUMNS,
+    TournamentResult,
+    TournamentSummary,
     simulate_tournament,
     simulate_tournament_monte_carlo,
 )
@@ -24,22 +26,46 @@ DEFAULT_N_SIMS = 2000
 DEFAULT_SEED = 42
 CACHE_TTL_SECONDS = 3600  # 1 hour
 
-# Module-level cache keyed by (n_sims, seed). Thread-safe because GIL + lock around mutation.
-_CACHE: dict[tuple[int, int], tuple[float, Any]] = {}
+# Module-level caches keyed by request params. Thread-safe via the lock; reads + writes
+# are atomic enough under the GIL that the simple (timestamp, value) tuple suffices.
+_STANDINGS_CACHE: dict[tuple[int, int], tuple[float, TournamentSummary]] = {}
+_BRACKET_CACHE: dict[int, tuple[float, TournamentResult]] = {}
 _CACHE_LOCK = threading.Lock()
 
 
-def _cached_summary(model: PoissonDC, fixtures: WC2026Fixtures, n_sims: int, seed: int) -> Any:
+def _cached_summary(
+    model: PoissonDC,
+    fixtures: WC2026Fixtures,
+    n_sims: int,
+    seed: int,
+) -> TournamentSummary:
     key = (n_sims, seed)
     now = time.monotonic()
     with _CACHE_LOCK:
-        cached = _CACHE.get(key)
+        cached = _STANDINGS_CACHE.get(key)
         if cached is not None and now - cached[0] < CACHE_TTL_SECONDS:
             return cached[1]
     summary = simulate_tournament_monte_carlo(fixtures, model, n_sims=n_sims, seed=seed)
     with _CACHE_LOCK:
-        _CACHE[key] = (now, summary)
+        _STANDINGS_CACHE[key] = (now, summary)
     return summary
+
+
+def _cached_bracket(
+    model: PoissonDC,
+    fixtures: WC2026Fixtures,
+    seed: int,
+) -> TournamentResult:
+    now = time.monotonic()
+    with _CACHE_LOCK:
+        cached = _BRACKET_CACHE.get(seed)
+        if cached is not None and now - cached[0] < CACHE_TTL_SECONDS:
+            return cached[1]
+    rng = np.random.default_rng(seed)
+    result = simulate_tournament(fixtures, model, rng)
+    with _CACHE_LOCK:
+        _BRACKET_CACHE[seed] = (now, result)
+    return result
 
 
 def _build_group_block(letter: str, summary, fixtures: WC2026Fixtures) -> dict[str, Any]:
@@ -106,8 +132,7 @@ def bracket(
     model: PoissonDC = Depends(get_model),
     fixtures: WC2026Fixtures = Depends(get_fixtures),
 ) -> dict[str, Any]:
-    rng = np.random.default_rng(seed)
-    result = simulate_tournament(fixtures, model, rng)
+    result = _cached_bracket(model, fixtures, seed)
     matches = []
     for mid, outcome in sorted(result.knockout_results.items()):
         # round_label by match id range per FIFA numbering

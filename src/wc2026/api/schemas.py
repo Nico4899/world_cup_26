@@ -46,6 +46,14 @@ class PredictionResponse(BaseModel):
     expected_away_goals: float
     outcome: OutcomeProbabilities
     top_scorelines: list[Scoreline]
+    score_matrix: list[list[float]] | None = Field(
+        default=None,
+        description=(
+            "Full joint P(home_goals, away_goals) matrix. Rows = home goals 0..N, "
+            "columns = away goals 0..N. Populated by /api/v1/predictions and "
+            "/api/v1/matches/{id}; omitted (null) where not needed to keep responses small."
+        ),
+    )
 
 
 class FixtureWithPrediction(BaseModel):

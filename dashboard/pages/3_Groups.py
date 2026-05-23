@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from dashboard.components.api_client import (
     APIUnreachable,
-    _get,
+    get_json,
     render_unreachable_warning,
 )
 
@@ -23,7 +23,7 @@ n_sims = st.sidebar.slider(
 )
 
 try:
-    data = _get("/api/v1/tournament/standings", params={"n_sims": n_sims, "seed": 42})
+    data = get_json("/api/v1/tournament/standings", params={"n_sims": n_sims, "seed": 42})
 except APIUnreachable as exc:
     render_unreachable_warning(exc)
     st.stop()
