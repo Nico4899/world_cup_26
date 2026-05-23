@@ -146,26 +146,33 @@ volume mounted at `/app/data` for ingest data + the model artefact.
 
 ## Known limitations (Stage 1)
 
-- **Local-only by default.** The Dockerfiles build, but no deploy target is wired up; you run the stack with `uv run uvicorn …` + `uv run streamlit …` (or via `docker compose`). The scheduler is coded but not running as a persistent process.
-- **No live polling / no in-match updates.** The dashboard shows pre-match predictions; updates require a scheduler refresh.
+These are the gaps the Stage 2 roadmap addresses (see "Stage 2 roadmap" below for the build sequence):
+
+- **Local-only by default.** The Dockerfiles build, but no deploy target is wired up; you run the stack with `uv run uvicorn …` + `uv run streamlit …` (or via `docker compose`). `fly.toml.example` is provided but `fly deploy` has not been run — Phase 10 of the roadmap.
+- **No live polling / no in-match updates.** The dashboard shows pre-match predictions; updates require a scheduler refresh. Phase 6 adds a Server-Sent Events live win-prob stream.
 - **Two model add-ons are experimental, not used by default**:
   - `PoissonDCWithPrior` (Elo prior) monotonically degrades WC 2022 log-loss across `prior_strength ∈ [0, 5]` — the base model already extracts team strength from match history.
   - `IsotonicCalibrator` (LOO recalibration) degrades WC 2022 log-loss by +0.077 — isotonic on N=64 is small-sample fragile; likely useful with N≥250.
   Both are kept as research artefacts; see `scripts/backtest_with_elo_prior.py` and `scripts/backtest_with_isotonic.py`.
+- **No XGBoost + SHAP blend, no xG features, no Team Profile / interactive bracket / map / crests.** Phases 2–5 and 9 of the roadmap.
 
-## Out of scope
+## Stage 2 roadmap
 
-The original blueprint specified the items below; we explicitly decided NOT to build them. See `/Users/nico/.claude/plans/extensively-review-and-understand-iterative-fern.md` for the reasoning per item.
+Stage 1 shipped a calibrated, locally-runnable platform. Stage 2 expands it to the full blueprint feature set. The 11-phase build sequence and per-phase verification gates live in [`/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md`](/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md).
 
-- **XGBoost secondary classifier + SHAP explanations + geometric-mean blend** — the pure Poisson model on WC 2018 (log-loss 0.9585) is already competitive with bookmaker closing odds (~0.97–1.00); the academic Poisson + RF hybrid improves by ~0.01–0.03 at significant complexity cost.
-- **xG-based features** (StatsBomb open data, FBref) — requires building an xG model from event data; ~2 weeks of work for an unverified gain.
-- **In-match live win-probability** (SSE, 30-second polling, score+minute+red-card logistic) — the platform isn't deployed and no live-UI consumer exists.
-- **Interactive click-to-set bracket simulator** — Streamlit is the wrong tool for that interaction model; the Bracket Realisation page shows one sampled realisation per seed instead.
-- **Team Profile page** — would duplicate information already split across Groups, Match Detail, and Track Record.
-- **PyDeck host-city map** — eye candy.
-- **TheSportsDB / openfootball / Wikipedia / FIFA.com ingesters** — we don't show logos/kits, and the model doesn't use squad metadata.
-- **football-data.co.uk closing-odds ingest** — the blueprint cited this as a benchmark source for World Cup bookmaker odds, but on inspection it only publishes Euros + domestic leagues, not World Cups. The Track Record page cites published academic numbers (Wheatcroft 2019, Constantinou 2019) instead of live-ingesting.
-- **Sentry / Prometheus monitoring** — not deployed yet; YAGNI.
+| Phase | Scope | Risk gate |
+|---|---|---|
+| 1 | Documentation reconciliation (this commit) | — |
+| 2 | TheSportsDB, openfootball, Wikipedia ingesters → crests, kit colours, canonical group letters, squads, FIFA ranking | New rows persisted; assets resolve in dashboard |
+| 3 | StatsBomb Open Data + FBref + football-data.co.uk → xG corpus + shot model | Hindcast WC 2022 log-loss does not regress > 0.02 vs Poisson-only |
+| 4 | `features.match_features` materialised table (Elo Δ, FIFA-rank Δ, xG-form Δ, rest days, neutral/host flags, squad age, Poisson outputs as features) | Daily `model_fit` job rebuilds the table |
+| 5 | XGBoost H/D/A + SHAP TreeExplainer + geometric-mean blend; `/api/v1/explain/{match_id}` | Blended log-loss ≤ Poisson-only log-loss on WC 2018 & 2022 hindcasts |
+| 6 | In-match live win-prob (Elo Δ, current GD, minutes remaining, red-card Δ); `/api/v1/live/{match_id}/sse`; live event poller | SSE replay test on stored StatsBomb match emits at every event |
+| 7 | Rolling WC 2026 calibration (Brier / log-loss / RPS), surfaced on Track Record above the historical hindcasts | Synthetic match-result fixture → metrics computed correctly |
+| 8 | Auto-rerun 10k Monte Carlo on each FINISHED match; cache `tournament_sim_runs` reads | `/api/v1/tournament/standings` no longer re-simulates per request |
+| 9 | Dashboard polish: Team Profile, PyDeck map, interactive bracket (custom React+SVG via `streamlit.components.v1`), Match-Detail SHAP panel, crests everywhere | Each new page renders end-to-end on live API data |
+| 10 | Deploy to Fly.io (volume + Postgres + 2-process scale) + Sentry SDK + off-site pg_dump to S3/R2 + warmth-keep cron | `curl https://<app>.fly.dev/health` → 200; Sentry test event received; dump in S3 |
+| 11 | Final README + ARCHITECTURE.md refresh with deployed URLs | — |
 
 ## Repo layout
 
