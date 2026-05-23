@@ -9,11 +9,12 @@ operator.
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 
 import httpx
 import streamlit as st
-from dashboard.components.api_client import APIUnreachable, get_json
+from dashboard.components.api_client import APIUnreachable, get_json, post_json
 
 st.title("Operator")
 st.caption(
@@ -117,3 +118,59 @@ if ops_body is not None:
                 + ", ".join(r["Job"] for r in stale)
                 + ". Daily cron should fire at least every 24h."
             )
+
+
+# --- Manual triggers --------------------------------------------------------
+
+st.subheader("Manual triggers")
+st.caption(
+    "Re-run an ingest or refit immediately. The job runs in the background; "
+    "outcome shows up in the table above on the next refresh (typically within "
+    "30 seconds for cheap jobs, longer for full ingests)."
+)
+
+available = None
+try:
+    available = get_json("/api/v1/_ops/available-jobs")
+except APIUnreachable:
+    st.info("Manual triggers unavailable while the API is unreachable.")
+except httpx.HTTPStatusError:
+    st.info("`/available-jobs` endpoint not yet deployed; restart the API.")
+
+if available is not None:
+    job_names = sorted(available.get("jobs", []))
+    if not job_names:
+        st.info("No jobs registered.")
+    else:
+        # Token entry only shown when the env var is set on the dashboard side;
+        # otherwise the API itself decides whether to enforce.
+        token_env = os.environ.get("WC2026_OPS_TOKEN")
+        token = st.text_input(
+            "Ops token (optional; required if the API enforces one)",
+            value=token_env or "",
+            type="password",
+            help="Set WC2026_OPS_TOKEN on the API to require this header.",
+        )
+        cols = st.columns(min(3, max(1, len(job_names))))
+        for i, name in enumerate(job_names):
+            with cols[i % len(cols)]:
+                if st.button(f"Run {name}", key=f"trigger-{name}"):
+                    headers = {"X-Ops-Token": token} if token else None
+                    try:
+                        body = post_json(
+                            f"/api/v1/_ops/run-job/{name}", headers=headers
+                        )
+                    except APIUnreachable:
+                        st.error("API became unreachable mid-request.")
+                    except httpx.HTTPStatusError as exc:
+                        if exc.response.status_code == 403:
+                            st.error("Forbidden — bad or missing X-Ops-Token.")
+                        elif exc.response.status_code == 404:
+                            st.error(f"Unknown job: {name}")
+                        else:
+                            st.error(f"HTTP {exc.response.status_code} — {exc.response.text[:200]}")
+                    else:
+                        st.success(
+                            f"Enqueued {body['job_name']} at "
+                            f"{body['enqueued_at'][:19].replace('T', ' ')} UTC."
+                        )

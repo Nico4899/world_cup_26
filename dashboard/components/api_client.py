@@ -26,6 +26,28 @@ def get_json(path: str, params: dict[str, Any] | None = None) -> Any:
     return r.json()
 
 
+def post_json(
+    path: str,
+    *,
+    headers: dict[str, str] | None = None,
+    params: dict[str, Any] | None = None,
+    json: Any = None,
+) -> Any:
+    """POST ``API_URL + path`` and return parsed JSON. Raises APIUnreachable on connection failure."""
+    try:
+        r = httpx.post(
+            f"{API_URL}{path}",
+            headers=headers,
+            params=params,
+            json=json,
+            timeout=TIMEOUT_SECONDS,
+        )
+    except httpx.HTTPError as exc:
+        raise APIUnreachable(f"could not reach API at {API_URL}: {exc}") from exc
+    r.raise_for_status()
+    return r.json()
+
+
 def render_unreachable_warning(exc: APIUnreachable) -> None:
     """Common UI fragment when the API isn't responding."""
     st.warning(
