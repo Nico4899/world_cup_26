@@ -32,3 +32,8 @@ jobs:
 
       - name: Run unit tests
         run: uv run pytest -q
+
+      - name: Validate fly.toml.example (offline parse + schema check)
+        run: |
+          curl -sL https://fly.io/install.sh | sh
+          ~/.fly/bin/flyctl config validate -c fly.toml.example --strict --access-token dummy

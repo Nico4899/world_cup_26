@@ -20,6 +20,12 @@
 # Fly's hobby tier (`fly machines run --auto-stop`) is sufficient for ~500
 # unique daily users. Estimated $5-10/month with the smallest CPU + 1GB RAM
 # Machines + Postgres + the volume.
+#
+# Local validation
+# ----------------
+# Verified valid with: `flyctl config validate -c fly.toml.example --strict
+# --access-token dummy` (flyctl v0.4.54). The dummy token suffices for the
+# offline parse + schema check; a real token is only required for `fly deploy`.
 
 app = "wc2026-predictor"
 primary_region = "fra"   # change to your closest region
