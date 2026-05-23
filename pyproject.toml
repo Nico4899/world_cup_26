@@ -9,6 +9,7 @@ authors = [{ name = "Nico Fliegel", email = "nico.fliegel@gmail.com" }]
 dependencies = [
     "alembic>=1.18.4",
     "duckdb>=1.5.3",
+    "kaggle>=2.1.2",
     "numpy>=2.4.6",
     "pandas>=3.0.3",
     "psycopg[binary]>=3.3.4",
