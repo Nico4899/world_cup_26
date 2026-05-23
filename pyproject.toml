@@ -103,3 +103,5 @@ ignore = [
 "tests/**" = ["PLR2004", "S101", "PLC0415"]
 # FastAPI idioms: Depends() / Query() in argument defaults; HTTPException re-raise chain.
 "src/wc2026/api/**" = ["B008"]
+# Dashboard UI strings frequently use typographic characters (en-dash, em-dash, ellipses).
+"dashboard/**" = ["RUF001", "RUF002", "RUF003"]
