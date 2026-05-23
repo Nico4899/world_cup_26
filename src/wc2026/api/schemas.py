@@ -19,6 +19,21 @@ class HealthResponse(BaseModel):
         default=None,
         description="Identifier of the currently-loaded model (e.g. 'poisson_dc.v1').",
     )
+    elo_snapshot_date: date | None = Field(
+        default=None,
+        description="Date of the eloratings snapshot powering the shootout submodel; "
+        "useful for spotting silent staleness if the daily scheduler stops running.",
+    )
+    elo_snapshot_age_days: int | None = Field(
+        default=None,
+        description="Days since the elo snapshot was captured. >7 means the daily ingest "
+        "hasn't run recently — check the scheduler logs.",
+    )
+    shootout_model_loaded: bool = Field(
+        default=False,
+        description="True if the Elo-based shootout submodel was loaded at startup; "
+        "False means knockouts fall back to 50/50.",
+    )
 
 
 class FixtureSummary(BaseModel):

@@ -69,5 +69,18 @@ with st.sidebar:
         version = health.get("model_version") or "unknown"
         fit_at_display = fit_at[:19].replace("T", " ") + " UTC" if fit_at else "unknown"
         st.caption(f"Model: `{version}` · fit at **{fit_at_display}**")
+        # Surface eloratings snapshot staleness — warn if >7 days old, since
+        # the shootout submodel keys off this snapshot.
+        elo_age = health.get("elo_snapshot_age_days")
+        elo_date = health.get("elo_snapshot_date")
+        if elo_age is None:
+            st.caption("Elo snapshot: _unavailable_ (shootouts fall back to 50/50).")
+        elif elo_age > 7:
+            st.warning(
+                f"Elo snapshot is **{elo_age} days old** (captured {elo_date}). "
+                "The daily ingest may not be running — check the scheduler logs."
+            )
+        else:
+            st.caption(f"Elo snapshot: {elo_date} ({elo_age}d old).")
     except APIUnreachable:
         st.caption("Model: status unavailable (API not reachable).")

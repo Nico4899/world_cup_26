@@ -73,23 +73,29 @@ def _load_or_fit_model(df: pd.DataFrame) -> tuple[PoissonDC, str, datetime]:
 
 
 def _build_shootout_strategy():
-    """Try to fit the Elo-based shootout submodel; return a strategy closure or None.
+    """Try to fit the Elo-based shootout submodel; return a strategy + metadata.
 
     If the elo snapshot or the shootouts.csv are missing — or if the fit fails
-    (too few overlapping teams) — we silently fall back to None, and the
-    knockout simulator's built-in 50/50 coin flip takes over.
+    (too few overlapping teams) — we silently fall back to ``(None, None, None)``
+    and the knockout simulator's built-in 50/50 coin flip takes over.
+
+    Returns ``(strategy, fitted_model, elo_snapshot_date)``. The snapshot date is
+    surfaced on /health so operators can spot a stale Elo file.
     """
     try:
         elo = load_latest_snapshot()
         shootouts = load_historical_shootouts()
         model = fit_shootout_model(shootouts, elo)
     except (FileNotFoundError, ValueError):
-        return None, None
+        return None, None, None
 
     def strategy(home: str, away: str, rng) -> str:
         return simulate_shootout(home, away, model, None, rng)
 
-    return strategy, model
+    snapshot_date = None
+    if "snapshot_date" in elo.columns and not elo["snapshot_date"].empty:
+        snapshot_date = pd.to_datetime(elo["snapshot_date"].iloc[0]).date()
+    return strategy, model, snapshot_date
 
 
 @asynccontextmanager
@@ -105,7 +111,11 @@ async def lifespan(app: FastAPI):
     app.state.fixtures = parse_wc2026_fixtures(load_scheduled())
     app.state.model_version = MODEL_VERSION
     # Optional Elo-based shootout model; None falls back to the 50/50 placeholder.
-    app.state.shootout_strategy, app.state.shootout_model = _build_shootout_strategy()
+    (
+        app.state.shootout_strategy,
+        app.state.shootout_model,
+        app.state.elo_snapshot_date,
+    ) = _build_shootout_strategy()
     yield
 
 

@@ -106,17 +106,42 @@ Then open http://localhost:8501. Dashboard pages:
 
 ## Deploying with Docker
 
-```bash
-# Build the dashboard image:
-docker build -f Dockerfile.dashboard -t wc2026-dashboard .
+### Local stack (postgres + scheduler + API)
 
-# Run the dashboard, pointing at the API on the host:
+```bash
+docker compose up -d                 # postgres + scheduler + api (all three services)
+docker compose logs -f scheduler     # watch the daily cron jobs
+docker compose restart api           # pick up a freshly-refitted model artefact
+```
+
+Dashboard is a separate image (it can run on your laptop pointing at the API):
+
+```bash
+docker build -f Dockerfile.dashboard -t wc2026-dashboard .
 docker run --rm -p 8501:8501 \
     -e WC2026_API_URL=http://host.docker.internal:8000 \
     wc2026-dashboard
 ```
 
-A `Dockerfile.app` for the API/scheduler is provided on the `agent/backend` branch (Stage 1.A).
+### Deploying to Fly.io (~$5–10/month hobby tier)
+
+A starter config is at [`fly.toml.example`](fly.toml.example). One-time setup:
+
+```bash
+cp fly.toml.example fly.toml          # then edit `app` name + `primary_region`
+fly launch --no-deploy --copy-config
+fly volumes create wc2026_data --size 2 --region <your-region>
+fly postgres create --name wc2026-pg --region <your-region>
+fly postgres attach wc2026-pg         # injects DATABASE_URL
+fly secrets set FOOTBALL_DATA_ORG_KEY=<your_key>   # optional
+fly deploy
+fly scale count app=1 scheduler=1     # one of each process group
+```
+
+The Fly config uses **two process groups** off the same Dockerfile.app:
+`app` (uvicorn on port 8000, HTTPS via Fly's edge, `/health` check every 15s)
+and `scheduler` (BlockingScheduler, smaller VM). Both share a `wc2026_data`
+volume mounted at `/app/data` for ingest data + the model artefact.
 
 ## Known limitations (Stage 1)
 

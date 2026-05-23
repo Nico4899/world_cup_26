@@ -172,6 +172,17 @@ def test_health_exposes_model_fit_at_and_version(client: TestClient) -> None:
     assert "T" in body["model_fit_at"]
 
 
+def test_health_exposes_elo_snapshot_freshness(client: TestClient) -> None:
+    """If the eloratings snapshot is on disk, /health should surface its date +
+    age + the shootout-model loaded flag."""
+    body = client.get("/health").json()
+    # In CI without the snapshot on disk these would be None / False; in the
+    # repo's test environment the cached snapshot exists.
+    assert body["elo_snapshot_date"] is not None
+    assert body["elo_snapshot_age_days"] >= 0
+    assert body["shootout_model_loaded"] is True
+
+
 # --- /api/v1/teams/{team}/recent -------------------------------------------
 
 
