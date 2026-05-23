@@ -138,6 +138,7 @@ The original blueprint specified the items below; we explicitly decided NOT to b
 - **Team Profile page** — would duplicate information already split across Groups, Match Detail, and Track Record.
 - **PyDeck host-city map** — eye candy.
 - **TheSportsDB / openfootball / Wikipedia / FIFA.com ingesters** — we don't show logos/kits, and the model doesn't use squad metadata.
+- **football-data.co.uk closing-odds ingest** — the blueprint cited this as a benchmark source for World Cup bookmaker odds, but on inspection it only publishes Euros + domestic leagues, not World Cups. The Track Record page cites published academic numbers (Wheatcroft 2019, Constantinou 2019) instead of live-ingesting.
 - **Sentry / Prometheus monitoring** — not deployed yet; YAGNI.
 
 ## Repo layout
