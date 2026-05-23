@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI
@@ -17,13 +18,15 @@ from wc2026.api.routes import h2h, health, matches, predictions, teams, tourname
 from wc2026.features.match_weights import combined_weight
 from wc2026.ingest.eloratings_scraper import load_latest_snapshot
 from wc2026.ingest.kaggle_intl import load_played, load_scheduled
-from wc2026.models.poisson_dc import PoissonDC
+from wc2026.models.poisson_dc import PoissonDC, PoissonDCParams
 from wc2026.models.shootout import (
     fit_shootout_model,
     load_historical_shootouts,
     simulate_shootout,
 )
 from wc2026.sim.fixtures import parse_wc2026_fixtures
+
+ARTEFACT_PATH = Path("data/artefacts/poisson_dc/latest.npz")
 
 # Match Stage 0.6's tuned defaults.
 MODEL_HALF_LIFE_DAYS = 3650.0
@@ -44,6 +47,29 @@ def _fit_model(df: pd.DataFrame) -> PoissonDC:
     train = df[df["date"] >= cutoff].reset_index(drop=True)
     weights = combined_weight(train, ref_date=MODEL_REF_DATE, half_life_days=MODEL_HALF_LIFE_DAYS)
     return PoissonDC().fit(train, weights=weights)
+
+
+def _load_or_fit_model(df: pd.DataFrame) -> tuple[PoissonDC, str, datetime]:
+    """Prefer a freshly-fit artefact on disk over a cold lifespan-time fit.
+
+    Returns ``(model, source, fit_at)`` where source is ``"artefact"`` (and
+    ``fit_at`` is the artefact mtime) or ``"in_process_fit"`` (and ``fit_at``
+    is now).
+    """
+    if ARTEFACT_PATH.exists():
+        try:
+            params = PoissonDCParams.load(ARTEFACT_PATH)
+        except (OSError, ValueError, KeyError):
+            # Corrupt or schema-mismatched artefact: silently re-fit from scratch.
+            pass
+        else:
+            model = PoissonDC()
+            model.params_ = params
+            model._team_idx = {t: i for i, t in enumerate(params.teams)}
+            model.converged_ = True
+            mtime = datetime.fromtimestamp(ARTEFACT_PATH.stat().st_mtime, tz=UTC)
+            return model, "artefact", mtime
+    return _fit_model(df), "in_process_fit", datetime.now(UTC)
 
 
 def _build_shootout_strategy():
@@ -72,10 +98,12 @@ async def lifespan(app: FastAPI):
     # 10-year window of it, and the /teams/{t}/recent and /h2h endpoints
     # query against it directly.
     app.state.played_df = load_played()
-    app.state.model = _fit_model(app.state.played_df)
+    model, source, fit_at = _load_or_fit_model(app.state.played_df)
+    app.state.model = model
+    app.state.model_source = source
+    app.state.model_fit_at = fit_at
     app.state.fixtures = parse_wc2026_fixtures(load_scheduled())
     app.state.model_version = MODEL_VERSION
-    app.state.model_fit_at = datetime.now(UTC)
     # Optional Elo-based shootout model; None falls back to the 50/50 placeholder.
     app.state.shootout_strategy, app.state.shootout_model = _build_shootout_strategy()
     yield

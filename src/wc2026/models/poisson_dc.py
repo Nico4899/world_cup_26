@@ -27,6 +27,7 @@ in the Football Betting Market", JRSS Series C (Applied Statistics) 46(2):265-28
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -84,6 +85,30 @@ class PoissonDCParams:
             raise ValueError(f"attack shape {self.attack.shape}, expected ({len(self.teams)},)")
         if self.defence.shape != (len(self.teams),):
             raise ValueError(f"defence shape {self.defence.shape}, expected ({len(self.teams)},)")
+
+    def save(self, path: Path) -> None:
+        """Persist parameters as a single .npz on disk; portable across processes."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # np.savez stores arrays + scalar fields; tuple-of-str → np.array of dtype object.
+        np.savez(
+            path,
+            teams=np.array(self.teams, dtype=object),
+            attack=self.attack,
+            defence=self.defence,
+            home_advantage=np.float64(self.home_advantage),
+            rho=np.float64(self.rho),
+        )
+
+    @classmethod
+    def load(cls, path: Path) -> PoissonDCParams:
+        with np.load(path, allow_pickle=True) as data:
+            return cls(
+                teams=tuple(str(t) for t in data["teams"]),
+                attack=np.asarray(data["attack"], dtype=float),
+                defence=np.asarray(data["defence"], dtype=float),
+                home_advantage=float(data["home_advantage"]),
+                rho=float(data["rho"]),
+            )
 
 
 # --- internal: parameter packing + log-likelihood with analytic gradient ----

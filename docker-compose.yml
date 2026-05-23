@@ -17,5 +17,51 @@ services:
       timeout: 5s
       retries: 10
 
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: wc2026-scheduler
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://wc2026:wc2026_local@postgres:5432/wc2026
+      LOG_LEVEL: INFO
+      # Optional — leave unset to skip the football-data.org daily refresh.
+      FOOTBALL_DATA_ORG_KEY: ${FOOTBALL_DATA_ORG_KEY:-}
+    volumes:
+      # Share `data/` with the host so ingest writes (Jürisoo CSV, eloratings
+      # Parquet) and model artefacts persist across container restarts.
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "wc2026.scheduler.jobs"]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: wc2026-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://wc2026:wc2026_local@postgres:5432/wc2026
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    volumes:
+      # Read-only mount: the API consumes Jürisoo CSV, Elo Parquet, and the
+      # latest model artefact written by the scheduler.
+      - ./data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      [
+        "python", "-m", "uvicorn",
+        "wc2026.api.main:app",
+        "--host", "0.0.0.0",
+        "--port", "8000",
+      ]
+
 volumes:
   postgres_data:

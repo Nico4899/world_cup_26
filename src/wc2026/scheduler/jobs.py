@@ -4,10 +4,15 @@ Schedule (UTC)
     04:00  Jürisoo Kaggle dataset refresh
     04:15  Elo ratings snapshot
     04:30  football-data.org WC fixtures refresh
+    05:00  Poisson + Dixon-Coles model refit → data/artefacts/poisson_dc/latest.npz
 
 Each job writes a row to ``scheduler_job_runs`` so the run history is visible
 in Postgres. If the DB is unavailable, the failure is logged but does not
 abort the scheduler process — the next tick will retry.
+
+The model refit overwrites ``data/artefacts/poisson_dc/latest.npz``; the API
+loads that on the next lifespan startup. Restart the API container (or the
+``api`` service in docker-compose) to pick up a freshly-refitted model.
 
 Run with:
     python -m wc2026.scheduler.jobs
@@ -22,6 +27,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+import pandas as pd
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -61,6 +67,14 @@ def _job_football_data_refresh() -> None:
     fetch_competition_matches(WC_COMPETITION_CODE)
 
 
+def _job_poisson_refit() -> None:
+    # Local import: keeps the scheduler module importable without scipy/sklearn
+    # at parse time, and matches the lazy-import pattern used by ingesters.
+    from scripts.refit_poisson_dc import refit_and_save  # noqa: PLC0415
+
+    refit_and_save(ref_date=pd.Timestamp(datetime.now(UTC).date()))
+
+
 JOB_SPECS: tuple[JobSpec, ...] = (
     JobSpec(name="kaggle_refresh", hour=4, minute=0, func=_job_kaggle_refresh),
     JobSpec(name="elo_refresh", hour=4, minute=15, func=_job_elo_refresh),
@@ -70,6 +84,7 @@ JOB_SPECS: tuple[JobSpec, ...] = (
         minute=30,
         func=_job_football_data_refresh,
     ),
+    JobSpec(name="poisson_refit", hour=5, minute=0, func=_job_poisson_refit),
 )
 
 

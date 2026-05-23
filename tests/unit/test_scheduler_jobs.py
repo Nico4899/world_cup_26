@@ -8,24 +8,30 @@ from apscheduler.triggers.cron import CronTrigger
 from wc2026.scheduler import jobs as job_mod
 
 
-def test_job_specs_have_three_entries_at_distinct_times():
+def test_job_specs_have_four_entries_at_distinct_times():
     times = {(s.hour, s.minute) for s in job_mod.JOB_SPECS}
-    assert len(job_mod.JOB_SPECS) == 3
-    assert len(times) == 3, "expected three distinct (hour, minute) slots"
+    assert len(job_mod.JOB_SPECS) == 4
+    assert len(times) == 4, "expected four distinct (hour, minute) slots"
 
 
 def test_job_specs_use_expected_names_and_window():
     names = {s.name for s in job_mod.JOB_SPECS}
-    assert names == {"kaggle_refresh", "elo_refresh", "football_data_org_refresh"}
+    assert names == {
+        "kaggle_refresh",
+        "elo_refresh",
+        "football_data_org_refresh",
+        "poisson_refit",
+    }
     for spec in job_mod.JOB_SPECS:
-        assert spec.hour == 4, "all daily jobs run at 04:xx UTC"
+        # Ingest at 04:xx UTC; the model refit follows at 05:00 to use fresh data.
+        assert spec.hour in (4, 5)
         assert spec.minute in {0, 15, 30}
 
 
-def test_register_jobs_attaches_three_cron_triggers():
+def test_register_jobs_attaches_all_cron_triggers():
     scheduler = BackgroundScheduler(timezone="UTC")
     job_mod.register_jobs(scheduler)
-    assert len(scheduler.get_jobs()) == 3
+    assert len(scheduler.get_jobs()) == len(job_mod.JOB_SPECS)
     for j in scheduler.get_jobs():
         assert isinstance(j.trigger, CronTrigger)
         assert str(j.trigger.timezone) == "UTC"
