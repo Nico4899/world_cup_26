@@ -14,7 +14,7 @@ import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from wc2026.api.routes import h2h, health, matches, predictions, teams, tournament
+from wc2026.api.routes import h2h, health, matches, ops, predictions, teams, tournament
 from wc2026.features.match_weights import combined_weight
 from wc2026.ingest.eloratings_scraper import load_latest_snapshot
 from wc2026.ingest.kaggle_intl import load_played, load_scheduled
@@ -167,3 +167,4 @@ app.include_router(predictions.router)
 app.include_router(tournament.router)
 app.include_router(teams.router)
 app.include_router(h2h.router)
+app.include_router(ops.router)

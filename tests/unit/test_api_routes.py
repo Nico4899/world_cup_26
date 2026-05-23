@@ -245,3 +245,25 @@ def test_h2h_unknown_team_returns_422(client: TestClient) -> None:
     r = client.get("/api/v1/h2h/Atlantis/Argentina")
     assert r.status_code == 422
     assert "Atlantis" in r.json()["detail"]
+
+
+# --- /api/v1/_ops/scheduler-status -----------------------------------------
+
+
+def test_scheduler_status_returns_503_or_empty_without_db(client: TestClient) -> None:
+    """In the unit-test env we have no Postgres. The endpoint must either:
+    - return 503 (DB unreachable), or
+    - return 200 with an empty job list (if a local test DB happens to exist
+      with the table but no rows).
+    What we MUST NOT do is crash the API or leak a stack trace.
+    """
+    r = client.get("/api/v1/_ops/scheduler-status")
+    assert r.status_code in (200, 503)
+    if r.status_code == 200:
+        body = r.json()
+        assert "jobs" in body
+        assert isinstance(body["jobs"], list)
+    else:
+        # 503 body must be informative without leaking internals.
+        body = r.json()
+        assert "Scheduler-status DB query failed" in body["detail"]
