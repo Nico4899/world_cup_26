@@ -159,3 +159,68 @@ def test_bracket_is_cached_by_seed(client: TestClient) -> None:
     # different seed gives a different realisation (almost surely)
     r3 = client.get("/api/v1/tournament/bracket", params={"seed": 8})
     assert r3.json()["matches"] != r1.json()["matches"]
+
+
+# --- /health (enriched) ----------------------------------------------------
+
+
+def test_health_exposes_model_fit_at_and_version(client: TestClient) -> None:
+    body = client.get("/health").json()
+    assert body["model_fit_at"] is not None
+    assert body["model_version"] == "poisson_dc.v1"
+    # ISO-formatted UTC timestamp
+    assert "T" in body["model_fit_at"]
+
+
+# --- /api/v1/teams/{team}/recent -------------------------------------------
+
+
+def test_recent_form_returns_n_matches_from_team_perspective(client: TestClient) -> None:
+    r = client.get("/api/v1/teams/Argentina/recent", params={"n": 5})
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 5
+    # Sorted desc by date
+    dates = [row["date"] for row in rows]
+    assert dates == sorted(dates, reverse=True)
+    for row in rows:
+        assert row["result"] in {"W", "D", "L"}
+        assert row["venue"] in {"home", "away", "neutral"}
+        # Argentina is never its own opponent
+        assert row["opponent"] != "Argentina"
+
+
+def test_recent_form_unknown_team_returns_422(client: TestClient) -> None:
+    r = client.get("/api/v1/teams/Atlantis/recent")
+    assert r.status_code == 422
+    assert "Atlantis" in r.json()["detail"]
+
+
+# --- /api/v1/h2h/{team_a}/{team_b} -----------------------------------------
+
+
+def test_h2h_returns_matches_between_two_teams(client: TestClient) -> None:
+    r = client.get("/api/v1/h2h/Argentina/Brazil", params={"n": 10})
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) > 0
+    # Every row pairs exactly Argentina vs Brazil
+    for row in rows:
+        teams = {row["home_team"], row["away_team"]}
+        assert teams == {"Argentina", "Brazil"}
+    # Sorted desc by date
+    dates = [row["date"] for row in rows]
+    assert dates == sorted(dates, reverse=True)
+
+
+def test_h2h_never_met_returns_empty_not_422(client: TestClient) -> None:
+    # San Marino vs Vanuatu — extremely unlikely fixture; defensive empty-OK.
+    r = client.get("/api/v1/h2h/San Marino/Vanuatu")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_h2h_unknown_team_returns_422(client: TestClient) -> None:
+    r = client.get("/api/v1/h2h/Atlantis/Argentina")
+    assert r.status_code == 422
+    assert "Atlantis" in r.json()["detail"]

@@ -60,3 +60,21 @@ def get_match(match_id: int) -> dict[str, Any]:
 def get_prediction(home: str, away: str, neutral: bool = True) -> dict[str, Any]:
     """Pairwise prediction with full score_matrix; useful for non-fixture matchups."""
     return get_json(f"/api/v1/predictions/{home}/{away}", params={"neutral": str(neutral).lower()})
+
+
+@st.cache_data(ttl=300, show_spinner="Loading recent form…")
+def get_recent_form(team: str, n: int = 5) -> list[dict[str, Any]]:
+    """Last `n` matches from the team's perspective (W/D/L)."""
+    return get_json(f"/api/v1/teams/{team}/recent", params={"n": n})
+
+
+@st.cache_data(ttl=300, show_spinner="Loading head-to-head…")
+def get_h2h(team_a: str, team_b: str, n: int = 10) -> list[dict[str, Any]]:
+    """Past matches between `team_a` and `team_b`, date-desc."""
+    return get_json(f"/api/v1/h2h/{team_a}/{team_b}", params={"n": n})
+
+
+@st.cache_data(ttl=600, show_spinner="Running tournament simulation…")
+def get_standings(n_sims: int = 2000, seed: int = 42) -> dict[str, Any]:
+    """Aggregated Monte Carlo standings (cached 10 min)."""
+    return get_json("/api/v1/tournament/standings", params={"n_sims": n_sims, "seed": seed})

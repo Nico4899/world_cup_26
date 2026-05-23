@@ -9,6 +9,7 @@ import streamlit as st
 from dashboard.components.api_client import (
     APIUnreachable,
     get_match,
+    get_standings,
     list_matches,
     render_unreachable_warning,
 )
@@ -133,3 +134,34 @@ for i in range(0, len(matches), 2):
                 on_click=_navigate_to_detail,
                 args=(m["match_id"],),
             )
+
+st.divider()
+st.subheader("Group-stage advancement (across all 12 groups)")
+st.caption(
+    "Stacked-bar advancement probabilities from the Monte Carlo simulator. "
+    "Each row is one group; segments are P(1st) · P(2nd) · P(3rd → R32) · P(eliminated). "
+    "For per-team detail see the **Groups** page."
+)
+
+try:
+    standings = get_standings(n_sims=2000, seed=42)
+except APIUnreachable as exc:
+    render_unreachable_warning(exc)
+else:
+    st.caption(f"Based on {standings['n_sims']} simulations.")
+    # Render compact 4-column row per group; each cell is the group name plus a tiny
+    # progress-bar string with the highest-prob advancing team highlighted.
+    for row_start in range(0, len(standings["groups"]), 4):
+        cols = st.columns(4)
+        for col, block in zip(cols, standings["groups"][row_start : row_start + 4], strict=False):
+            with col:
+                st.markdown(f"**Group {block['group']}**")
+                for team in block["teams"]:
+                    advance_p = team["p_first"] + team["p_second"] + team["p_third_advance"]
+                    bar_filled = round(advance_p * 12)
+                    bar = "█" * bar_filled + "░" * (12 - bar_filled)
+                    st.markdown(
+                        f"<code style='font-size:0.85em'>{bar}</code> "
+                        f"{team['team']} <small>· {advance_p:.0%} adv</small>",
+                        unsafe_allow_html=True,
+                    )

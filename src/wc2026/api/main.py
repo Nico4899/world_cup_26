@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from wc2026.api.routes import health, matches, predictions, tournament
+from wc2026.api.routes import h2h, health, matches, predictions, teams, tournament
 from wc2026.features.match_weights import combined_weight
 from wc2026.ingest.kaggle_intl import load_played, load_scheduled
 from wc2026.models.poisson_dc import PoissonDC
@@ -33,17 +33,20 @@ CORS_ORIGINS = (
 )
 
 
-def _fit_model() -> PoissonDC:
-    df = load_played()
+def _fit_model(df: pd.DataFrame) -> PoissonDC:
     cutoff = MODEL_REF_DATE - pd.Timedelta(days=int(MODEL_HISTORY_YEARS * 365.25))
-    df = df[df["date"] >= cutoff].reset_index(drop=True)
-    weights = combined_weight(df, ref_date=MODEL_REF_DATE, half_life_days=MODEL_HALF_LIFE_DAYS)
-    return PoissonDC().fit(df, weights=weights)
+    train = df[df["date"] >= cutoff].reset_index(drop=True)
+    weights = combined_weight(train, ref_date=MODEL_REF_DATE, half_life_days=MODEL_HALF_LIFE_DAYS)
+    return PoissonDC().fit(train, weights=weights)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.model = _fit_model()
+    # Cache the full played-matches DataFrame once: the model fit uses a
+    # 10-year window of it, and the /teams/{t}/recent and /h2h endpoints
+    # query against it directly.
+    app.state.played_df = load_played()
+    app.state.model = _fit_model(app.state.played_df)
     app.state.fixtures = parse_wc2026_fixtures(load_scheduled())
     app.state.model_version = MODEL_VERSION
     app.state.model_fit_at = datetime.now(UTC)
@@ -69,3 +72,5 @@ app.include_router(health.router)
 app.include_router(matches.router)
 app.include_router(predictions.router)
 app.include_router(tournament.router)
+app.include_router(teams.router)
+app.include_router(h2h.router)

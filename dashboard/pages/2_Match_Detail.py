@@ -8,9 +8,14 @@ import plotly.graph_objects as go
 import streamlit as st
 from dashboard.components.api_client import (
     APIUnreachable,
+    get_h2h,
     get_match,
+    get_recent_form,
     render_unreachable_warning,
 )
+
+# Color tokens for W/D/L form bubbles.
+_RESULT_COLOR = {"W": "#1f9d55", "D": "#888888", "L": "#d62728"}
 
 DISPLAY_GOALS = 7  # truncate the 11×11 matrix for visual clarity
 
@@ -134,3 +139,78 @@ st.markdown(
     - Remember: a 60% favourite still loses 40% of the time. These are probabilities, not predictions.
     """
 )
+
+st.divider()
+
+
+def _render_form(team: str) -> None:
+    """Render a team's last-5 form as coloured W/D/L bubbles + tooltip text."""
+    st.markdown(f"**{team}** — last 5")
+    try:
+        form = get_recent_form(team, n=5)
+    except APIUnreachable as exc:
+        render_unreachable_warning(exc)
+        return
+    if not form:
+        st.caption("_no recent matches in dataset_")
+        return
+    # Render each match as a colored badge in a row.
+    badges_html = " ".join(
+        f"<span style='background:{_RESULT_COLOR[m['result']]};color:white;"
+        f"padding:3px 8px;border-radius:6px;margin-right:4px;font-weight:600' "
+        f"title='{m['date']} {team} {m['goals_for']}-{m['goals_against']} {m['opponent']} "
+        f"({m['venue']}, {m['tournament']})'>{m['result']}</span>"
+        for m in form
+    )
+    st.markdown(badges_html, unsafe_allow_html=True)
+    st.caption(
+        " · ".join(
+            f"{m['result']} {m['goals_for']}-{m['goals_against']} {'vs' if m['venue'] != 'away' else '@'} {m['opponent']}"
+            for m in form
+        )
+    )
+
+
+st.subheader("Recent form")
+form_l, form_r = st.columns(2)
+with form_l:
+    _render_form(fx["home_team"])
+with form_r:
+    _render_form(fx["away_team"])
+
+st.subheader("Head-to-head")
+try:
+    h2h = get_h2h(fx["home_team"], fx["away_team"], n=10)
+except APIUnreachable as exc:
+    render_unreachable_warning(exc)
+else:
+    if not h2h:
+        st.caption(
+            f"_{fx['home_team']} and {fx['away_team']} have never met in the dataset (1872 → present)._"
+        )
+    else:
+        # Quick aggregate
+        wins_home = sum(
+            1
+            for m in h2h
+            if (m["home_team"] == fx["home_team"] and m["home_score"] > m["away_score"])
+            or (m["away_team"] == fx["home_team"] and m["away_score"] > m["home_score"])
+        )
+        draws = sum(1 for m in h2h if m["home_score"] == m["away_score"])
+        wins_away = len(h2h) - wins_home - draws
+        st.caption(
+            f"Last {len(h2h)} meetings — "
+            f"**{fx['home_team']}** {wins_home} W · **draw** {draws} · **{fx['away_team']}** {wins_away} W"
+        )
+        rows = [
+            {
+                "Date": m["date"],
+                "Home": m["home_team"],
+                "Score": f"{m['home_score']}–{m['away_score']}",
+                "Away": m["away_team"],
+                "Tournament": m["tournament"],
+                "Neutral": "✓" if m["neutral"] else "",
+            }
+            for m in h2h
+        ]
+        st.dataframe(rows, hide_index=True, width="stretch")

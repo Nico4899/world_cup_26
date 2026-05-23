@@ -67,3 +67,27 @@ class PredictionResponse(BaseModel):
 class FixtureWithPrediction(BaseModel):
     fixture: FixtureSummary
     prediction: PredictionResponse
+
+
+class TeamRecentMatch(BaseModel):
+    """One past match, framed from a specific team's perspective."""
+
+    date: date
+    opponent: str
+    venue: str = Field(description="home / away / neutral")
+    goals_for: int
+    goals_against: int
+    result: str = Field(description="W / D / L from the team's perspective")
+    tournament: str
+
+
+class H2HMatch(BaseModel):
+    """One head-to-head match between two specific teams (date-sorted desc)."""
+
+    date: date
+    home_team: str
+    away_team: str
+    home_score: int
+    away_score: int
+    tournament: str
+    neutral: bool

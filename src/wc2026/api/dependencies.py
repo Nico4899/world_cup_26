@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 from fastapi import HTTPException, Request, status
 
 from wc2026.models.poisson_dc import PoissonDC
@@ -26,3 +27,13 @@ def get_fixtures(request: Request) -> WC2026Fixtures:
             detail="fixtures not loaded",
         )
     return fixtures
+
+
+def get_played_df(request: Request) -> pd.DataFrame:
+    df = getattr(request.app.state, "played_df", None)
+    if df is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="played-matches dataset not loaded",
+        )
+    return df
