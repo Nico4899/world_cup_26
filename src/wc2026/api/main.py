@@ -12,7 +12,7 @@ import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from wc2026.api.routes import health, matches, predictions
+from wc2026.api.routes import health, matches, predictions, tournament
 from wc2026.features.match_weights import combined_weight
 from wc2026.ingest.kaggle_intl import load_played, load_scheduled
 from wc2026.models.poisson_dc import PoissonDC
@@ -66,3 +66,4 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(matches.router)
 app.include_router(predictions.router)
+app.include_router(tournament.router)

@@ -100,3 +100,38 @@ def test_pairwise_prediction_422_on_unknown_team(client: TestClient) -> None:
     r = client.get("/api/v1/predictions/Atlantis/France")
     assert r.status_code == 422
     assert "Atlantis" in r.json()["detail"]
+
+
+# --- /api/v1/tournament -----------------------------------------------------
+
+
+def test_standings_returns_12_groups_with_per_team_probabilities(client: TestClient) -> None:
+    # Use a small n_sims to keep the test fast.
+    r = client.get("/api/v1/tournament/standings", params={"n_sims": 100, "seed": 0})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["n_sims"] == 100
+    assert len(body["groups"]) == 12
+    for g in body["groups"]:
+        assert len(g["teams"]) == 4
+        for row in g["teams"]:
+            for k in ("p_first", "p_second", "p_third_advance", "p_eliminated"):
+                assert 0.0 <= row[k] <= 1.0
+    # Headline has 10 teams sorted by p_champion descending
+    assert len(body["headline"]) == 10
+    ps = [t["p_champion"] for t in body["headline"]]
+    assert ps == sorted(ps, reverse=True)
+
+
+def test_bracket_returns_31_knockout_matches_and_champion(client: TestClient) -> None:
+    r = client.get("/api/v1/tournament/bracket", params={"seed": 0})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["seed"] == 0
+    # 16 R32 + 8 R16 + 4 QF + 2 SF + 1 Final = 31 matches
+    assert len(body["matches"]) == 31
+    rounds = {m["round"] for m in body["matches"]}
+    assert rounds == {"R32", "R16", "QF", "SF", "Final"}
+    # Champion is one of the teams in the final
+    final_match = next(m for m in body["matches"] if m["round"] == "Final")
+    assert body["champion"] in (final_match["home_team"], final_match["away_team"])
