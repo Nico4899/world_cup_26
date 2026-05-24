@@ -319,3 +319,33 @@ class TeamXgFormResponse(BaseModel):
     last_5: XgFormSplit
     last_10: XgFormSplit
     last_12_months: XgFormSplit
+
+
+class PathOpponent(BaseModel):
+    """One opponent candidate at a given knockout round."""
+
+    team: str
+    p_conditional: float = Field(
+        description=(
+            "P(opponent | team reached this round). Among teams a side is most "
+            "likely to face here, summed to 1 when the team reached the round in "
+            "at least one sim."
+        )
+    )
+
+
+class PathRound(BaseModel):
+    """One knockout round in the per-team path-to-final tree."""
+
+    round: str = Field(description="One of r32 / r16 / qf / sf / final.")
+    p_reached: float
+    most_likely_opponent: PathOpponent | None = None
+    top_opponents: list[PathOpponent] = []
+
+
+class TeamPathToFinal(BaseModel):
+    """Round-by-round advancement probabilities + most-likely opponents."""
+
+    team: str
+    n_sims: int
+    rounds: list[PathRound]

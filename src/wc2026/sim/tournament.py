@@ -209,6 +209,70 @@ _R16_MATCH_IDS = tuple(mid for mid, _, _ in R16_PAIRS)
 _QF_MATCH_IDS = tuple(mid for mid, _, _ in QF_PAIRS)
 _SF_MATCH_IDS = tuple(mid for mid, _, _ in SF_PAIRS)
 
+# Round-by-round match-id buckets keyed by the same labels the dashboard uses.
+PATH_ROUND_MATCH_IDS: dict[str, tuple[int, ...]] = {
+    "r32": _R32_MATCH_IDS,
+    "r16": _R16_MATCH_IDS,
+    "qf": _QF_MATCH_IDS,
+    "sf": _SF_MATCH_IDS,
+    "final": (FINAL_PAIR[0],),
+}
+
+
+def compute_path_to_final(
+    fixtures: WC2026Fixtures,
+    model: PoissonDC,
+    *,
+    n_sims: int = 2000,
+    seed: int = 42,
+    fifa_ranking: dict[str, int] | None = None,
+    shootout_strategy: ShootoutStrategy | None = None,
+    known_group_results: dict[tuple[str, str], tuple[int, int]] | None = None,
+) -> dict[str, dict[str, dict[str, int]]]:
+    """Histogram of per-team opponents at each knockout round.
+
+    Returns ``{team: {round_label: {opponent: count}}}``. Each ``count`` is
+    the number of simulated tournaments in which ``team`` faced ``opponent``
+    in ``round_label``. Sums to ``count(team reached round)`` per (team, round).
+
+    Computed in a single Monte Carlo pass so the Team Profile route can serve
+    "most likely opponent at each stage" for any team without re-simulating.
+    """
+    if n_sims <= 0:
+        raise ValueError(f"n_sims must be positive, got {n_sims}")
+    teams = list(fixtures.teams)
+    histograms: dict[str, dict[str, dict[str, int]]] = {
+        t: {label: {} for label in PATH_ROUND_MATCH_IDS} for t in teams
+    }
+
+    rng = np.random.default_rng(seed)
+    for _ in range(n_sims):
+        result = simulate_tournament(
+            fixtures,
+            model,
+            rng,
+            fifa_ranking=fifa_ranking,
+            shootout_strategy=shootout_strategy,
+            known_group_results=known_group_results,
+        )
+        for label, mids in PATH_ROUND_MATCH_IDS.items():
+            for mid in mids:
+                if mid not in result.knockout_results and label != "r32":
+                    continue
+                if label == "r32":
+                    pair = result.r32_matchups.get(mid)
+                    if pair is None:
+                        continue
+                    a, b = pair
+                    histograms[a][label][b] = histograms[a][label].get(b, 0) + 1
+                    histograms[b][label][a] = histograms[b][label].get(a, 0) + 1
+                else:
+                    outcome = result.knockout_results[mid]
+                    a, b = outcome.home_team, outcome.away_team
+                    histograms[a][label][b] = histograms[a][label].get(b, 0) + 1
+                    histograms[b][label][a] = histograms[b][label].get(a, 0) + 1
+    return histograms
+
 
 def _update_counters_from_result(
     counters: dict[str, dict[str, int]],

@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from wc2026.api.dependencies import get_played_df
+from wc2026.api.dependencies import get_fixtures, get_model, get_played_df
 from wc2026.api.schemas import (
     EloHistoryPoint,
     FifaRankingPoint,
+    PathOpponent,
+    PathRound,
     SquadMember,
     TeamAssetsResponse,
     TeamEloHistory,
     TeamFifaRankingHistory,
+    TeamPathToFinal,
     TeamRecentMatch,
     TeamSquadResponse,
     TeamTournamentProbabilities,
@@ -33,6 +38,9 @@ from wc2026.db.models import (
     TournamentSimTeamOutcome,
 )
 from wc2026.db.session import get_engine
+from wc2026.models.poisson_dc import PoissonDC
+from wc2026.sim.fixtures import WC2026Fixtures
+from wc2026.sim.tournament import PATH_ROUND_MATCH_IDS, compute_path_to_final
 
 router = APIRouter(prefix="/api/v1/teams")
 
@@ -348,3 +356,84 @@ def team_assets(team: str) -> TeamAssetsResponse:
         stadium_city=row.stadium_city,
         stadium_country=row.stadium_country,
     )
+
+
+# --- /api/v1/teams/{team}/path-to-final ------------------------------------
+#
+# Path-to-final caches a single Monte Carlo opponent-histogram pass at module
+# scope and serves every team from it. Burning ~1-2 s once per cache window
+# beats running per-team mini-sims on every Team Profile click.
+
+PATH_CACHE_TTL_SECONDS = 3600  # mirror the standings cache window
+DEFAULT_PATH_N_SIMS = 2000
+DEFAULT_PATH_SEED = 42
+
+_PATH_CACHE: dict[tuple[int, int], tuple[float, dict[str, dict[str, dict[str, int]]]]] = {}
+_PATH_CACHE_LOCK = threading.Lock()
+
+
+def _cached_path_histograms(
+    fixtures: WC2026Fixtures,
+    model: PoissonDC,
+    *,
+    n_sims: int,
+    seed: int,
+    shootout_strategy,
+) -> dict[str, dict[str, dict[str, int]]]:
+    key = (n_sims, seed)
+    now = time.monotonic()
+    with _PATH_CACHE_LOCK:
+        cached = _PATH_CACHE.get(key)
+        if cached is not None and now - cached[0] < PATH_CACHE_TTL_SECONDS:
+            return cached[1]
+    hist = compute_path_to_final(
+        fixtures, model, n_sims=n_sims, seed=seed, shootout_strategy=shootout_strategy
+    )
+    with _PATH_CACHE_LOCK:
+        _PATH_CACHE[key] = (now, hist)
+    return hist
+
+
+@router.get("/{team}/path-to-final", response_model=TeamPathToFinal)
+def team_path_to_final(
+    request: Request,
+    team: str,
+    n_sims: int = Query(default=DEFAULT_PATH_N_SIMS, ge=200, le=10_000),
+    seed: int = Query(default=DEFAULT_PATH_SEED),
+    fixtures: WC2026Fixtures = Depends(get_fixtures),
+    model: PoissonDC = Depends(get_model),
+) -> TeamPathToFinal:
+    """Round-by-round advancement probabilities + most-likely opponents.
+
+    Each round entry carries P(team reaches it) and a histogram of the
+    opponents the team faced when they did. The default ``n_sims=2000`` is
+    a cost/precision compromise — for chart-level resolution it's plenty;
+    for tail-team estimates bump it to 5–10k.
+    """
+    shootout_strategy = getattr(request.app.state, "shootout_strategy", None)
+    histograms = _cached_path_histograms(
+        fixtures, model, n_sims=n_sims, seed=seed, shootout_strategy=shootout_strategy
+    )
+    team_hist = histograms.get(team)
+    if team_hist is None:
+        # Team isn't in the WC 2026 corpus — surface a clean 422 rather than
+        # an empty-everywhere payload that looks like "we ran 0 sims".
+        raise HTTPException(status_code=422, detail=f"unknown team: {team!r}")
+    rounds: list[PathRound] = []
+    for label in PATH_ROUND_MATCH_IDS:
+        counts = team_hist.get(label, {})
+        total = sum(counts.values())
+        p_reached = total / n_sims if n_sims > 0 else 0.0
+        opponents = [
+            PathOpponent(team=opp, p_conditional=c / total)
+            for opp, c in sorted(counts.items(), key=lambda kv: kv[1], reverse=True)
+        ]
+        rounds.append(
+            PathRound(
+                round=label,
+                p_reached=p_reached,
+                most_likely_opponent=opponents[0] if opponents else None,
+                top_opponents=opponents[:3],
+            )
+        )
+    return TeamPathToFinal(team=team, n_sims=n_sims, rounds=rounds)
