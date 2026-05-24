@@ -745,6 +745,74 @@ def test_wc2026_track_record_aggregates_when_event_and_prediction_present(
     assert abs(body["log_loss"] - 0.6931) < 1e-6
 
 
+# --- Phase 8: persisted-run standings -------------------------------------
+
+
+def test_standings_uses_persisted_run_when_use_persisted_default(
+    client: TestClient, monkeypatch
+) -> None:
+    """When a persisted MC run exists in the DB, the route serves it (no in-process MC)."""
+    import pandas as pd
+
+    from wc2026.api.routes import tournament as tour
+    from wc2026.sim.tournament import ROUND_COLUMNS, TournamentSummary
+
+    fixtures = client.app.state.fixtures
+    teams = list(fixtures.teams)
+    df = pd.DataFrame(
+        [[1 / len(teams)] * len(ROUND_COLUMNS)] * len(teams),
+        index=teams,
+        columns=list(ROUND_COLUMNS),
+    )
+    df.index.name = "team"
+    summary = TournamentSummary(n_sims=10_000, probabilities=df)
+
+    called = {"in_process": 0}
+
+    def fake_loader():
+        return summary, 42, "poisson_dc.v1"
+
+    def boom_in_process(*_args, **_kwargs):
+        called["in_process"] += 1
+        return summary
+
+    monkeypatch.setattr(tour, "_load_persisted_summary", fake_loader)
+    monkeypatch.setattr(tour, "_cached_summary", boom_in_process)
+
+    r = client.get("/api/v1/tournament/standings")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "persisted"
+    assert body["run_id"] == 42
+    assert body["model_version"] == "poisson_dc.v1"
+    assert called["in_process"] == 0
+
+
+def test_standings_force_in_process_with_use_persisted_false(
+    client: TestClient, monkeypatch
+) -> None:
+    from wc2026.api.routes import tournament as tour
+
+    monkeypatch.setattr(tour, "_load_persisted_summary", lambda: ({}, 0, "x"))
+    r = client.get("/api/v1/tournament/standings", params={"use_persisted": "false", "n_sims": 100})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "in_process"
+    assert body["run_id"] is None
+
+
+def test_standings_falls_back_to_in_process_when_no_persisted_run(
+    client: TestClient, monkeypatch
+) -> None:
+    from wc2026.api.routes import tournament as tour
+
+    monkeypatch.setattr(tour, "_load_persisted_summary", lambda: None)
+    r = client.get("/api/v1/tournament/standings", params={"n_sims": 100})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "in_process"
+
+
 def test_wc2026_track_record_returns_503_on_db_error(client: TestClient, monkeypatch) -> None:
     from wc2026.api.routes import track_record as tr
 

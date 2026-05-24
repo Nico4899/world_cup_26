@@ -70,6 +70,7 @@ BACKUP_RETENTION_DAYS = 14
 WC_TOURNAMENT_START = date(2026, 6, 11)
 WC_TOURNAMENT_END = date(2026, 7, 19)
 STANDINGS_WARM_INTERVAL_MINUTES = 60
+MONTE_CARLO_RERUN_INTERVAL_MINUTES = 30
 
 logger = logging.getLogger(__name__)
 
@@ -294,6 +295,20 @@ def _job_features_rebuild() -> None:
     persist_daily_snapshot()
 
 
+def _job_monte_carlo_rerun() -> None:
+    """Re-run the 10k Monte Carlo conditioned on completed-match results.
+
+    Registered only during the WC 2026 window. Skipped when no DB is
+    configured (the persistence script handles the env check itself).
+    """
+    today = datetime.now(UTC).date()
+    if not (WC_TOURNAMENT_START <= today <= WC_TOURNAMENT_END):
+        return
+    from scripts.rerun_monte_carlo import rerun_and_persist  # noqa: PLC0415
+
+    rerun_and_persist()
+
+
 def _job_warm_standings_cache(api_url: str | None = None, timeout_s: float = 60.0) -> None:
     """Force the API to recompute its standings cache against the latest model.
 
@@ -480,6 +495,25 @@ def register_jobs(
             trigger=IntervalTrigger(minutes=STANDINGS_WARM_INTERVAL_MINUTES, timezone="UTC"),
             id=warm_spec.name,
             name=warm_spec.name,
+            replace_existing=True,
+        )
+        # Phase 8: conditional Monte Carlo rerun every 30 min during the
+        # tournament. When the live poller writes a FT_WHISTLE row, the next
+        # firing folds it into the simulator's known-results map and persists
+        # the freshly-conditioned standings to tournament_sim_runs.
+        mc_spec = JobSpec(
+            name="monte_carlo_rerun",
+            hour=-1,
+            minute=-1,
+            func=_job_monte_carlo_rerun,
+        )
+        scheduler.add_job(
+            _wrap_with_tracking(mc_spec),
+            trigger=IntervalTrigger(
+                minutes=MONTE_CARLO_RERUN_INTERVAL_MINUTES, timezone="UTC"
+            ),
+            id=mc_spec.name,
+            name=mc_spec.name,
             replace_existing=True,
         )
 

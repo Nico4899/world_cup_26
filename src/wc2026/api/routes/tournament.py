@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from typing import Any
 
 import numpy as np
+import pandas as pd
 from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import desc, select
+from sqlalchemy.orm import Session
 
 from wc2026.api.dependencies import get_fixtures, get_model
+from wc2026.db.models import TournamentSimRun, TournamentSimTeamOutcome
+from wc2026.db.session import get_engine
 from wc2026.models.poisson_dc import PoissonDC
 from wc2026.sim.fixtures import WC2026Fixtures
 from wc2026.sim.knockout import ShootoutStrategy
@@ -20,6 +26,8 @@ from wc2026.sim.tournament import (
     simulate_tournament,
     simulate_tournament_monte_carlo,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/tournament")
 
@@ -32,6 +40,62 @@ CACHE_TTL_SECONDS = 3600  # 1 hour
 _STANDINGS_CACHE: dict[tuple[int, int], tuple[float, TournamentSummary]] = {}
 _BRACKET_CACHE: dict[int, tuple[float, TournamentResult]] = {}
 _CACHE_LOCK = threading.Lock()
+
+
+def _load_persisted_summary() -> tuple[TournamentSummary, int, str] | None:
+    """Return the most-recent persisted MC run as a TournamentSummary.
+
+    The Phase 8 ``rerun_monte_carlo`` script writes per-team probabilities
+    into ``tournament_sim_runs`` + ``tournament_sim_team_outcomes``. We
+    rebuild ``TournamentSummary.probabilities`` from those rows; the
+    ``third_advance`` column the in-process simulator emits isn't stored
+    explicitly, but it's algebraically recoverable as
+    ``advance_r32_p - group_winner_p - group_runner_up_p``.
+
+    Returns ``(summary, run_id, model_version)`` or ``None`` when the table
+    is empty or the DB is unreachable.
+    """
+    try:
+        eng = get_engine()
+        with Session(eng, future=True) as session:
+            run = session.scalars(
+                select(TournamentSimRun).order_by(desc(TournamentSimRun.created_at)).limit(1)
+            ).first()
+            if run is None:
+                return None
+            outcomes = list(
+                session.scalars(
+                    select(TournamentSimTeamOutcome).where(
+                        TournamentSimTeamOutcome.run_id == run.run_id
+                    )
+                )
+            )
+            if not outcomes:
+                return None
+            data = {
+                "group_winner": [o.group_winner_p for o in outcomes],
+                "runner_up": [o.group_runner_up_p for o in outcomes],
+                "third_advance": [
+                    max(o.advance_r32_p - o.group_winner_p - o.group_runner_up_p, 0.0)
+                    for o in outcomes
+                ],
+                "r32_reached": [o.advance_r32_p for o in outcomes],
+                "r16_reached": [o.advance_r16_p for o in outcomes],
+                "qf_reached": [o.quarterfinal_p for o in outcomes],
+                "sf_reached": [o.semifinal_p for o in outcomes],
+                "final_reached": [o.final_p for o in outcomes],
+                "champion": [o.champion_p for o in outcomes],
+            }
+            df = pd.DataFrame(data, index=[o.team for o in outcomes], columns=list(ROUND_COLUMNS))
+            df.index.name = "team"
+            return (
+                TournamentSummary(n_sims=int(run.n_sims), probabilities=df),
+                int(run.run_id),
+                str(run.model_version),
+            )
+    except Exception:
+        logger.debug("standings: persisted-run lookup failed; falling back to in-process MC", exc_info=True)
+        return None
 
 
 def _cached_summary(
@@ -104,11 +168,30 @@ def standings(
     request: Request,
     n_sims: int = Query(default=DEFAULT_N_SIMS, ge=100, le=20_000),
     seed: int = Query(default=DEFAULT_SEED),
+    use_persisted: bool = Query(
+        default=True,
+        description=(
+            "Phase 8: when True (the default) the route serves the most-recent "
+            "persisted Monte Carlo run from ``tournament_sim_runs``, which the "
+            "rerun_monte_carlo script writes after each completed WC 2026 match. "
+            "Set False to force an in-process simulation (legacy behaviour)."
+        ),
+    ),
     model: PoissonDC = Depends(get_model),
     fixtures: WC2026Fixtures = Depends(get_fixtures),
 ) -> dict[str, Any]:
     shootout_strategy = getattr(request.app.state, "shootout_strategy", None)
-    summary = _cached_summary(model, fixtures, n_sims, seed, shootout_strategy)
+    summary: TournamentSummary
+    source = "in_process"
+    run_id: int | None = None
+    persisted_model_version: str | None = None
+    if use_persisted:
+        loaded = _load_persisted_summary()
+        if loaded is not None:
+            summary, run_id, persisted_model_version = loaded
+            source = "persisted"
+    if source == "in_process":
+        summary = _cached_summary(model, fixtures, n_sims, seed, shootout_strategy)
     groups = [_build_group_block(letter, summary, fixtures) for letter in fixtures.groups]
     # Top-10 championship probabilities for the headline
     top = (
@@ -132,6 +215,9 @@ def standings(
         "round_columns": list(ROUND_COLUMNS),
         "groups": groups,
         "headline": headline,
+        "source": source,
+        "run_id": run_id,
+        "model_version": persisted_model_version,
     }
 
 
