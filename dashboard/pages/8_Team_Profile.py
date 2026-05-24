@@ -245,16 +245,18 @@ except (APIUnreachable, httpx.HTTPStatusError):
 
 last5 = xg.get("last_5") or {"matches": 0}
 last10 = xg.get("last_10") or {"matches": 0}
-if last10.get("matches", 0) == 0:
+last_12_months = xg.get("last_12_months") or {"matches": 0}
+if last10.get("matches", 0) == 0 and last_12_months.get("matches", 0) == 0:
     st.caption(
         "_No xG records for this team yet. The weekly `fbref_refresh` + manual "
         "`statsbomb_refresh` jobs populate `raw_match_xg`._"
     )
 else:
-    xg_cols = st.columns(2)
+    xg_cols = st.columns(3)
     for col, split, label in (
         (xg_cols[0], last5, "Last 5"),
         (xg_cols[1], last10, "Last 10"),
+        (xg_cols[2], last_12_months, "Last 12 months"),
     ):
         with col:
             n = int(split.get("matches", 0) or 0)
