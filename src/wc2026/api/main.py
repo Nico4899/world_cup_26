@@ -53,6 +53,7 @@ from wc2026.models.xgb_classifier import (
 from wc2026.models.xgb_classifier import (
     XgbMatchModel,
 )
+from wc2026.observability.sentry import init_sentry
 from wc2026.sim.fixtures import load_group_assignment, parse_wc2026_fixtures
 
 ARTEFACT_PATH = Path("data/artifacts/poisson_dc/latest.npz")
@@ -213,6 +214,9 @@ def _build_shootout_strategy():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Sentry init runs first so any subsequent lifespan crash is reported.
+    # No-op when SENTRY_DSN is unset.
+    init_sentry(service="api")
     # Cache the full played-matches DataFrame once: the model fit uses a
     # 10-year window of it, and the /teams/{t}/recent and /h2h endpoints
     # query against it directly.

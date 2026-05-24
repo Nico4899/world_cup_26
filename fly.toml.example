@@ -6,12 +6,21 @@
 #
 # First-time setup
 # ----------------
+# See docs/deploy.md for the full runbook. Short version:
 #   1. `fly launch --no-deploy --copy-config` (rename this file to `fly.toml`
 #      then run; or pass `--name` to choose an app name).
 #   2. `fly volumes create wc2026_data --size 2 --region <your-region>`
 #   3. `fly postgres create --name wc2026-pg --region <your-region>`
 #      `fly postgres attach wc2026-pg`   (sets DATABASE_URL)
-#   4. `fly secrets set FOOTBALL_DATA_ORG_KEY=<your_key>` (optional)
+#   4. `fly secrets set \
+#        FOOTBALL_DATA_ORG_KEY=<key> \
+#        SENTRY_DSN=<dsn> \
+#        AWS_S3_BUCKET=<bucket> \
+#        AWS_S3_ENDPOINT_URL=<r2-or-s3-endpoint> \
+#        AWS_ACCESS_KEY_ID=<key> \
+#        AWS_SECRET_ACCESS_KEY=<secret>`
+#      Every secret above is optional; missing values gracefully degrade the
+#      relevant feature (no Sentry events, no off-site backup, no live polling).
 #   5. `fly deploy`
 #   6. `fly scale count app=1 scheduler=1`   (one of each process group)
 #
@@ -35,8 +44,18 @@ primary_region = "fra"   # change to your closest region
 
 [env]
   LOG_LEVEL = "INFO"
-  # DATABASE_URL is injected by `fly postgres attach`
-  # FOOTBALL_DATA_ORG_KEY is set via `fly secrets set ...`
+  SENTRY_ENVIRONMENT = "production"
+  # The following are NOT secrets — they live in `[env]` so both processes see them:
+  WC2026_BACKUP_PREFIX = "wc2026/backups/"
+  WC2026_BACKUP_RETENTION_DAYS = "30"
+  # The following ARE secrets, set via `fly secrets set …` so they're not in this file:
+  #   DATABASE_URL              (injected by `fly postgres attach`)
+  #   FOOTBALL_DATA_ORG_KEY     (optional; without it the live poller no-ops)
+  #   SENTRY_DSN                (optional; without it Sentry init is a no-op)
+  #   AWS_S3_BUCKET             (optional; without it db_backup stays local-only)
+  #   AWS_S3_ENDPOINT_URL       (optional; set for Cloudflare R2, omit for AWS S3)
+  #   AWS_ACCESS_KEY_ID
+  #   AWS_SECRET_ACCESS_KEY
 
 [mounts]
   source = "wc2026_data"
@@ -52,7 +71,11 @@ primary_region = "fra"   # change to your closest region
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  # Phase 10 warmth-keep: 1 machine stays warm so live-match SSE clients never
+  # hit a cold-start (a 10–30 s spin-up during a goal makes the live win-prob
+  # chart skip a beat). Set back to 0 outside the tournament window if you
+  # want the autoscaler to fully scale to zero.
+  min_machines_running = 1
   processes = ["app"]
 
   [http_service.concurrency]

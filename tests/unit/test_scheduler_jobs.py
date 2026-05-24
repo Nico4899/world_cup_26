@@ -271,6 +271,64 @@ def test_db_backup_prune_returns_zero_when_dir_missing(tmp_path):
     assert job_mod._prune_backups(tmp_path / "does-not-exist") == 0
 
 
+def test_db_backup_calls_s3_upload_after_writing_local_dump(monkeypatch, tmp_path):
+    """Phase 10: after pg_dump + local prune, the job invokes upload_backup so
+    the off-site copy hits S3/R2. We don't require it to succeed (the upload
+    helper is itself env-gated)."""
+    import subprocess as _subprocess
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@z/db")
+    monkeypatch.setattr(job_mod.shutil, "which", lambda _: "/usr/bin/pg_dump")
+
+    class FakeResult:
+        stdout = b"-- mock"
+        stderr = b""
+
+    def fake_run(*args, **kwargs):
+        _ = args, kwargs
+        return FakeResult()
+
+    monkeypatch.setattr(job_mod.subprocess, "run", fake_run)
+
+    from wc2026.observability import s3_upload
+
+    called: dict[str, int] = {"upload": 0}
+
+    def fake_upload(local_path, **_kw):
+        called["upload"] += 1
+
+    monkeypatch.setattr(s3_upload, "upload_backup", fake_upload)
+
+    out = job_mod._job_db_backup(backup_dir=tmp_path)
+    assert out is not None
+    assert called["upload"] == 1
+    # Don't leak the unused import
+    _ = _subprocess
+
+
+def test_db_backup_swallows_s3_upload_failure(monkeypatch, tmp_path):
+    """An S3 upload failure must NOT take down the local backup job."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@z/db")
+    monkeypatch.setattr(job_mod.shutil, "which", lambda _: "/usr/bin/pg_dump")
+
+    class FakeResult:
+        stdout = b"-- mock"
+        stderr = b""
+
+    monkeypatch.setattr(job_mod.subprocess, "run", lambda *a, **k: FakeResult())
+
+    from wc2026.observability import s3_upload
+
+    def boom(*_a, **_kw):
+        raise RuntimeError("network is on fire")
+
+    monkeypatch.setattr(s3_upload, "upload_backup", boom)
+
+    out = job_mod._job_db_backup(backup_dir=tmp_path)
+    assert out is not None  # the local backup still landed
+    assert out.exists()
+
+
 # --- tournament-window standings cache warm --------------------------------
 
 

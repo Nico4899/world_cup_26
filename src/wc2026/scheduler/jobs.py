@@ -247,6 +247,14 @@ def _job_db_backup(
         fout.write(proc.stdout)
     removed = _prune_backups(backup_dir, retention_days)
     logger.info("DB backup written to %s (pruned %d old)", out_path, removed)
+    # Phase 10: best-effort off-site upload. Silent no-op when AWS_S3_BUCKET
+    # isn't configured; failures are logged but never break the local backup.
+    try:
+        from wc2026.observability.s3_upload import upload_backup  # noqa: PLC0415
+
+        upload_backup(out_path)
+    except Exception:
+        logger.exception("S3 upload failed (local backup is still written)")
     return out_path
 
 
@@ -609,6 +617,11 @@ def build_scheduler() -> BlockingScheduler:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    # Phase 10: surface scheduler errors to Sentry when SENTRY_DSN is configured.
+    # No-op without the env var — never blocks the scheduler boot.
+    from wc2026.observability.sentry import init_sentry  # noqa: PLC0415
+
+    init_sentry(service="scheduler")
     scheduler = build_scheduler()
     logger.info("Starting scheduler with %d jobs", len(JOB_SPECS))
     scheduler.start()
