@@ -56,12 +56,12 @@ flowchart LR
         MC[Monte Carlo<br/>conditional after FT_WHISTLE]
     end
 
-    subgraph API[FastAPI — 22 endpoints]
+    subgraph API[FastAPI — 25 endpoints]
         BASE[Stage 1: matches / predictions /<br/>tournament / teams / h2h / health]
         P5[Phase 5: /explain]
         P6[Phase 6: /live + /sse]
         P7[Phase 7: /track-record]
-        P9[Phase 9: /teams/.../elo-history,<br/>tournament-probs, assets]
+        P9[Phase 9: /teams/.../elo-history,<br/>tournament-probs, assets,<br/>fifa-rankings, squad, xg-form]
         OPS[/_ops: scheduler-status,<br/>available-jobs, run-job]
     end
 
@@ -111,7 +111,7 @@ flowchart LR
 
 | Service | Module | Purpose | Restart safety |
 |---|---|---|---|
-| FastAPI | `src/wc2026/api/main.py` | 22 endpoints across 11 routers; loads PoissonDC + shootout + XGB + SHAP + live-win-prob + Elo snapshot in lifespan | Stateless — every artefact reloaded on restart |
+| FastAPI | `src/wc2026/api/main.py` | 25 endpoints across 11 routers; loads PoissonDC + shootout + XGB + SHAP + live-win-prob + Elo snapshot in lifespan | Stateless — every artefact reloaded on restart |
 | Streamlit | `dashboard/streamlit_app.py` | 9 pages; cached via `@st.cache_data` (TTLs 5 min for fixtures / 10 min for tournament / 1 h for team assets) | Stateless — no DB writes |
 | Scheduler | `src/wc2026/scheduler/jobs.py` | 13 cron jobs + 3 interval-triggered tournament-window jobs + 2 manual-only; logs each run to `scheduler_job_runs` for the Operator page | Re-registers triggers on startup; missed runs skipped (no catch-up) |
 
@@ -149,7 +149,7 @@ flowchart LR
 | `wikipedia_squads_refresh` | `POST /api/v1/_ops/run-job/wikipedia_squads_refresh` | tournament squad rosters |
 | `statsbomb_refresh` | same | StatsBomb shots corpus + xG shot model refit + live win-prob model refit |
 
-## API surface (22 endpoints, 11 routers)
+## API surface (25 endpoints, 11 routers)
 
 | Router | Endpoints |
 |---|---|
@@ -157,7 +157,7 @@ flowchart LR
 | `matches` | `GET /api/v1/matches`, `GET /api/v1/matches/{id}` |
 | `predictions` | `GET /api/v1/predictions/{home}/{away}` (with `?blend=true`) |
 | `tournament` | `GET /standings` (reads persisted MC by default), `GET /bracket` |
-| `teams` | `GET /{team}/recent`, `/{team}/elo-history`, `/{team}/tournament-probs`, `/{team}/assets` |
+| `teams` | `GET /{team}/recent`, `/{team}/elo-history`, `/{team}/tournament-probs`, `/{team}/assets`, `/{team}/fifa-rankings`, `/{team}/squad`, `/{team}/xg-form` |
 | `h2h` | `GET /api/v1/h2h/{a}/{b}` |
 | `explain` | `GET /api/v1/explain/{match_id}` (Phase 5 SHAP; 503 when no XGB artefact) |
 | `live` | `GET /api/v1/live/{id}`, `/history`, `/sse` (Phase 6) |

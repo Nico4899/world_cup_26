@@ -894,6 +894,304 @@ def test_team_assets_returns_503_on_db_error(client: TestClient, monkeypatch) ->
     assert r.status_code == 503
 
 
+# --- /api/v1/teams/{team}/fifa-rankings ------------------------------------
+
+
+def test_team_fifa_rankings_empty_when_no_rows(client: TestClient, monkeypatch) -> None:
+    """No FIFA snapshots → empty history, 200 (so the dashboard can render an empty state)."""
+    from wc2026.api.routes import teams as teams_route
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def scalars(self, _stmt):
+            class _S:
+                def first(_self):
+                    return None
+
+                def __iter__(_self):
+                    return iter([])
+
+            return _S()
+
+    def _stub_engine():
+        return object()
+
+    def _stub_session(*_args, **_kw):
+        return _FakeSession()
+
+    monkeypatch.setattr(teams_route, "get_engine", _stub_engine)
+    monkeypatch.setattr(teams_route, "Session", _stub_session)
+    r = client.get("/api/v1/teams/Argentina/fifa-rankings")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["team"] == "Argentina"
+    assert body["history"] == []
+
+
+def test_team_fifa_rankings_returns_populated_history(client: TestClient, monkeypatch) -> None:
+    import datetime as _dt
+
+    from wc2026.api.routes import teams as teams_route
+    from wc2026.db.models import RawFifaRanking
+
+    rows = [
+        RawFifaRanking(
+            ranking_date=_dt.date(2026, 1, 1),
+            team="Argentina",
+            rank=2,
+            points=1850.0,
+            previous_rank=3,
+        ),
+        RawFifaRanking(
+            ranking_date=_dt.date(2026, 2, 1),
+            team="Argentina",
+            rank=1,
+            points=1870.0,
+            previous_rank=2,
+        ),
+    ]
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def scalars(self, _stmt):
+            class _S:
+                def __iter__(_self):
+                    return iter(rows)
+
+            return _S()
+
+    def _stub_engine_fr():
+        return object()
+
+    def _stub_session_fr(*_args, **_kw):
+        return _FakeSession()
+
+    monkeypatch.setattr(teams_route, "get_engine", _stub_engine_fr)
+    monkeypatch.setattr(teams_route, "Session", _stub_session_fr)
+    r = client.get("/api/v1/teams/Argentina/fifa-rankings")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["history"]) == 2
+    assert body["history"][-1]["rank"] == 1
+    assert body["history"][-1]["previous_rank"] == 2
+
+
+# --- /api/v1/teams/{team}/xg-form ------------------------------------------
+
+
+def test_team_xg_form_returns_zero_window_when_no_rows(client: TestClient, monkeypatch) -> None:
+    from wc2026.api.routes import teams as teams_route
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def scalars(self, _stmt):
+            class _S:
+                def __iter__(_self):
+                    return iter([])
+
+            return _S()
+
+    def _stub_engine_xg_empty():
+        return object()
+
+    def _stub_session_xg_empty(*_args, **_kw):
+        return _FakeSession()
+
+    monkeypatch.setattr(teams_route, "get_engine", _stub_engine_xg_empty)
+    monkeypatch.setattr(teams_route, "Session", _stub_session_xg_empty)
+    r = client.get("/api/v1/teams/Argentina/xg-form")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["last_5"]["matches"] == 0
+    assert body["last_5"]["xg_for"] is None
+    assert body["last_10"]["matches"] == 0
+
+
+def test_team_xg_form_averages_recent_rows(client: TestClient, monkeypatch) -> None:
+    import datetime as _dt
+
+    from wc2026.api.routes import teams as teams_route
+    from wc2026.db.models import RawMatchXg
+
+    rows = [
+        RawMatchXg(
+            match_date=_dt.date(2026, 3, 1),
+            home_team="Argentina",
+            away_team="Brazil",
+            team="Argentina",
+            source="statsbomb",
+            xg_for=2.5,
+            xg_against=1.0,
+        ),
+        RawMatchXg(
+            match_date=_dt.date(2026, 2, 1),
+            home_team="Spain",
+            away_team="Argentina",
+            team="Argentina",
+            source="statsbomb",
+            xg_for=1.5,
+            xg_against=0.5,
+        ),
+    ]
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def scalars(self, _stmt):
+            class _S:
+                def __iter__(_self):
+                    return iter(rows)
+
+            return _S()
+
+    def _stub_engine_xg_pop():
+        return object()
+
+    def _stub_session_xg_pop(*_args, **_kw):
+        return _FakeSession()
+
+    monkeypatch.setattr(teams_route, "get_engine", _stub_engine_xg_pop)
+    monkeypatch.setattr(teams_route, "Session", _stub_session_xg_pop)
+    r = client.get("/api/v1/teams/Argentina/xg-form")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["last_5"]["matches"] == 2
+    assert body["last_5"]["xg_for"] == pytest.approx(2.0)
+    assert body["last_5"]["xg_against"] == pytest.approx(0.75)
+    assert body["last_5"]["xg_diff"] == pytest.approx(1.25)
+
+
+# --- /api/v1/teams/{team}/squad --------------------------------------------
+
+
+def test_team_squad_returns_empty_when_no_rows(client: TestClient, monkeypatch) -> None:
+    from wc2026.api.routes import teams as teams_route
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def execute(self, _stmt):
+            class _R:
+                def first(_self):
+                    return None
+
+            return _R()
+
+        def scalars(self, _stmt):
+            class _S:
+                def __iter__(_self):
+                    return iter([])
+
+            return _S()
+
+    def _stub_engine_sq_empty():
+        return object()
+
+    def _stub_session_sq_empty(*_args, **_kw):
+        return _FakeSession()
+
+    monkeypatch.setattr(teams_route, "get_engine", _stub_engine_sq_empty)
+    monkeypatch.setattr(teams_route, "Session", _stub_session_sq_empty)
+    r = client.get("/api/v1/teams/Argentina/squad")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["team"] == "Argentina"
+    assert body["players"] == []
+    assert body["snapshot_date"] is None
+
+
+def test_team_squad_returns_latest_snapshot_with_players(client: TestClient, monkeypatch) -> None:
+    import datetime as _dt
+
+    from wc2026.api.routes import teams as teams_route
+    from wc2026.db.models import RawSquad
+
+    snapshot_date = _dt.date(2026, 5, 1)
+    rows = [
+        RawSquad(
+            tournament="FIFA World Cup 2026",
+            team="Argentina",
+            player_name="Lionel Messi",
+            snapshot_date=snapshot_date,
+            shirt_number=10,
+            position="FW",
+            club="Inter Miami",
+            caps=192,
+            goals=109,
+        ),
+        RawSquad(
+            tournament="FIFA World Cup 2026",
+            team="Argentina",
+            player_name="Emiliano Martinez",
+            snapshot_date=snapshot_date,
+            shirt_number=23,
+            position="GK",
+            club="Aston Villa",
+        ),
+    ]
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def execute(self, _stmt):
+            class _R:
+                def first(_self):
+                    return ("FIFA World Cup 2026", snapshot_date)
+
+            return _R()
+
+        def scalars(self, _stmt):
+            class _S:
+                def __iter__(_self):
+                    return iter(rows)
+
+            return _S()
+
+    def _stub_engine_sq_pop():
+        return object()
+
+    def _stub_session_sq_pop(*_args, **_kw):
+        return _FakeSession()
+
+    monkeypatch.setattr(teams_route, "get_engine", _stub_engine_sq_pop)
+    monkeypatch.setattr(teams_route, "Session", _stub_session_sq_pop)
+    r = client.get("/api/v1/teams/Argentina/squad")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["snapshot_date"] == "2026-05-01"
+    assert len(body["players"]) == 2
+    # Players come out sorted by shirt number ascending.
+    assert body["players"][0]["shirt_number"] == 10
+    assert body["players"][1]["shirt_number"] == 23
+
+
 def test_standings_falls_back_to_in_process_when_no_persisted_run(
     client: TestClient, monkeypatch
 ) -> None:
