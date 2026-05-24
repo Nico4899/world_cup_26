@@ -408,7 +408,7 @@ def team_path_to_final(
     Each round entry carries P(team reaches it) and a histogram of the
     opponents the team faced when they did. The default ``n_sims=2000`` is
     a cost/precision compromise — for chart-level resolution it's plenty;
-    for tail-team estimates bump it to 5–10k.
+    for tail-team estimates bump it to 5-10k.
     """
     shootout_strategy = getattr(request.app.state, "shootout_strategy", None)
     histograms = _cached_path_histograms(

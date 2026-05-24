@@ -67,8 +67,11 @@ def test_persist_run_writes_run_plus_team_outcomes(sqlite_engine) -> None:
     from wc2026.sim.tournament import ROUND_COLUMNS, TournamentSummary
 
     teams = ["Mexico", "Senegal", "Argentina"]
+    # ROUND_COLUMNS layout (Phase 12+): group_winner, runner_up, third_advance,
+    # third_out, fourth, r32_reached, r16_reached, qf_reached, sf_reached,
+    # final_reached, champion.
     df = pd.DataFrame(
-        [[0.5, 0.3, 0.2, 0.8, 0.6, 0.4, 0.2, 0.1, 0.05]] * len(teams),
+        [[0.5, 0.3, 0.2, 0.1, 0.1, 0.8, 0.6, 0.4, 0.2, 0.1, 0.05]] * len(teams),
         index=teams,
         columns=list(ROUND_COLUMNS),
     )

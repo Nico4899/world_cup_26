@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 
+import httpx
 import plotly.graph_objects as go
 import streamlit as st
 from dashboard.components.api_client import (
     APIUnreachable,
+    get_explanation,
     get_match,
     get_standings,
     list_matches,
@@ -140,12 +142,46 @@ for i in range(0, len(matches), 2):
             st.caption("Most likely scorelines:")
             for sc in pred["top_scorelines"][:3]:
                 st.write(f"- **{sc['home_goals']}–{sc['away_goals']}** ({sc['probability']:.1%})")
-            st.button(
-                "View match detail →",
-                key=f"view-{m['match_id']}",
-                on_click=_navigate_to_detail,
-                args=(m["match_id"],),
-            )
+            why_col, detail_col = st.columns([1, 1])
+            with why_col, st.popover("Why?", use_container_width=True):
+                xg_diff = xg_h - xg_a
+                favourite = (
+                    m["home_team"] if xg_diff >= 0 else m["away_team"]
+                )
+                st.markdown(
+                    f"**Expected goals**: {m['home_team']} **{xg_h:.2f}** vs "
+                    f"{m['away_team']} **{xg_a:.2f}** "
+                    f"({'roughly even' if abs(xg_diff) < 0.2 else f'edge {favourite} +{abs(xg_diff):.2f}'})."
+                )
+                top1 = pred["top_scorelines"][0]
+                st.markdown(
+                    f"Most likely scoreline: **{top1['home_goals']}–{top1['away_goals']}** "
+                    f"({top1['probability']:.1%})."
+                )
+                # Best-effort SHAP top-3 (silently skipped when XGB isn't loaded).
+                try:
+                    explanation = get_explanation(
+                        m["match_id"], class_name="home_win", top_n=3
+                    )
+                except (APIUnreachable, httpx.HTTPStatusError):
+                    explanation = None
+                contribs = (explanation or {}).get("contributions") or []
+                if contribs:
+                    st.markdown("**Top model contributions** _(toward home win)_:")
+                    for c in contribs:
+                        sign = "↑" if c["contribution"] >= 0 else "↓"
+                        st.write(
+                            f"- {sign} **{c['feature']}** "
+                            f"({c['contribution']:+.3f})"
+                        )
+            with detail_col:
+                st.button(
+                    "Open detail →",
+                    key=f"view-{m['match_id']}",
+                    on_click=_navigate_to_detail,
+                    args=(m["match_id"],),
+                    use_container_width=True,
+                )
 
 st.divider()
 st.subheader("Group-stage advancement (across all 12 groups)")

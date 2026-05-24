@@ -255,7 +255,7 @@ def _empty_team_row(team: str) -> dict[str, Any]:
     }
 
 
-def _live_group_tally(fixtures: WC2026Fixtures) -> dict[str, list[dict[str, Any]]]:
+def _live_group_tally(fixtures: WC2026Fixtures) -> dict[str, list[dict[str, Any]]]:  # noqa: PLR0912 — single-pass tally + tiebreak fallbacks
     """Build the per-group "current table" from completed live events.
 
     Cross-references FDO ``match_id`` → ``(date, home, away)`` via the cached

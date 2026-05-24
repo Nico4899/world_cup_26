@@ -16,6 +16,7 @@ from dashboard.components.api_client import (
     get_recent_form,
     get_team_elo_history,
     get_team_fifa_rankings,
+    get_team_path_to_final,
     get_team_squad,
     get_team_tournament_probs,
     get_team_xg_form,
@@ -113,6 +114,46 @@ else:
         f"From persisted run {probs['run_id']} ({probs.get('n_sims', '?')} sims, "
         f"model {probs.get('model_version', '?')}). Probabilities update on the "
         "next conditional rerun after a match finishes."
+    )
+
+st.divider()
+
+# --- Path-to-final (most-likely opponent at each stage) --------------------
+
+st.subheader("Path to the final")
+try:
+    path = get_team_path_to_final(team)
+except (APIUnreachable, httpx.HTTPStatusError):
+    path = {"team": team, "n_sims": 0, "rounds": []}
+
+path_rounds = path.get("rounds") or []
+if not path_rounds or all((r.get("p_reached") or 0) == 0 for r in path_rounds):
+    st.caption(
+        "_No knockout reach in this MC sample. Most-likely-opponent estimates "
+        "appear once the team reaches a round in at least one simulation._"
+    )
+else:
+    _ROUND_LABEL = {"r32": "R32", "r16": "R16", "qf": "QF", "sf": "SF", "final": "Final"}
+    n_path_sims = int(path.get("n_sims", 0) or 0)
+    path_cols = st.columns(len(path_rounds))
+    for col, rd in zip(path_cols, path_rounds, strict=False):
+        label = _ROUND_LABEL.get(rd["round"], rd["round"].upper())
+        p_reached = float(rd.get("p_reached") or 0.0)
+        opp = rd.get("most_likely_opponent")
+        with col:
+            st.markdown(f"**{label}**")
+            st.metric("Reach", f"{p_reached:.1%}")
+            if opp is not None:
+                st.caption(
+                    f"Most likely opponent: **{opp['team']}** "
+                    f"({float(opp['p_conditional']):.0%} of paths)"
+                )
+            else:
+                st.caption("_no opponent observed_")
+    st.caption(
+        f"From a {n_path_sims:,}-sim Monte Carlo pass. ``Most likely opponent`` is "
+        "argmax of opponents-when-reached, not the modal bracket; ties are "
+        "broken by team-name order."
     )
 
 st.divider()
