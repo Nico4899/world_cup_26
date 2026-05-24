@@ -82,7 +82,7 @@ Then open http://localhost:8501. Dashboard pages (9 total):
 | **Track Record** | Live WC 2026 rolling calibration (Phase 7) above the WC 2018 + WC 2022 historical hindcasts |
 | **About** | Methodology + references rendered from `docs/methodology.md` |
 | **Operator** | Health, scheduler-job status, and `/_ops/run-job/{name}` manual triggers |
-| **Team Profile** | Per-team Elo history + recent-10 form + WC 2026 path-to-final probabilities |
+| **Team Profile** | Per-team Elo history, recent-10 form, FIFA ranking, squad roster, rolling xG-form, and WC 2026 path-to-final probabilities |
 | **Host-city map** | 16 host venues plotted on `st.map`; filter the fixture list by venue |
 
 ### API endpoints
@@ -99,6 +99,9 @@ Then open http://localhost:8501. Dashboard pages (9 total):
 | `GET /api/v1/teams/{team}/elo-history` | daily Elo snapshots |
 | `GET /api/v1/teams/{team}/tournament-probs` | per-team advancement probs from the latest persisted MC run |
 | `GET /api/v1/teams/{team}/assets` | crest / kit / stadium metadata from `raw_team_assets` |
+| `GET /api/v1/teams/{team}/fifa-rankings` | monthly FIFA Men's Ranking history |
+| `GET /api/v1/teams/{team}/squad` | latest tournament-squad snapshot |
+| `GET /api/v1/teams/{team}/xg-form` | rolling xG aggregates over the last 5 + last 10 matches |
 | `GET /api/v1/h2h/{a}/{b}?n=10` | head-to-head history |
 | `GET /api/v1/explain/{match_id}?class_name=home_win&top_n=5` | SHAP top-features for one fixture (503 when no XGB artefact loaded) |
 | `GET /api/v1/live/{match_id}` | current state + in-running win-prob (Phase 6) |
@@ -189,9 +192,9 @@ Stage 1 shipped a calibrated, locally-runnable platform. Stage 2 expanded it to 
 
 ### Key Stage 2 numbers (at completion)
 
-- **539 unit tests**, **9 deselected** as `slow`/`integration` (~18 s for the default suite)
+- **547 unit tests**, **9 deselected** as `slow`/`integration` (~18 s for the default suite)
 - **13 cron jobs** + **3 interval-triggered tournament-window jobs** (`standings_cache_warm`, `monte_carlo_rerun`, `live_events_poll`) + **2 manual-only** (`wikipedia_squads_refresh`, `statsbomb_refresh`)
-- **22 API endpoints** across 11 routers
+- **25 API endpoints** across 11 routers
 - **9 dashboard pages**
 - **5 Alembic migrations** (Stage 1 + Phases 2/3/4/6) covering 11 application tables
 - **WC 2022 hindcast log-loss = 1.0379** (unchanged across all 11 phases; identical to the Stage 0.7 decision-gate value)
@@ -218,7 +221,7 @@ src/wc2026/
 dashboard/        # Streamlit — 9 pages + components
 alembic/          # 5 migrations (Stage 1 + Phases 2/3/4/6)
 docs/             # ARCHITECTURE.md, methodology.md, deploy.md, LICENSES.md
-tests/            # 539 unit tests + 1 replay integration test
+tests/            # 547 unit tests + 1 replay integration test
 data/             # local-only, gitignored (raw parquet snapshots + artefacts)
 scripts/          # one-off + scheduler-invoked entrypoints
 notebooks/        # exploratory; not under test
