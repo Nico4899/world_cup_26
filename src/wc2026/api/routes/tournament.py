@@ -9,7 +9,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
@@ -346,6 +347,85 @@ def groups_live(fixtures: WC2026Fixtures = Depends(get_fixtures)) -> dict[str, A
         )
         out_groups.append({"group": letter, "teams": rows})
     return {"groups": out_groups}
+
+
+class BracketLock(BaseModel):
+    """One per-match knockout lock for the conditional bracket endpoint."""
+
+    match_id: int = Field(
+        ge=73, le=103, description="FIFA knockout match id (R32 73-88, R16 89-96, QF 97-100, SF 101-102, Final 103)."
+    )
+    winner: str = Field(min_length=1)
+
+
+class BracketConditionalRequest(BaseModel):
+    """Inputs for ``POST /api/v1/tournament/bracket/conditional``."""
+
+    locks: list[BracketLock] = Field(default_factory=list)
+    n_sims: int = Field(default=5000, ge=200, le=20_000)
+    seed: int = Field(default=42)
+
+
+@router.post("/bracket/conditional")
+def bracket_conditional(
+    request: Request,
+    payload: BracketConditionalRequest,
+    model: PoissonDC = Depends(get_model),
+    fixtures: WC2026Fixtures = Depends(get_fixtures),
+) -> dict[str, Any]:
+    """Run a conditional Monte Carlo with locked knockout winners.
+
+    Each lock is applied **only** to sims where the locked team is one of the
+    two contestants in the specified match — so an unreachable lock simply
+    doesn't fire, rather than rejecting the entire trajectory. This matches
+    the spec's click-to-set semantics ("set Spain as R32 winner") without
+    requiring the user to reason about how the team got there.
+    """
+    valid_teams = set(fixtures.teams)
+    locked: dict[int, str] = {}
+    for lock in payload.locks:
+        if lock.winner not in valid_teams:
+            raise HTTPException(
+                status_code=422,
+                detail=f"unknown team {lock.winner!r} in lock for match {lock.match_id}",
+            )
+        locked[int(lock.match_id)] = lock.winner
+
+    shootout_strategy = getattr(request.app.state, "shootout_strategy", None)
+    summary = simulate_tournament_monte_carlo(
+        fixtures,
+        model,
+        n_sims=payload.n_sims,
+        seed=payload.seed,
+        shootout_strategy=shootout_strategy,
+        known_knockout_winners=locked or None,
+    )
+
+    # Headline top-10 + per-team champion / final / sf probs for the rendering
+    # layer — same shape as /standings.headline so the dashboard can reuse the
+    # display code.
+    top = (
+        summary.probabilities.sort_values("champion", ascending=False)
+        .head(10)
+        .reset_index()
+        .rename(columns={"index": "team"})
+    )
+    headline = [
+        {
+            "team": r["team"],
+            "p_champion": float(r["champion"]),
+            "p_final": float(r["final_reached"]),
+            "p_sf": float(r["sf_reached"]),
+            "p_qf": float(r["qf_reached"]),
+        }
+        for _, r in top.iterrows()
+    ]
+    return {
+        "n_sims": int(summary.n_sims),
+        "seed": int(payload.seed),
+        "locks": [{"match_id": k, "winner": v} for k, v in locked.items()],
+        "headline": headline,
+    }
 
 
 @router.get("/bracket")

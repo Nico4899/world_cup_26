@@ -114,35 +114,48 @@ def simulate_tournament(
     # --- knockout rounds ---
     knockout_results: dict[int, KnockoutOutcome] = {}
     winners_by_match: dict[int, str] = {}
+    locked = known_knockout_winners or {}
 
-    def _ko(home: str, away: str) -> KnockoutOutcome:
+    def _ko(home: str, away: str, *, match_id: int) -> KnockoutOutcome:
+        # Apply per-match-id lock when the chosen winner is actually one of
+        # the two sides; otherwise fall through to the sampler so the bracket
+        # stays consistent on sims where the lock isn't reachable.
+        forced = locked.get(match_id)
+        if forced in (home, away):
+            return KnockoutOutcome(
+                home_team=home,
+                away_team=away,
+                winner=forced,
+                regulation_score=(1, 0) if forced == home else (0, 1),
+                decided_in="regulation",
+            )
         return simulate_knockout_match(
             home, away, model, rng, neutral=True, shootout_strategy=shootout_strategy
         )
 
     # R32
     for mid, (a, b) in r32_matchups.items():
-        out = _ko(a, b)
+        out = _ko(a, b, match_id=mid)
         knockout_results[mid] = out
         winners_by_match[mid] = out.winner
 
     # R16, QF, SF
     for mid, ma, mb in R16_PAIRS:
-        out = _ko(winners_by_match[ma], winners_by_match[mb])
+        out = _ko(winners_by_match[ma], winners_by_match[mb], match_id=mid)
         knockout_results[mid] = out
         winners_by_match[mid] = out.winner
     for mid, ma, mb in QF_PAIRS:
-        out = _ko(winners_by_match[ma], winners_by_match[mb])
+        out = _ko(winners_by_match[ma], winners_by_match[mb], match_id=mid)
         knockout_results[mid] = out
         winners_by_match[mid] = out.winner
     for mid, ma, mb in SF_PAIRS:
-        out = _ko(winners_by_match[ma], winners_by_match[mb])
+        out = _ko(winners_by_match[ma], winners_by_match[mb], match_id=mid)
         knockout_results[mid] = out
         winners_by_match[mid] = out.winner
 
     # Final
     final_id, sf1, sf2 = FINAL_PAIR
-    out = _ko(winners_by_match[sf1], winners_by_match[sf2])
+    out = _ko(winners_by_match[sf1], winners_by_match[sf2], match_id=final_id)
     knockout_results[final_id] = out
     champion = out.winner
 
@@ -175,12 +188,14 @@ def simulate_tournament_monte_carlo(
     fifa_ranking: dict[str, int] | None = None,
     shootout_strategy: ShootoutStrategy | None = None,
     known_group_results: dict[tuple[str, str], tuple[int, int]] | None = None,
+    known_knockout_winners: dict[int, str] | None = None,
 ) -> TournamentSummary:
     """Run ``n_sims`` simulations; return per-team advancement probabilities.
 
     ``known_group_results`` (Phase 8) is forwarded to every individual
     simulation, so the same locked-in scorelines apply to all ``n_sims``
-    iterations.
+    iterations. ``known_knockout_winners`` (Tier 3) does the same for
+    knockout match ids — useful for "what if Team X wins the SF?" scenarios.
     """
     if n_sims <= 0:
         raise ValueError(f"n_sims must be positive, got {n_sims}")
@@ -196,6 +211,7 @@ def simulate_tournament_monte_carlo(
             fifa_ranking=fifa_ranking,
             shootout_strategy=shootout_strategy,
             known_group_results=known_group_results,
+            known_knockout_winners=known_knockout_winners,
         )
         _update_counters_from_result(counters, result)
 
