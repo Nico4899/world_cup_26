@@ -234,6 +234,36 @@ class MatchFeatures(Base):
     )
 
 
+class RawLiveEvent(Base):
+    """In-match event from a live football-data.org / TheSportsDB poll.
+
+    One row per **observed** state-changing event (goal, red/yellow card,
+    substitution, period-end). The ``seq`` column is the order the poller
+    saw the event for this match; combined with ``match_id`` it forms the
+    primary key. ``home_score_after`` / ``away_score_after`` /
+    ``home_red_cards_after`` / ``away_red_cards_after`` capture the match
+    state *after* this event resolves — so the row by itself contains every
+    feature the live win-prob model needs.
+    """
+
+    __tablename__ = "raw_live_events"
+
+    match_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    seq: Mapped[int] = mapped_column(Integer, primary_key=True)
+    minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    period: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    team: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    player: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    home_score_after: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    away_score_after: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    home_red_cards_after: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    away_red_cards_after: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
 class RawMatchXg(Base):
     """Per-match, per-team expected-goals aggregate.
 
@@ -267,6 +297,7 @@ __all__ = [
     "ModelPrediction",
     "RawEloSnapshot",
     "RawFifaRanking",
+    "RawLiveEvent",
     "RawMatch",
     "RawMatchXg",
     "RawSquad",

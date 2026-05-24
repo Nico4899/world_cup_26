@@ -20,6 +20,7 @@ from wc2026.db.models import (
     ModelPrediction,
     RawEloSnapshot,
     RawFifaRanking,
+    RawLiveEvent,
     RawMatch,
     RawMatchXg,
     RawSquad,
@@ -55,6 +56,7 @@ def test_all_expected_tables_are_registered(sqlite_engine):
         "raw_fifa_rankings",
         "raw_match_xg",
         "features_match_features",
+        "raw_live_events",
     }
     assert expected.issubset(tables), f"missing tables: {expected - tables}"
 
@@ -290,6 +292,31 @@ def test_match_features_round_trip_with_json_provenance(sqlite_engine):
             abs((loaded.poisson_p_home + loaded.poisson_p_draw + loaded.poisson_p_away) - 1.0)
             < 1e-9
         )
+
+
+def test_raw_live_event_round_trip_with_post_event_state(sqlite_engine):
+    with Session(sqlite_engine) as s:
+        s.add(
+            RawLiveEvent(
+                match_id=42,
+                seq=1,
+                minute=37,
+                period=1,
+                event_type="GOAL",
+                team="Argentina",
+                player="Lionel Messi",
+                home_score_after=1,
+                away_score_after=0,
+                home_red_cards_after=0,
+                away_red_cards_after=0,
+                ingested_at=datetime.now(UTC),
+            )
+        )
+        s.commit()
+        loaded = s.scalar(select(RawLiveEvent))
+        assert loaded.event_type == "GOAL"
+        assert loaded.home_score_after == 1
+        assert loaded.player == "Lionel Messi"
 
 
 def test_raw_match_xg_composite_pk_allows_multiple_sources(sqlite_engine):
