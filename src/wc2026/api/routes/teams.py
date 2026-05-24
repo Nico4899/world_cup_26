@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+import logging
+
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from wc2026.api.dependencies import get_played_df
-from wc2026.api.schemas import TeamRecentMatch
+from wc2026.api.schemas import TeamAssetsResponse, TeamRecentMatch
+from wc2026.db.models import RawTeamAsset
+from wc2026.db.session import get_engine
 
 router = APIRouter(prefix="/api/v1/teams")
 
 DEFAULT_RECENT_N = 5
 MAX_RECENT_N = 30
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("/{team}/recent", response_model=list[TeamRecentMatch])
@@ -54,3 +62,36 @@ def recent_form(
             )
         )
     return out
+
+
+@router.get("/{team}/assets", response_model=TeamAssetsResponse)
+def team_assets(team: str) -> TeamAssetsResponse:
+    """Return crest / kit / stadium metadata for ``team`` from ``raw_team_assets``.
+
+    Returns a payload with all-``null`` fields when there's no DB row (so the
+    dashboard can render a fallback without 404-handling). Surfaces 503 only
+    when Postgres itself is unreachable.
+    """
+    try:
+        eng = get_engine()
+        with Session(eng, future=True) as session:
+            row = session.scalars(
+                select(RawTeamAsset).where(RawTeamAsset.team == team)
+            ).first()
+    except Exception as exc:
+        logger.debug("team_assets: DB unreachable for %s", team, exc_info=True)
+        raise HTTPException(
+            status_code=503, detail=f"team_assets DB query failed: {exc.__class__.__name__}"
+        ) from exc
+    if row is None:
+        return TeamAssetsResponse(team=team)
+    return TeamAssetsResponse(
+        team=team,
+        crest_url=row.crest_url,
+        kit_home_color=row.kit_home_color,
+        kit_away_color=row.kit_away_color,
+        stadium_name=row.stadium_name,
+        stadium_capacity=row.stadium_capacity,
+        stadium_city=row.stadium_city,
+        stadium_country=row.stadium_country,
+    )

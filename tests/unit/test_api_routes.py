@@ -801,6 +801,89 @@ def test_standings_force_in_process_with_use_persisted_false(
     assert body["run_id"] is None
 
 
+# --- /api/v1/teams/{team}/assets ------------------------------------------
+
+
+def test_team_assets_returns_null_payload_when_no_db_row(client: TestClient, monkeypatch) -> None:
+    """Without a raw_team_assets row, the route returns the team name with all-null
+    fields rather than 404 — keeps the dashboard simple."""
+    from wc2026.api.routes import teams as teams_route
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def scalars(self, _stmt):
+            class _S:
+                def first(_self):
+                    return None
+
+            return _S()
+
+    monkeypatch.setattr(teams_route, "get_engine", lambda: object())
+    monkeypatch.setattr(
+        teams_route, "Session", lambda *_args, **_kw: _FakeSession()
+    )
+    r = client.get("/api/v1/teams/Argentina/assets")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["team"] == "Argentina"
+    assert body["crest_url"] is None
+
+
+def test_team_assets_returns_populated_row_when_present(client: TestClient, monkeypatch) -> None:
+    from wc2026.api.routes import teams as teams_route
+    from wc2026.db.models import RawTeamAsset
+
+    asset = RawTeamAsset(
+        team="Argentina",
+        thesportsdb_id=133602,
+        crest_url="https://example.test/argentina.png",
+        kit_home_color="#75AADB",
+        kit_away_color="#000080",
+        stadium_name="Estadio Monumental",
+        stadium_capacity=83214,
+        stadium_city="Buenos Aires",
+        stadium_country="Argentina",
+    )
+
+    class _FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def scalars(self, _stmt):
+            class _S:
+                def first(_self):
+                    return asset
+
+            return _S()
+
+    monkeypatch.setattr(teams_route, "get_engine", lambda: object())
+    monkeypatch.setattr(teams_route, "Session", lambda *_args, **_kw: _FakeSession())
+    r = client.get("/api/v1/teams/Argentina/assets")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["crest_url"] == "https://example.test/argentina.png"
+    assert body["stadium_capacity"] == 83214
+
+
+def test_team_assets_returns_503_on_db_error(client: TestClient, monkeypatch) -> None:
+    from wc2026.api.routes import teams as teams_route
+
+    def boom():
+        raise RuntimeError("Postgres unreachable")
+
+    monkeypatch.setattr(teams_route, "get_engine", boom)
+    r = client.get("/api/v1/teams/Argentina/assets")
+    assert r.status_code == 503
+
+
 def test_standings_falls_back_to_in_process_when_no_persisted_run(
     client: TestClient, monkeypatch
 ) -> None:

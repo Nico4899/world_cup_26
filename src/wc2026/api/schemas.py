@@ -158,6 +158,20 @@ class LiveStateSnapshot(BaseModel):
     )
 
 
+class TeamAssetsResponse(BaseModel):
+    """TheSportsDB-sourced UI assets for one team. ``null`` fields mean the
+    upstream record exists but the field was blank."""
+
+    team: str
+    crest_url: str | None = None
+    kit_home_color: str | None = None
+    kit_away_color: str | None = None
+    stadium_name: str | None = None
+    stadium_capacity: int | None = None
+    stadium_city: str | None = None
+    stadium_country: str | None = None
+
+
 class LiveEventTrace(BaseModel):
     """One in-running observation in the per-match timeline."""
 
