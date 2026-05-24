@@ -376,9 +376,7 @@ def test_simulate_group_matches_unaffected_by_empty_known_results() -> None:
         )
     ]
     rng = np.random.default_rng(0)
-    results = simulate_group_matches(
-        fixtures, _AlwaysScoreOneNilModel(), rng, known_results={}
-    )  # type: ignore[arg-type]
+    results = simulate_group_matches(fixtures, _AlwaysScoreOneNilModel(), rng, known_results={})  # type: ignore[arg-type]
     assert results[0].home_score == 1 and results[0].away_score == 0
 
 

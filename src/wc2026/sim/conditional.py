@@ -36,9 +36,7 @@ def known_group_results_from_live_events(
     eng = engine or get_engine()
     with Session(eng, future=True) as session:
         rows = list(
-            session.scalars(
-                select(RawLiveEvent).where(RawLiveEvent.event_type == EVENT_FT_WHISTLE)
-            )
+            session.scalars(select(RawLiveEvent).where(RawLiveEvent.event_type == EVENT_FT_WHISTLE))
         )
     out: dict[tuple[str, str], tuple[int, int]] = {}
     for r in rows:

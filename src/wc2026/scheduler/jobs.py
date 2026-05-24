@@ -509,9 +509,7 @@ def register_jobs(
         )
         scheduler.add_job(
             _wrap_with_tracking(mc_spec),
-            trigger=IntervalTrigger(
-                minutes=MONTE_CARLO_RERUN_INTERVAL_MINUTES, timezone="UTC"
-            ),
+            trigger=IntervalTrigger(minutes=MONTE_CARLO_RERUN_INTERVAL_MINUTES, timezone="UTC"),
             id=mc_spec.name,
             name=mc_spec.name,
             replace_existing=True,

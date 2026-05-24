@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+import scripts.rerun_monte_carlo as mcr
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-import scripts.rerun_monte_carlo as mcr
 from wc2026.db.models import Base, RawLiveEvent, TournamentSimRun, TournamentSimTeamOutcome
 
 
@@ -139,9 +139,7 @@ def test_rerun_and_persist_writes_to_db_with_no_known_results(
     _ = tournament_mod  # keep import alive for type-narrowing
 
 
-def test_rerun_loads_known_results_from_live_events(
-    monkeypatch, sqlite_engine, tmp_path
-) -> None:
+def test_rerun_loads_known_results_from_live_events(monkeypatch, sqlite_engine, tmp_path) -> None:
     """If a FT_WHISTLE row exists and the mapping covers it, the run picks it up."""
     import numpy as np
 

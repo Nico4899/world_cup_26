@@ -154,14 +154,10 @@ def rerun_and_persist(
     if engine is None and not (
         os.environ.get("DATABASE_URL") or os.environ.get("WC2026_DATABASE_URL")
     ):
-        logger.warning(
-            "neither DATABASE_URL nor WC2026_DATABASE_URL set — skipping MC rerun"
-        )
+        logger.warning("neither DATABASE_URL nor WC2026_DATABASE_URL set — skipping MC rerun")
         return None
     if not artefact_path.exists():
-        logger.warning(
-            "no PoissonDC artefact at %s — run refit_poisson_dc first", artefact_path
-        )
+        logger.warning("no PoissonDC artefact at %s — run refit_poisson_dc first", artefact_path)
         return None
     model = _hydrate_model(artefact_path)
     fixtures = _load_fixtures()
@@ -192,9 +188,7 @@ def main() -> int:
     parser.add_argument("--artefact", default=str(DEFAULT_ARTEFACT_PATH))
     parser.add_argument("--model-version", default=DEFAULT_MODEL_VERSION)
     args = parser.parse_args()
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     rerun_and_persist(
         n_sims=args.n_sims,
         seed=args.seed,

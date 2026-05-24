@@ -94,7 +94,9 @@ def _load_persisted_summary() -> tuple[TournamentSummary, int, str] | None:
                 str(run.model_version),
             )
     except Exception:
-        logger.debug("standings: persisted-run lookup failed; falling back to in-process MC", exc_info=True)
+        logger.debug(
+            "standings: persisted-run lookup failed; falling back to in-process MC", exc_info=True
+        )
         return None
 
 
