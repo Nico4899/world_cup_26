@@ -69,6 +69,7 @@ def simulate_tournament(
     fifa_ranking: dict[str, int] | None = None,
     shootout_strategy: ShootoutStrategy | None = None,
     known_group_results: dict[tuple[str, str], tuple[int, int]] | None = None,
+    known_knockout_winners: dict[int, str] | None = None,
 ) -> TournamentResult:
     """Run a single tournament simulation end-to-end.
 
@@ -78,11 +79,14 @@ def simulate_tournament(
 
     ``known_group_results`` (Phase 8) locks in scorelines for group-stage
     fixtures that have already happened — keyed by ``(home_team, away_team)``.
-    Any fixture not in the dict is sampled from the model as usual. Knockout
-    matches are still sampled (conditioning on knockout results is a future
-    enhancement; the bracket structure depends on the group results, so
-    locking knockouts also requires locking the upstream groups they came
-    from).
+
+    ``known_knockout_winners`` (Tier 3 "lock a match" feature) locks the
+    *winner* of specific knockout match ids. When the locked team is one of
+    the two sides that actually reached the match in this simulation, the
+    lock fires (a deterministic 1-0 regulation result is recorded so the
+    bracket structure is well-defined). If the locked team isn't a
+    contestant, the lock is silently skipped for that sim — by design, so
+    users can lock optimistic scenarios without rejecting the entire MC pass.
     """
     # --- group stage ---
     group_results: dict[str, GroupResult] = {}

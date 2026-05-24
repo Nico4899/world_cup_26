@@ -33,11 +33,52 @@ st.caption(
     "10 000+ sims) are on the Groups page."
 )
 
+
+# --- URL-encoded scenario sharing ------------------------------------------
+#
+# All inputs (mode + seed + n_scenarios) round-trip via ``st.query_params`` so
+# every bracket realisation has a copy-pasteable URL. The spec calls this out
+# as one of the biggest growth levers for a prediction site.
+
+_MODE_LABELS = ("Single seed", "Scenario comparison")
+_MODE_PARAM = {"single": "Single seed", "scenarios": "Scenario comparison"}
+_MODE_REVERSE = {v: k for k, v in _MODE_PARAM.items()}
+
+
+def _read_int_param(key: str, *, default: int, lo: int, hi: int) -> int:
+    raw = st.query_params.get(key)
+    if raw is None:
+        return default
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, v))
+
+
+def _write_params(**kwargs: str) -> None:
+    """Update ``st.query_params`` only for keys whose value changed.
+
+    Streamlit's query-params write triggers a rerun, so guard against the
+    no-op write to avoid an infinite cycle when the page re-renders from
+    the same URL.
+    """
+    changed = False
+    for k, v in kwargs.items():
+        if st.query_params.get(k) != v:
+            st.query_params[k] = v
+            changed = True
+    return changed
+
+
+_initial_mode = _MODE_PARAM.get(st.query_params.get("mode", ""), "Single seed")
 mode = st.radio(
     "View mode",
-    options=("Single seed", "Scenario comparison"),
+    options=_MODE_LABELS,
+    index=_MODE_LABELS.index(_initial_mode),
     horizontal=True,
 )
+_write_params(mode=_MODE_REVERSE[mode])
 
 
 def _fetch_bracket(seed_value: int) -> dict | None:
@@ -71,7 +112,11 @@ def _render_bracket_detail(data: dict) -> None:
 
 
 if mode == "Single seed":
-    seed = st.number_input("Seed", min_value=0, max_value=1_000_000, value=42, step=1)
+    seed_default = _read_int_param("seed", default=42, lo=0, hi=1_000_000)
+    seed = st.number_input(
+        "Seed", min_value=0, max_value=1_000_000, value=seed_default, step=1
+    )
+    _write_params(seed=str(int(seed)))
     data = _fetch_bracket(int(seed))
     if data is None:
         st.stop()
@@ -82,9 +127,20 @@ else:
         "how often each team reaches the SF / final / lifts the trophy across "
         "this small sample."
     )
-    n_scenarios = st.slider("Number of scenarios", min_value=2, max_value=8, value=4, step=1)
+    n_default = _read_int_param("scenarios", default=4, lo=2, hi=8)
+    base_default = _read_int_param("base_seed", default=42, lo=0, hi=1_000_000)
+    n_scenarios = st.slider(
+        "Number of scenarios", min_value=2, max_value=8, value=n_default, step=1
+    )
     base_seed = st.number_input(
-        "Base seed (first scenario)", min_value=0, max_value=1_000_000, value=42, step=1
+        "Base seed (first scenario)",
+        min_value=0,
+        max_value=1_000_000,
+        value=base_default,
+        step=1,
+    )
+    _write_params(
+        scenarios=str(int(n_scenarios)), base_seed=str(int(base_seed))
     )
     scenarios = []
     for i in range(int(n_scenarios)):
