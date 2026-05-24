@@ -40,9 +40,7 @@ def upgrade() -> None:
         sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("match_id", "seq"),
     )
-    op.create_index(
-        "ix_raw_live_events_event_type", "raw_live_events", ["event_type"]
-    )
+    op.create_index("ix_raw_live_events_event_type", "raw_live_events", ["event_type"])
 
 
 def downgrade() -> None:

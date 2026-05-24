@@ -41,6 +41,8 @@ from wc2026.features.live_state import (
 from wc2026.ingest.eloratings_scraper import load_latest_snapshot as load_elo_snapshot
 from wc2026.ingest.statsbomb_open import (
     DEFAULT_TARGET as STATSBOMB_DEFAULT_TARGET,
+)
+from wc2026.ingest.statsbomb_open import (
     fetch_match_events,
     fetch_matches,
 )
@@ -95,12 +97,7 @@ def _build_rows_from_one_match(
     away_team = (match.get("away_team") or {}).get("away_team_name")
     home_score = match.get("home_score")
     away_score = match.get("away_score")
-    if (
-        home_team is None
-        or away_team is None
-        or home_score is None
-        or away_score is None
-    ):
+    if home_team is None or away_team is None or home_score is None or away_score is None:
         return []
     mid = int(match["match_id"])
     try:
@@ -150,9 +147,7 @@ def build_training_rows(
             logger.warning("fetch_matches(%d, %d) failed; skipping", comp_id, season_id)
             continue
         for match in matches:
-            new_rows = _build_rows_from_one_match(
-                match, elo_by_team=elo_by_team, session=session
-            )
+            new_rows = _build_rows_from_one_match(match, elo_by_team=elo_by_team, session=session)
             if not new_rows:
                 continue
             rows.extend(new_rows)
@@ -195,9 +190,7 @@ def main() -> None:
         help="Cap on the number of matches contributing rows (debug knob).",
     )
     args = parser.parse_args()
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     fit_and_save(max_matches=args.rows)
 
 

@@ -46,18 +46,14 @@ class _StubRequest:
 
 
 def _events() -> list[dict]:
-    return json.loads(
-        (FIXTURE_DIR / "statsbomb_events_sample.json").read_text(encoding="utf-8")
-    )
+    return json.loads((FIXTURE_DIR / "statsbomb_events_sample.json").read_text(encoding="utf-8"))
 
 
 def _fitted_poisson() -> PoissonDC:
     df = load_played()
     cutoff = pd.Timestamp("2018-01-01")
     train = df[df["date"] >= cutoff].reset_index(drop=True)
-    weights = combined_weight(
-        train, ref_date=pd.Timestamp("2023-01-01"), half_life_days=3650.0
-    )
+    weights = combined_weight(train, ref_date=pd.Timestamp("2023-01-01"), half_life_days=3650.0)
     return PoissonDC().fit(train, weights=weights)
 
 
@@ -141,9 +137,7 @@ def _argentina_v_france_fixture() -> FixtureMatch:
 
 
 def test_replay_full_pipeline_emits_one_frame_per_event(monkeypatch) -> None:
-    snapshots = replay_statsbomb_events(
-        _events(), home_team="Argentina", away_team="France"
-    )
+    snapshots = replay_statsbomb_events(_events(), home_team="Argentina", away_team="France")
     rows = _snapshots_to_rows(snapshots, match_id=0)
 
     from wc2026.api.routes import live as live_route
@@ -190,9 +184,7 @@ def test_replay_full_pipeline_emits_one_frame_per_event(monkeypatch) -> None:
 
 
 def test_replay_pipeline_collapses_to_realised_outcome_at_full_time(monkeypatch) -> None:
-    snapshots = replay_statsbomb_events(
-        _events(), home_team="Argentina", away_team="France"
-    )
+    snapshots = replay_statsbomb_events(_events(), home_team="Argentina", away_team="France")
     rows = _snapshots_to_rows(snapshots, match_id=0)
     from wc2026.api.routes import live as live_route
 
@@ -227,9 +219,7 @@ def test_replay_pipeline_win_prob_responds_to_goal_diff(monkeypatch) -> None:
     """As the fixture progresses (0-0 → 1-0 → 1-1 → 2-1), home_win prob should
     rise on the home goal, fall on the away equaliser, and re-rise after the
     home winner."""
-    snapshots = replay_statsbomb_events(
-        _events(), home_team="Argentina", away_team="France"
-    )
+    snapshots = replay_statsbomb_events(_events(), home_team="Argentina", away_team="France")
     rows = _snapshots_to_rows(snapshots, match_id=0)
     from wc2026.api.routes import live as live_route
 

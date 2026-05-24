@@ -13,7 +13,7 @@ same H/D/A class encoding as ``models.xgb_classifier``.
 
 The model is intentionally small (5 parameters per class with no interaction
 terms) so it stays interpretable on the dashboard's live win-prob chart and
-calibrates quickly on the StatsBomb open-data corpus (~250 matches × ~120
+calibrates quickly on the StatsBomb open-data corpus (~250 matches x ~120
 state snapshots = 30k training rows).
 
 Persistence: a tiny JSON file holding the coefficient matrix + intercepts +
@@ -84,9 +84,7 @@ class LiveWinProbModel:
         if y_arr.ndim != 1 or len(y_arr) != len(X_arr):
             raise ValueError("y must be a 1-d array the same length as X")
         if not set(np.unique(y_arr)).issubset({CLASS_HOME, CLASS_DRAW, CLASS_AWAY}):
-            raise ValueError(
-                "y labels must be a subset of {CLASS_HOME, CLASS_DRAW, CLASS_AWAY}"
-            )
+            raise ValueError("y labels must be a subset of {CLASS_HOME, CLASS_DRAW, CLASS_AWAY}")
         clf = LogisticRegression(C=1.0, max_iter=500)
         clf.fit(
             X_arr,
@@ -173,9 +171,7 @@ class LiveWinProbModel:
     def from_dict(cls, payload: dict[str, Any]) -> LiveWinProbModel:
         return cls(
             intercepts=tuple(float(v) for v in payload["intercepts"]),
-            coefficients=tuple(
-                tuple(float(c) for c in row) for row in payload["coefficients"]
-            ),
+            coefficients=tuple(tuple(float(c) for c in row) for row in payload["coefficients"]),
             feature_names=tuple(payload.get("feature_names", DEFAULT_FEATURE_COLUMNS)),
             version=str(payload.get("version", "live_win_prob.v1")),
         )

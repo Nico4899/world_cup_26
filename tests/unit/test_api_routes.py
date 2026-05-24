@@ -538,9 +538,7 @@ def test_live_snapshot_returns_pre_match_fallback_without_events(
     assert body["last_event_type"] == "KICKOFF"
 
 
-def test_live_snapshot_uses_live_model_when_events_present(
-    client: TestClient, monkeypatch
-) -> None:
+def test_live_snapshot_uses_live_model_when_events_present(client: TestClient, monkeypatch) -> None:
     """Stub the DB-history loader so the snapshot route sees a 1-0 home goal."""
     import datetime as _dt
 

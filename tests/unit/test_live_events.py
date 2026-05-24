@@ -89,9 +89,7 @@ def test_reconcile_emits_one_goal_per_home_delta(engine) -> None:
         session.add_all(reconcile_events(_state(home_score=0, away_score=0), session=session))
         session.commit()
         # Second poll: 1-0 home — one GOAL row for Argentina.
-        rows = reconcile_events(
-            _state(home_score=1, away_score=0, minute=23), session=session
-        )
+        rows = reconcile_events(_state(home_score=1, away_score=0, minute=23), session=session)
         assert len(rows) == 1
         assert rows[0].event_type == EVENT_GOAL
         assert rows[0].team == "Argentina"
@@ -104,9 +102,7 @@ def test_reconcile_emits_multiple_goals_when_polls_lag(engine) -> None:
         session.add_all(reconcile_events(_state(home_score=0, away_score=0), session=session))
         session.commit()
         # Two goals between polls: 0-0 → 2-1.
-        rows = reconcile_events(
-            _state(home_score=2, away_score=1, minute=37), session=session
-        )
+        rows = reconcile_events(_state(home_score=2, away_score=1, minute=37), session=session)
         # Two home goals then one away goal.
         assert [r.event_type for r in rows] == [EVENT_GOAL, EVENT_GOAL, EVENT_GOAL]
         assert [r.team for r in rows] == ["Argentina", "Argentina", "France"]
@@ -123,9 +119,7 @@ def test_reconcile_emits_ft_whistle_when_status_finished(engine) -> None:
         session.add_all(reconcile_events(_state(home_score=2, away_score=1), session=session))
         session.commit()
         rows = reconcile_events(
-            _state(
-                home_score=2, away_score=1, minute=90, period=2, status="FINISHED"
-            ),
+            _state(home_score=2, away_score=1, minute=90, period=2, status="FINISHED"),
             session=session,
         )
         # No new goals; one FT_WHISTLE.
@@ -138,18 +132,14 @@ def test_reconcile_does_not_double_emit_ft_whistle(engine) -> None:
         session.add_all(reconcile_events(_state(home_score=2, away_score=1), session=session))
         session.commit()
         first = reconcile_events(
-            _state(
-                home_score=2, away_score=1, minute=90, period=2, status="FINISHED"
-            ),
+            _state(home_score=2, away_score=1, minute=90, period=2, status="FINISHED"),
             session=session,
         )
         session.add_all(first)
         session.commit()
         # Second FINISHED poll: should be empty (no re-emission).
         second = reconcile_events(
-            _state(
-                home_score=2, away_score=1, minute=90, period=2, status="FINISHED"
-            ),
+            _state(home_score=2, away_score=1, minute=90, period=2, status="FINISHED"),
             session=session,
         )
         assert second == []

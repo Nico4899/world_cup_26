@@ -23,7 +23,6 @@ Limitations (documented in the Phase 6 README addendum)
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -126,9 +125,7 @@ def reconcile_events(
     new_rows: list[RawLiveEvent] = []
 
     # Seed a KICKOFF row the first time we ever poll a live match.
-    if latest is None and (
-        state.status in LIVE_STATUSES or state.status in FINISHED_STATUSES
-    ):
+    if latest is None and (state.status in LIVE_STATUSES or state.status in FINISHED_STATUSES):
         new_rows.append(
             RawLiveEvent(
                 match_id=state.match_id,
@@ -262,9 +259,7 @@ def load_event_history(
     db_url = engine.url.render_as_string(hide_password=False) if engine is not None else None
     with session_scope(db_url) as session:
         stmt = (
-            select(RawLiveEvent)
-            .where(RawLiveEvent.match_id == match_id)
-            .order_by(RawLiveEvent.seq)
+            select(RawLiveEvent).where(RawLiveEvent.match_id == match_id).order_by(RawLiveEvent.seq)
         )
         rows = list(session.scalars(stmt))
         # Detach from the session so callers can use the objects after the scope closes.

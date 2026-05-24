@@ -89,12 +89,8 @@ def test_predict_proba_responds_to_red_card() -> None:
     """An equal-Elo, scoreless mid-match state shifts toward the side with the man advantage."""
     X, y = _synthetic_state_corpus(n=4000, seed=2)
     model = LiveWinProbModel.fit(X, y)
-    no_red = model.predict_one(
-        elo_diff=0, goal_diff=0, minutes_remaining=45, red_diff=0
-    )
-    home_advantage = model.predict_one(
-        elo_diff=0, goal_diff=0, minutes_remaining=45, red_diff=-1
-    )
+    no_red = model.predict_one(elo_diff=0, goal_diff=0, minutes_remaining=45, red_diff=0)
+    home_advantage = model.predict_one(elo_diff=0, goal_diff=0, minutes_remaining=45, red_diff=-1)
     # red_diff=-1 means the AWAY side has a man down → home_win should rise.
     assert home_advantage["home_win"] > no_red["home_win"]
 
@@ -136,8 +132,6 @@ def test_fit_rejects_invalid_label() -> None:
 def test_predict_one_outputs_dict_summing_to_one() -> None:
     X, y = _synthetic_state_corpus(seed=5)
     model = LiveWinProbModel.fit(X, y)
-    probs = model.predict_one(
-        elo_diff=50, goal_diff=1, minutes_remaining=30, red_diff=0
-    )
+    probs = model.predict_one(elo_diff=50, goal_diff=1, minutes_remaining=30, red_diff=0)
     assert set(probs.keys()) == {"home_win", "draw", "away_win"}
     assert math.isclose(sum(probs.values()), 1.0, abs_tol=1e-9)

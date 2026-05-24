@@ -25,9 +25,7 @@ TYPE_FOUL_COMMITTED = "Foul Committed"
 
 # StatsBomb red-card outcome names (apply to both the bad_behaviour and the
 # foul_committed event variants).
-RED_CARD_NAMES: frozenset[str] = frozenset(
-    {"Red Card", "Second Yellow", "Second Yellow Card"}
-)
+RED_CARD_NAMES: frozenset[str] = frozenset({"Red Card", "Second Yellow", "Second Yellow Card"})
 
 
 @dataclass(frozen=True)

@@ -29,6 +29,12 @@ from wc2026.features.build_match_features import FeatureSources
 from wc2026.features.match_weights import combined_weight
 from wc2026.ingest.eloratings_scraper import load_latest_snapshot
 from wc2026.ingest.kaggle_intl import load_played, load_scheduled
+from wc2026.models.live_win_prob import (
+    DEFAULT_ARTIFACT_PATH as LIVE_WIN_PROB_PATH,
+)
+from wc2026.models.live_win_prob import (
+    LiveWinProbModel,
+)
 from wc2026.models.poisson_dc import PoissonDC, PoissonDCParams
 from wc2026.models.shap_explain import XgbExplainer
 from wc2026.models.shootout import (
@@ -45,10 +51,6 @@ from wc2026.models.xgb_classifier import (
 )
 from wc2026.models.xgb_classifier import (
     XgbMatchModel,
-)
-from wc2026.models.live_win_prob import (
-    DEFAULT_ARTIFACT_PATH as LIVE_WIN_PROB_PATH,
-    LiveWinProbModel,
 )
 from wc2026.sim.fixtures import load_group_assignment, parse_wc2026_fixtures
 

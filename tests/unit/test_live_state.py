@@ -18,9 +18,7 @@ FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
 
 
 def _events() -> list[dict]:
-    return json.loads(
-        (FIXTURE_DIR / "statsbomb_events_sample.json").read_text(encoding="utf-8")
-    )
+    return json.loads((FIXTURE_DIR / "statsbomb_events_sample.json").read_text(encoding="utf-8"))
 
 
 def test_replay_starts_with_kickoff_snapshot() -> None:

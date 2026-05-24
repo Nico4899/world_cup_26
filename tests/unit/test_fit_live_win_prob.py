@@ -10,8 +10,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-
 import scripts.fit_live_win_prob as f
+
 from wc2026.models.live_win_prob import LiveWinProbModel
 
 
@@ -23,9 +23,7 @@ def _synthetic_rows(n: int = 800, seed: int = 0) -> pd.DataFrame:
     red_diff = rng.choice([-1, 0, 1], size=n, p=[0.05, 0.9, 0.05])
     logits = 0.01 * elo_diff + 1.4 * goal_diff - 0.4 * red_diff
     noise = rng.normal(0, 1.0, size=n)
-    labels = np.where(
-        logits + noise > 0.8, 0, np.where(logits + noise < -0.8, 2, 1)
-    ).astype(int)
+    labels = np.where(logits + noise > 0.8, 0, np.where(logits + noise < -0.8, 2, 1)).astype(int)
     return pd.DataFrame(
         {
             "elo_diff": elo_diff,
@@ -59,9 +57,7 @@ def test_build_training_rows_returns_empty_when_no_disk_corpus(tmp_path) -> None
     """A fresh, never-populated statsbomb cache yields an empty rows df."""
     df = f.build_training_rows(target_dir=tmp_path)
     assert df.empty
-    assert {"elo_diff", "goal_diff", "minutes_remaining", "red_diff", "label"}.issubset(
-        df.columns
-    )
+    assert {"elo_diff", "goal_diff", "minutes_remaining", "red_diff", "label"}.issubset(df.columns)
 
 
 def test_build_training_rows_walks_replay_for_one_match(monkeypatch, tmp_path) -> None:
@@ -70,9 +66,7 @@ def test_build_training_rows_walks_replay_for_one_match(monkeypatch, tmp_path) -
     from pathlib import Path
 
     fixtures_dir = Path(__file__).parent.parent / "fixtures"
-    events = json.loads(
-        (fixtures_dir / "statsbomb_events_sample.json").read_text(encoding="utf-8")
-    )
+    events = json.loads((fixtures_dir / "statsbomb_events_sample.json").read_text(encoding="utf-8"))
 
     # Lay out a synthetic shots.parquet so _resolve_competition_seasons finds it.
     (tmp_path / "43" / "106").mkdir(parents=True)
@@ -109,9 +103,7 @@ def test_build_training_rows_respects_max_matches(monkeypatch, tmp_path) -> None
     from pathlib import Path
 
     fixtures_dir = Path(__file__).parent.parent / "fixtures"
-    events = json.loads(
-        (fixtures_dir / "statsbomb_events_sample.json").read_text(encoding="utf-8")
-    )
+    events = json.loads((fixtures_dir / "statsbomb_events_sample.json").read_text(encoding="utf-8"))
     (tmp_path / "43" / "106").mkdir(parents=True)
     (tmp_path / "43" / "106" / "shots.parquet").write_bytes(b"")
 
@@ -131,5 +123,5 @@ def test_build_training_rows_respects_max_matches(monkeypatch, tmp_path) -> None
     )
     monkeypatch.setattr(f, "fetch_match_events", lambda *_a, **_k: events)
     df = f.build_training_rows(target_dir=tmp_path, elo_df=None, max_matches=2)
-    # 2 matches × 4 snapshots each = 8 rows
+    # 2 matches x 4 snapshots each = 8 rows
     assert len(df) == 8

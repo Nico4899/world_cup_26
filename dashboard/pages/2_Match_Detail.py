@@ -9,6 +9,7 @@ no external dependency).
 
 from __future__ import annotations
 
+import httpx
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
@@ -79,6 +80,13 @@ except APIUnreachable:
     # the earlier render_unreachable_warning would have stopped us already, so
     # we shouldn't get here. Belt-and-braces fallback: silently skip.
     live_payload = None
+except httpx.HTTPStatusError as exc:
+    # An older API (pre-Phase 6) returns 404 for /live/{id}/history. Treat
+    # that as "no live data" so the page still renders against legacy
+    # deployments — the rest of the Match Detail view doesn't depend on it.
+    if exc.response.status_code != 404:
+        raise
+    live_payload = None
 
 snapshot = (live_payload or {}).get("snapshot")
 events = (live_payload or {}).get("events") or []
@@ -91,9 +99,7 @@ if snapshot is not None and snapshot.get("win_prob_source") in (
         # Embed a meta-refresh so the page reloads every 5 seconds while the
         # match is in progress. The browser handles it; no streamlit-autorefresh
         # dependency needed.
-        st.markdown(
-            "<meta http-equiv='refresh' content='5'>", unsafe_allow_html=True
-        )
+        st.markdown("<meta http-equiv='refresh' content='5'>", unsafe_allow_html=True)
 
     st.divider()
     badge = "🔴 LIVE" if is_live else "✅ FULL TIME"
@@ -106,12 +112,8 @@ if snapshot is not None and snapshot.get("win_prob_source") in (
     score_text = f"{snapshot['home_score']}–{snapshot['away_score']}"
     state_text = f"min {snapshot['minute']} · last: {snapshot['last_event_type']}"
     if snapshot["home_red_cards"] or snapshot["away_red_cards"]:
-        state_text += (
-            f" · 🟥 {snapshot['home_red_cards']}–{snapshot['away_red_cards']}"
-        )
-    st.subheader(
-        f"{fx['home_team']} {score_text} {fx['away_team']}"
-    )
+        state_text += f" · 🟥 {snapshot['home_red_cards']}–{snapshot['away_red_cards']}"
+    st.subheader(f"{fx['home_team']} {score_text} {fx['away_team']}")
     st.caption(state_text)
 
     live_col_a, live_col_b, live_col_c = st.columns(3)
