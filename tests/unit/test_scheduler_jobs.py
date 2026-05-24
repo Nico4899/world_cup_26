@@ -348,6 +348,122 @@ def test_monte_carlo_rerun_job_invokes_rerun_inside_window(monkeypatch):
     assert called["n"] == 1
 
 
+# --- live_events_poll (Phase 6 production poller) --------------------------
+
+
+def test_register_jobs_adds_live_events_poll_inside_tournament_window():
+    scheduler = BackgroundScheduler(timezone="UTC")
+    job_mod.register_jobs(scheduler, today=date(2026, 6, 25))
+    by_id = {j.id: j for j in scheduler.get_jobs()}
+    assert "live_events_poll" in by_id
+    trig = by_id["live_events_poll"].trigger
+    assert isinstance(trig, IntervalTrigger)
+    assert int(trig.interval.total_seconds()) == job_mod.LIVE_EVENTS_POLL_INTERVAL_SECONDS
+
+
+def test_register_jobs_skips_live_events_poll_outside_tournament_window():
+    scheduler = BackgroundScheduler(timezone="UTC")
+    job_mod.register_jobs(scheduler, today=date(2026, 5, 23))
+    assert "live_events_poll" not in {j.id for j in scheduler.get_jobs()}
+
+
+def test_live_events_poll_no_ops_outside_window(monkeypatch):
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_START", date(2099, 1, 1))
+    monkeypatch.setenv("FOOTBALL_DATA_ORG_KEY", "x")
+    monkeypatch.setenv("DATABASE_URL", "x")
+    import wc2026.ingest.football_data_org as fdo
+    import wc2026.ingest.live_events as live_ev
+
+    def boom_fetch(*_, **__):
+        raise AssertionError("must not fetch outside window")
+
+    def boom_poll(*_, **__):
+        raise AssertionError("must not poll outside window")
+
+    monkeypatch.setattr(fdo, "fetch_competition_matches", boom_fetch)
+    monkeypatch.setattr(live_ev, "poll_live_match", boom_poll)
+    job_mod._job_live_events_poll()  # no assertion fires → pass
+
+
+def test_live_events_poll_no_ops_without_football_data_org_key(monkeypatch):
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_START", date(1900, 1, 1))
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_END", date(2999, 12, 31))
+    monkeypatch.delenv("FOOTBALL_DATA_ORG_KEY", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "x")
+    import wc2026.ingest.football_data_org as fdo
+
+    def boom_fetch(*_, **__):
+        raise AssertionError("must not fetch without API key")
+
+    monkeypatch.setattr(fdo, "fetch_competition_matches", boom_fetch)
+    job_mod._job_live_events_poll()
+
+
+def test_live_events_poll_no_ops_without_database_url(monkeypatch):
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_START", date(1900, 1, 1))
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_END", date(2999, 12, 31))
+    monkeypatch.setenv("FOOTBALL_DATA_ORG_KEY", "x")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("WC2026_DATABASE_URL", raising=False)
+    import wc2026.ingest.football_data_org as fdo
+
+    def boom_fetch(*_, **__):
+        raise AssertionError("must not fetch without DB URL")
+
+    monkeypatch.setattr(fdo, "fetch_competition_matches", boom_fetch)
+    job_mod._job_live_events_poll()
+
+
+def test_live_events_poll_filters_to_today_and_polls(monkeypatch):
+    """Happy path: fixture list has 3 matches — 1 today IN_PLAY, 1 today SCHEDULED,
+    1 yesterday FINISHED. We expect 2 polls (the IN_PLAY today + the FINISHED yesterday)."""
+    import datetime as _dt
+
+    import pandas as _pd
+
+    import wc2026.ingest.football_data_org as fdo
+    import wc2026.ingest.live_events as live_ev
+
+    today = _dt.date(2026, 6, 25)
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_START", _dt.date(1900, 1, 1))
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_END", _dt.date(2999, 12, 31))
+
+    class _FrozenDatetime:
+        @classmethod
+        def now(cls, _tz=None):
+            return _dt.datetime(2026, 6, 25, 14, 0, tzinfo=_dt.UTC)
+
+    monkeypatch.setattr(job_mod, "datetime", _FrozenDatetime)
+    monkeypatch.setenv("FOOTBALL_DATA_ORG_KEY", "x")
+    monkeypatch.setenv("DATABASE_URL", "x")
+
+    df = _pd.DataFrame(
+        {
+            "match_id": [101, 102, 103],
+            "status": ["IN_PLAY", "SCHEDULED", "FINISHED"],
+            "utc_date": _pd.to_datetime(
+                [
+                    f"{today.isoformat()} 13:00:00+00:00",
+                    f"{today.isoformat()} 19:00:00+00:00",
+                    f"{(today - _dt.timedelta(days=1)).isoformat()} 21:00:00+00:00",
+                ],
+                utc=True,
+            ),
+        }
+    )
+
+    monkeypatch.setattr(fdo, "fetch_competition_matches", lambda *_a, **_k: df)
+
+    polled: list[int] = []
+
+    def fake_poll(match_id, **_kw):
+        polled.append(int(match_id))
+
+    monkeypatch.setattr(live_ev, "poll_live_match", fake_poll)
+    job_mod._job_live_events_poll()
+    assert sorted(polled) == [101, 103]  # SCHEDULED 102 is filtered out
+
+
 def test_warm_standings_cache_no_ops_outside_window(monkeypatch):
     """Even if directly invoked outside the tournament window, the job should
     not hit the network (defensive guard against mis-registration)."""

@@ -71,6 +71,7 @@ WC_TOURNAMENT_START = date(2026, 6, 11)
 WC_TOURNAMENT_END = date(2026, 7, 19)
 STANDINGS_WARM_INTERVAL_MINUTES = 60
 MONTE_CARLO_RERUN_INTERVAL_MINUTES = 30
+LIVE_EVENTS_POLL_INTERVAL_SECONDS = 60
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +296,72 @@ def _job_features_rebuild() -> None:
     persist_daily_snapshot()
 
 
+def _job_live_events_poll() -> None:  # noqa: PLR0911 — guard-clause early returns
+    """Phase 6 production live poller — runs every minute during the tournament window.
+
+    Pulls today's (and yesterday's, for matches that crossed midnight UTC)
+    WC 2026 fixtures from football-data.org and invokes ``poll_live_match``
+    for any with status ∈ {IN_PLAY, PAUSED, FINISHED}. The reconciler is a
+    no-op when the latest stored event for the match is already
+    ``FT_WHISTLE``, so re-polling finished matches is safe — but we filter
+    to date == today/yesterday anyway to keep the rate-limit cost trivial.
+
+    Short-circuits when:
+      * outside the tournament window
+      * no ``FOOTBALL_DATA_ORG_KEY`` env var (without a key we can't fetch)
+      * no ``DATABASE_URL`` / ``WC2026_DATABASE_URL`` (nowhere to persist)
+    """
+    today = datetime.now(UTC).date()
+    if not (WC_TOURNAMENT_START <= today <= WC_TOURNAMENT_END):
+        return
+    if not os.environ.get("FOOTBALL_DATA_ORG_KEY"):
+        logger.debug("live_events_poll: FOOTBALL_DATA_ORG_KEY unset — skipping")
+        return
+    if not (os.environ.get("DATABASE_URL") or os.environ.get("WC2026_DATABASE_URL")):
+        logger.debug("live_events_poll: no DATABASE_URL — skipping")
+        return
+    from wc2026.ingest.football_data_org import (  # noqa: PLC0415
+        WC_COMPETITION_CODE,
+        fetch_competition_matches,
+    )
+    from wc2026.ingest.live_events import (  # noqa: PLC0415
+        FINISHED_STATUSES,
+        LIVE_STATUSES,
+        poll_live_match,
+    )
+
+    try:
+        df = fetch_competition_matches(WC_COMPETITION_CODE)
+    except Exception:
+        logger.exception("live_events_poll: fixture-list fetch failed")
+        return
+    if df.empty:
+        return
+
+    yesterday = today - timedelta(days=1)
+    statuses = LIVE_STATUSES | FINISHED_STATUSES
+    candidates = df[df["status"].isin(list(statuses))].copy()
+    if candidates.empty:
+        return
+    candidates["_match_date"] = candidates["utc_date"].dt.date
+    candidates = candidates[candidates["_match_date"].isin([yesterday, today])]
+    if candidates.empty:
+        return
+
+    n_polled = 0
+    for _, row in candidates.iterrows():
+        match_id = row.get("match_id")
+        if pd.isna(match_id):
+            continue
+        try:
+            poll_live_match(int(match_id))
+            n_polled += 1
+        except Exception:
+            logger.exception("live_events_poll: poll_live_match(%s) failed", match_id)
+    if n_polled:
+        logger.info("live_events_poll: polled %d active/recent matches", n_polled)
+
+
 def _job_monte_carlo_rerun() -> None:
     """Re-run the 10k Monte Carlo conditioned on completed-match results.
 
@@ -514,6 +581,24 @@ def register_jobs(
             name=mc_spec.name,
             replace_existing=True,
         )
+        # Phase 6 production poller: every 60 s, fetch today's WC fixtures and
+        # invoke poll_live_match for each that's IN_PLAY / PAUSED / recently
+        # FINISHED. The job filters by date so the football-data.org rate-
+        # limit cost is bounded (~4 calls/min on the busiest matchday, well
+        # within the 10/min free-tier ceiling).
+        live_spec = JobSpec(
+            name="live_events_poll",
+            hour=-1,
+            minute=-1,
+            func=_job_live_events_poll,
+        )
+        scheduler.add_job(
+            _wrap_with_tracking(live_spec),
+            trigger=IntervalTrigger(seconds=LIVE_EVENTS_POLL_INTERVAL_SECONDS, timezone="UTC"),
+            id=live_spec.name,
+            name=live_spec.name,
+            replace_existing=True,
+        )
 
 
 def build_scheduler() -> BlockingScheduler:
@@ -536,6 +621,7 @@ if __name__ == "__main__":
 __all__ = [
     "JOB_REGISTRY",
     "JOB_SPECS",
+    "LIVE_EVENTS_POLL_INTERVAL_SECONDS",
     "MANUAL_ONLY_JOB_SPECS",
     "MONTE_CARLO_RERUN_INTERVAL_MINUTES",
     "STANDINGS_WARM_INTERVAL_MINUTES",
