@@ -9,17 +9,18 @@ authors = [{ name = "Nico Fliegel", email = "nico.fliegel@gmail.com" }]
 dependencies = [
     "alembic>=1.18.4",
     "apscheduler>=3.11.2",
-    "beautifulsoup4>=4.12",
     "boto3>=1.35",
-    "duckdb>=1.5.3",
     "fastapi>=0.136.1",
     "httpx>=0.28.1",
     "kaggle>=2.1.2",
+    # lxml is a runtime dep of pandas.read_html (fbref / wikipedia ingesters)
+    # even though no Python module here imports it directly.
     "lxml>=5.0",
     "numpy>=2.4.6",
     "pandas>=3.0.3",
     "plotly>=6.7.0",
     "psycopg[binary]>=3.3.4",
+    # pyarrow backs every pandas .to_parquet / .read_parquet call.
     "pyarrow>=24.0.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",

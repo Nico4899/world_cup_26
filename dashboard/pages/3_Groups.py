@@ -28,7 +28,23 @@ except APIUnreachable as exc:
     render_unreachable_warning(exc)
     st.stop()
 
-st.caption(f"Based on {data['n_sims']} simulations.")
+# Phase 8 provenance: surface whether these probabilities come from a persisted
+# Monte Carlo run (post-result conditional rerun) or from a cold in-process
+# simulation. When persisted, also show the run id + model version so an operator
+# can correlate against the scheduler log.
+source = data.get("source")
+run_id = data.get("run_id")
+model_version = data.get("model_version")
+if source == "persisted" and run_id is not None:
+    st.caption(
+        f"Based on {data['n_sims']} simulations · persisted run **#{run_id}** "
+        f"(model `{model_version or 'unknown'}`). Updates after each completed match."
+    )
+else:
+    st.caption(
+        f"Based on {data['n_sims']} simulations · in-process run "
+        "(no persisted Monte Carlo run on file yet — run `scripts/rerun_monte_carlo.py`)."
+    )
 
 
 def _group_fig(block: dict) -> go.Figure:
