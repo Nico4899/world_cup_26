@@ -324,6 +324,64 @@ def test_simulate_group_matches_uses_model_distribution() -> None:
     assert all(r.home_score == 1 and r.away_score == 0 for r in results)
 
 
+def test_simulate_group_matches_locks_in_known_results() -> None:
+    """Phase 8 conditional MC: a (home, away) → (h_score, a_score) override
+    short-circuits the model sample for that fixture only."""
+    import pandas as _pd
+
+    fixtures = [
+        FixtureMatch(
+            date=_pd.Timestamp("2026-06-11"),
+            home_team="A",
+            away_team="B",
+            group="A",
+            city="X",
+            country="USA",
+            neutral=True,
+        ),
+        FixtureMatch(
+            date=_pd.Timestamp("2026-06-12"),
+            home_team="C",
+            away_team="D",
+            group="A",
+            city="X",
+            country="USA",
+            neutral=True,
+        ),
+    ]
+    rng = np.random.default_rng(0)
+    overrides = {("A", "B"): (3, 1)}
+    results = simulate_group_matches(
+        fixtures, _AlwaysScoreOneNilModel(), rng, known_results=overrides
+    )  # type: ignore[arg-type]
+    # A vs B was overridden; C vs D still uses the model (1-0).
+    assert results[0].home_score == 3
+    assert results[0].away_score == 1
+    assert results[1].home_score == 1
+    assert results[1].away_score == 0
+
+
+def test_simulate_group_matches_unaffected_by_empty_known_results() -> None:
+    import pandas as _pd
+
+    fixtures = [
+        FixtureMatch(
+            date=_pd.Timestamp("2026-06-11"),
+            home_team="A",
+            away_team="B",
+            group="A",
+            city="X",
+            country="USA",
+            neutral=True,
+        )
+    ]
+    rng = np.random.default_rng(0)
+    results = simulate_group_matches(
+        fixtures, _AlwaysScoreOneNilModel(), rng, known_results={}
+    )  # type: ignore[arg-type]
+    assert results[0].home_score == 1 and results[0].away_score == 0
+
+
 # --- simulate_group end-to-end -------------------------------------------
 
 

@@ -105,18 +105,31 @@ def simulate_group_matches(
     fixtures: Iterable[FixtureMatch],
     model: PoissonDC,
     rng: np.random.Generator,
+    *,
+    known_results: dict[tuple[str, str], tuple[int, int]] | None = None,
 ) -> tuple[GroupMatchResult, ...]:
-    """Sample a scoreline for each fixture using model.score_probs."""
+    """Sample a scoreline for each fixture using model.score_probs.
+
+    ``known_results`` lets the caller lock in actual scorelines that have
+    already happened (Phase 8: conditional Monte Carlo after match-day kicks
+    off). Keyed by ``(home_team, away_team)`` → ``(home_score, away_score)``;
+    fixtures not in the dict are sampled from the model as usual.
+    """
+    overrides = known_results or {}
     out: list[GroupMatchResult] = []
     for m in fixtures:
-        prob = model.score_probs(m.home_team, m.away_team, neutral=m.neutral)
-        h_g, a_g = sample_scoreline(prob, rng)
+        forced = overrides.get((m.home_team, m.away_team))
+        if forced is not None:
+            h_g, a_g = forced
+        else:
+            prob = model.score_probs(m.home_team, m.away_team, neutral=m.neutral)
+            h_g, a_g = sample_scoreline(prob, rng)
         out.append(
             GroupMatchResult(
                 home_team=m.home_team,
                 away_team=m.away_team,
-                home_score=h_g,
-                away_score=a_g,
+                home_score=int(h_g),
+                away_score=int(a_g),
             )
         )
     return tuple(out)
@@ -280,14 +293,20 @@ def simulate_group(
     rng: np.random.Generator,
     *,
     fifa_ranking: dict[str, int] | None = None,
+    known_results: dict[tuple[str, str], tuple[int, int]] | None = None,
 ) -> GroupResult:
-    """One full group simulation: sample 6 scorelines, rank with tiebreakers."""
+    """One full group simulation: sample 6 scorelines, rank with tiebreakers.
+
+    Fixtures present in ``known_results`` are not sampled — the locked-in
+    scoreline is used. This is the entry point for Phase 8's conditional
+    Monte Carlo rerun after match-day results land.
+    """
     if len(teams) != 4:
         raise ValueError(f"group must have 4 teams, got {len(teams)}")
     if len(fixtures) != 6:
         raise ValueError(f"group must have 6 fixtures, got {len(fixtures)}")
     if any(m.group != group_letter for m in fixtures):
         raise ValueError(f"fixture group mismatch for group {group_letter}")
-    matches = simulate_group_matches(fixtures, model, rng)
+    matches = simulate_group_matches(fixtures, model, rng, known_results=known_results)
     standings = rank_teams(teams, matches, rng, fifa_ranking=fifa_ranking)
     return GroupResult(group=group_letter, matches=matches, standings=standings)

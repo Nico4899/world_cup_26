@@ -61,12 +61,21 @@ def simulate_tournament(
     *,
     fifa_ranking: dict[str, int] | None = None,
     shootout_strategy: ShootoutStrategy | None = None,
+    known_group_results: dict[tuple[str, str], tuple[int, int]] | None = None,
 ) -> TournamentResult:
     """Run a single tournament simulation end-to-end.
 
     ``shootout_strategy``, when provided, replaces the 50/50 coin-flip on every
     shootout (R32 → final). Pass an Elo-based logistic from
     :mod:`wc2026.models.shootout` for slightly better than chance shootout calls.
+
+    ``known_group_results`` (Phase 8) locks in scorelines for group-stage
+    fixtures that have already happened — keyed by ``(home_team, away_team)``.
+    Any fixture not in the dict is sampled from the model as usual. Knockout
+    matches are still sampled (conditioning on knockout results is a future
+    enhancement; the bracket structure depends on the group results, so
+    locking knockouts also requires locking the upstream groups they came
+    from).
     """
     # --- group stage ---
     group_results: dict[str, GroupResult] = {}
@@ -78,6 +87,7 @@ def simulate_tournament(
             model,
             rng,
             fifa_ranking=fifa_ranking,
+            known_results=known_group_results,
         )
 
     winners = {letter: gr.standings[0].team for letter, gr in group_results.items()}
@@ -153,8 +163,14 @@ def simulate_tournament_monte_carlo(
     seed: int = 42,
     fifa_ranking: dict[str, int] | None = None,
     shootout_strategy: ShootoutStrategy | None = None,
+    known_group_results: dict[tuple[str, str], tuple[int, int]] | None = None,
 ) -> TournamentSummary:
-    """Run ``n_sims`` simulations; return per-team advancement probabilities."""
+    """Run ``n_sims`` simulations; return per-team advancement probabilities.
+
+    ``known_group_results`` (Phase 8) is forwarded to every individual
+    simulation, so the same locked-in scorelines apply to all ``n_sims``
+    iterations.
+    """
     if n_sims <= 0:
         raise ValueError(f"n_sims must be positive, got {n_sims}")
     teams = list(fixtures.teams)
@@ -168,6 +184,7 @@ def simulate_tournament_monte_carlo(
             rng,
             fifa_ranking=fifa_ranking,
             shootout_strategy=shootout_strategy,
+            known_group_results=known_group_results,
         )
         _update_counters_from_result(counters, result)
 
