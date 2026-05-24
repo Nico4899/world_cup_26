@@ -226,9 +226,7 @@ def _job_statsbomb_refresh() -> None:
     except ValueError:
         # No rows surfaced (e.g. a fresh `data/raw/statsbomb/` without any
         # event JSONs cached yet). Logged then ignored.
-        logger.warning(
-            "statsbomb refresh: live-win-prob corpus empty — skipping refit"
-        )
+        logger.warning("statsbomb refresh: live-win-prob corpus empty — skipping refit")
     except Exception:
         logger.exception("statsbomb refresh: live-win-prob refit failed")
 

@@ -310,8 +310,8 @@ def test_statsbomb_refresh_chains_live_win_prob_refit(monkeypatch, tmp_path):
     """After the xG shot model refit, statsbomb_refresh also calls
     fit_live_win_prob so both artefacts land in one operator click."""
     import pandas as pd
-
     import scripts.fit_live_win_prob as live_wp_module
+
     import wc2026.ingest.statsbomb_open as sb
     import wc2026.models.xg_shot_model as xg
 
@@ -338,8 +338,8 @@ def test_statsbomb_refresh_swallows_live_win_prob_empty_corpus(monkeypatch, tmp_
     """If the live-win-prob fit raises ValueError (no rows), the xG refit
     still succeeds — neither pulls the other down."""
     import pandas as pd
-
     import scripts.fit_live_win_prob as live_wp_module
+
     import wc2026.ingest.statsbomb_open as sb
     import wc2026.models.xg_shot_model as xg
 
