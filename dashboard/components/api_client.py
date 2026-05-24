@@ -175,3 +175,9 @@ def get_team_squad(team: str) -> dict[str, Any]:
 def get_team_xg_form(team: str) -> dict[str, Any]:
     """Rolling xG-for / xG-against over the last 5 and 10 matches with xG data."""
     return get_json(f"/api/v1/teams/{team}/xg-form")
+
+
+@st.cache_data(ttl=1800, show_spinner="Running 2000-sim path-to-final…")
+def get_team_path_to_final(team: str, n_sims: int = 2000) -> dict[str, Any]:
+    """Round-by-round advancement + most-likely opponent histogram for a team."""
+    return get_json(f"/api/v1/teams/{team}/path-to-final", params={"n_sims": n_sims})
