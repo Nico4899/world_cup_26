@@ -95,10 +95,60 @@ st.caption(
     + ("neutral venue" if fx["neutral"] else f"{fx['home_team']} at home")
 )
 
+def _render_outcome_popover(
+    *, column, label: str, probability: float, class_name: str
+) -> None:
+    """Per-outcome clickable cell that reveals the SHAP top-3 driver list.
+
+    Trades ``st.metric``'s bold visual for a popover button so every probability
+    on the page is reachable from a single click — the spec's "interpretability
+    as headline feature" principle.
+    """
+    with column, st.popover(
+        f"{label}\n\n**{probability:.1%}**", use_container_width=True
+    ):
+        st.markdown(f"**Why {label} = {probability:.1%}?**")
+        try:
+            ex = get_explanation(int(match_id), class_name=class_name, top_n=3)
+        except (APIUnreachable, httpx.HTTPStatusError) as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            if status == 503:
+                st.caption(
+                    "_SHAP explanations require the optional XGB classifier. "
+                    "Train it with `uv run python scripts/refit_xgb.py` and restart_."
+                )
+            else:
+                st.caption("_explanation endpoint unavailable_")
+            return
+        contribs = (ex or {}).get("contributions") or []
+        if not contribs:
+            st.caption("_no contributions returned_")
+            return
+        for c in contribs:
+            sign = "↑" if c["contribution"] >= 0 else "↓"
+            st.write(
+                f"- {sign} **{c['feature']}** "
+                f"(value {('—' if c.get('value') is None else f'{c['value']:+.3f}')}, "
+                f"contribution {c['contribution']:+.3f})"
+            )
+
+
 col_a, col_b, col_c = st.columns(3)
-col_a.metric(fx["home_team"], f"{pred['outcome']['home_win']:.1%}")
-col_b.metric("Draw", f"{pred['outcome']['draw']:.1%}")
-col_c.metric(fx["away_team"], f"{pred['outcome']['away_win']:.1%}")
+_render_outcome_popover(
+    column=col_a,
+    label=fx["home_team"],
+    probability=pred["outcome"]["home_win"],
+    class_name="home_win",
+)
+_render_outcome_popover(
+    column=col_b, label="Draw", probability=pred["outcome"]["draw"], class_name="draw"
+)
+_render_outcome_popover(
+    column=col_c,
+    label=fx["away_team"],
+    probability=pred["outcome"]["away_win"],
+    class_name="away_win",
+)
 
 # --- Phase 5 blend overlay --------------------------------------------------
 # Opt-in sidebar toggle that surfaces the Poisson × XGB geometric mean

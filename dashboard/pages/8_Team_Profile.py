@@ -74,11 +74,41 @@ elif probs.get("champion_p") is None:
         "last refit._"
     )
 else:
+    # Pre-fetch path-to-final so each clickable tile can surface the
+    # most-likely opponent + provenance without round-tripping per click.
+    try:
+        _path_for_tiles = get_team_path_to_final(team)
+    except (APIUnreachable, httpx.HTTPStatusError):
+        _path_for_tiles = {"team": team, "n_sims": 0, "rounds": []}
+    _opp_by_round = {
+        r["round"]: r.get("most_likely_opponent")
+        for r in _path_for_tiles.get("rounds", [])
+    }
+
+    def _render_round_tile(column, label: str, value: float | None, round_key: str) -> None:
+        pct = f"{(value or 0):.1%}"
+        with column, st.popover(f"{label}\n\n**{pct}**", use_container_width=True):
+            st.markdown(
+                f"From persisted run **#{probs['run_id']}** "
+                f"({probs.get('n_sims', '?')} sims, model "
+                f"`{probs.get('model_version', 'unknown')}`)."
+            )
+            opp = _opp_by_round.get(round_key)
+            if opp is not None:
+                st.write(
+                    f"Most-likely opponent at this stage: **{opp['team']}** "
+                    f"({float(opp['p_conditional']):.0%} of paths)."
+                )
+            else:
+                st.caption(
+                    "_Most-likely opponent not yet observed in the path-to-final sample._"
+                )
+
     cols = st.columns(4)
-    cols[0].metric("Champion", f"{(probs.get('champion_p') or 0):.1%}")
-    cols[1].metric("Final", f"{(probs.get('final_p') or 0):.1%}")
-    cols[2].metric("Semifinal", f"{(probs.get('semifinal_p') or 0):.1%}")
-    cols[3].metric("Quarterfinal", f"{(probs.get('quarterfinal_p') or 0):.1%}")
+    _render_round_tile(cols[0], "Champion", probs.get("champion_p"), "final")
+    _render_round_tile(cols[1], "Final", probs.get("final_p"), "sf")
+    _render_round_tile(cols[2], "Semifinal", probs.get("semifinal_p"), "qf")
+    _render_round_tile(cols[3], "Quarterfinal", probs.get("quarterfinal_p"), "r16")
 
     # Path-to-final bar chart: cumulative prob of reaching each round.
     stages = [
