@@ -10,6 +10,7 @@ import {
   ProbabilityLegend,
   type ProbabilitySegment,
 } from "@/components/probability-bar";
+import { HelpDot } from "@/components/help-dot";
 import { WhyPopover } from "@/components/today/why-popover";
 import { apiGet, ApiError, ApiUnreachable } from "@/lib/api";
 import { utcTimeOfDay } from "@/lib/format";
@@ -77,8 +78,9 @@ export async function MatchCard({ fixture }: { fixture: FixtureSummary }) {
         <ProbabilityLegend segments={segments} />
         <div className="flex items-center justify-between text-sm pt-1">
           <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground inline-flex items-center gap-1">
               Expected goals
+              <HelpDot term="xG" />
             </p>
             <p className="font-medium tabular-nums">
               {pred.expected_home_goals.toFixed(2)} - {pred.expected_away_goals.toFixed(2)}

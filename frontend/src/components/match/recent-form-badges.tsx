@@ -1,4 +1,9 @@
 import { apiGet, ApiError, ApiUnreachable } from "@/lib/api";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const COLOR: Record<string, string> = {
   W: "var(--result-win)",
@@ -44,14 +49,21 @@ export async function RecentFormBadges({
     <div className="space-y-1">
       <div className="flex flex-wrap gap-1">
         {form.map((m, i) => (
-          <span
-            key={i}
-            title={`${m.date} ${team} ${m.goals_for}-${m.goals_against} ${m.opponent} (${m.venue}, ${m.tournament})`}
-            className="inline-flex items-center justify-center rounded px-2 py-0.5 text-xs font-semibold text-white"
-            style={{ background: COLOR[m.result] ?? "#666" }}
-          >
-            {m.result}
-          </span>
+          <Tooltip key={i}>
+            <TooltipTrigger
+              className="inline-flex items-center justify-center rounded px-2 py-0.5 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ background: COLOR[m.result] ?? "#666" }}
+              aria-label={`${m.result} ${m.goals_for}-${m.goals_against} ${m.venue === "away" ? "@" : "vs"} ${m.opponent} on ${m.date}`}
+            >
+              {m.result}
+            </TooltipTrigger>
+            <TooltipContent>
+              <span className="tabular-nums">
+                {m.date} · {team} {m.goals_for}-{m.goals_against}{" "}
+                {m.opponent} ({m.venue}, {m.tournament})
+              </span>
+            </TooltipContent>
+          </Tooltip>
         ))}
       </div>
       <p className="text-[11px] text-muted-foreground">

@@ -8,6 +8,7 @@ import {
   type LiveGroupTeam,
 } from "@/components/groups/group-card";
 import { NSimsSlider } from "@/components/groups/n-sims-slider";
+import { TermHelp } from "@/components/help-dot";
 
 type StandingsResponse = {
   n_sims: number;
@@ -86,9 +87,11 @@ export default async function GroupsPage({
       </header>
 
       <p className="text-xs text-muted-foreground">
-        Each row shows where the model thinks a team will finish. Top 2 + 8 best
-        3rd-placed teams advance to the Round of 32. Bars stack: 1st (dark blue),
-        2nd (sky), 3rd→R32 (amber), 3rd-out (light), 4th (grey).
+        Each bar is the model&apos;s odds of how a team finishes its group.
+        Top 2 + 8{" "}
+        <TermHelp term="best-3rd">best 3rd-placed teams</TermHelp> advance to
+        the <TermHelp term="R32">Round of 32</TermHelp>. Colours stack 1st →
+        4th: navy, mid-blue, mint (advances), pink (eliminated), faded.
       </p>
 
       <div className="rounded-lg border bg-card p-4">

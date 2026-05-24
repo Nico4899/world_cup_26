@@ -4,6 +4,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { Slider } from "@/components/ui/slider";
+import { HelpDot } from "@/components/help-dot";
 
 type Props = { initial: number };
 
@@ -28,8 +29,9 @@ export function NSimsSlider({ initial }: Props) {
   return (
     <div className="space-y-2">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-xs uppercase tracking-wide text-muted-foreground">
+        <span className="text-xs uppercase tracking-wide text-muted-foreground inline-flex items-center">
           Monte Carlo simulations
+          <HelpDot term="Monte Carlo" />
         </span>
         <span className="text-sm font-medium tabular-nums">
           {value.toLocaleString()}

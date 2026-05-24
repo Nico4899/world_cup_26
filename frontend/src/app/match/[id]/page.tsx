@@ -14,6 +14,7 @@ import { RecentFormBadges } from "@/components/match/recent-form-badges";
 import { LiveSection } from "@/components/match/live-section";
 import { DownloadableCard } from "@/components/downloadable-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HelpDot } from "@/components/help-dot";
 import { utcTimeOfDay } from "@/lib/format";
 import type { FixtureWithPrediction } from "@/lib/types";
 
@@ -74,6 +75,10 @@ export default async function MatchDetailPage({
           </div>
         </div>
         <ForecastHeader />
+        <p className="text-xs text-muted-foreground">
+          Tap any outcome to see the top features driving it. The score grid
+          below shows the probability of every result from 0-0 to 5-5.
+        </p>
       </header>
 
       <section className="space-y-2">
@@ -95,7 +100,12 @@ export default async function MatchDetailPage({
 
       {prediction.score_matrix ? (
         <DownloadableCard
-          title="Joint score probability"
+          title={
+            <span className="inline-flex items-center gap-1">
+              Joint score probability
+              <HelpDot term="joint score probability" />
+            </span>
+          }
           filename={`heatmap-${fixture.home_team}-${fixture.away_team}`}
         >
           <ProbHeatmap

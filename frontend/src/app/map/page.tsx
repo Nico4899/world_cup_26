@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { HostCityMap } from "@/components/map/host-city-map";
 import { ALL_CITIES, FixtureList } from "@/components/map/fixture-list";
+import { TermHelp } from "@/components/help-dot";
 
 /**
  * /map — clicking a pin on the deck.gl map filters the fixture table below,
@@ -18,9 +19,9 @@ export default function MapPage() {
       <header className="space-y-2">
         <h1 className="ds-h1">Host-city map</h1>
         <p className="text-xs text-muted-foreground">
-          16 host venues across USA (11) + Mexico (3) + Canada (2).
-          Click a pin to filter the fixture list, or pick a city from the
-          dropdown to highlight the pin.
+          16 <TermHelp term="host venue">host venues</TermHelp> across the USA
+          (11), Mexico (3), and Canada (2). Click a pin to filter the fixture
+          list below, or pick a city from the dropdown to highlight the pin.
         </p>
       </header>
       <HostCityMap

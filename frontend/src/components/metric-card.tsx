@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type MetricCardProps = {
-  /** Top-line label (e.g. "Argentina", "Champion"). */
-  label: string;
+  /** Top-line label. Accepts ReactNode so callers can append a
+   *  `<HelpDot/>` for inline glossary lookup. */
+  label: ReactNode;
   /** Big value (e.g. "48.2%", "192", "+0.74"). */
   value: string;
   /** Optional small caption below the value. */
@@ -47,9 +48,9 @@ export function MetricCard({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+        <div className="text-xs uppercase tracking-wide text-muted-foreground inline-flex items-center gap-1">
           {label}
-        </p>
+        </div>
         {popover ? (
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
         ) : null}

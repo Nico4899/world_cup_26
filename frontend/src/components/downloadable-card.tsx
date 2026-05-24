@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePngDownload } from "@/hooks/use-png-download";
 
 type Props = {
-  title: string;
+  /** Card title. Accepts ReactNode so callers can append inline help affordances. */
+  title: ReactNode;
   filename: string;
   children: ReactNode;
 };

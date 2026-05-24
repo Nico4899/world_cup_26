@@ -36,6 +36,7 @@ import {
 import { ApiError, ApiUnreachable, apiGet, apiPost } from "@/lib/api";
 import { pct } from "@/lib/format";
 import { useLockedBracket, type Lock } from "@/hooks/use-locked-bracket";
+import { HelpDot, TermHelp } from "@/components/help-dot";
 import type { FixtureSummary } from "@/lib/types";
 
 type Mode = "single" | "scenarios" | "locks";
@@ -99,9 +100,13 @@ function BracketPageInner() {
       <header className="space-y-2">
         <h1 className="ds-h1">Knockout bracket realisation(s)</h1>
         <p className="text-xs text-muted-foreground">
-          Each seed gives one Monte Carlo sample of the full knockout bracket.
-          Compare scenarios to see how much the predicted champion / finalists
-          vary across realisations. Per-team probabilities are on the Groups page.
+          Each seed plays the knockout once — a single{" "}
+          <TermHelp term="realisation">realisation</TermHelp> from the{" "}
+          <TermHelp term="Monte Carlo">Monte Carlo</TermHelp> simulator.
+          Compare seeds to see how much the predicted champion swings,
+          or pin a knockout result under <strong>Conditional locks</strong>
+          <HelpDot term="conditional locks" /> to fix one outcome and replay
+          the rest. Per-team probabilities live on the Groups page.
         </p>
       </header>
 

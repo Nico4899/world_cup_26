@@ -16,6 +16,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { HelpDot } from "@/components/help-dot";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { pct, signed } from "@/lib/format";
 import type { FixtureSummary } from "@/lib/types";
 
@@ -248,7 +254,15 @@ export default async function TeamProfilePage({
       </Card>
 
       {elo && elo.history.length > 0 ? (
-        <DownloadableCard title="Elo rating history" filename={`elo-history-${team}`}>
+        <DownloadableCard
+          title={
+            <span className="inline-flex items-center gap-1">
+              Elo rating history
+              <HelpDot term="Elo" />
+            </span>
+          }
+          filename={`elo-history-${team}`}
+        >
           <EloLine history={elo.history} />
           <p className="text-xs text-muted-foreground mt-2">
             {elo.history.length} daily snapshots. Most recent:{" "}
@@ -284,14 +298,21 @@ export default async function TeamProfilePage({
             <div className="space-y-1">
               <div className="flex flex-wrap gap-1">
                 {form.map((m, i) => (
-                  <span
-                    key={i}
-                    title={`${m.date} ${team} ${m.goals_for}-${m.goals_against} ${m.opponent} (${m.venue}, ${m.tournament})`}
-                    className="inline-flex items-center justify-center rounded px-2 py-0.5 text-xs font-semibold text-white"
-                    style={{ background: RESULT_COLOR[m.result] }}
-                  >
-                    {m.result}
-                  </span>
+                  <Tooltip key={i}>
+                    <TooltipTrigger
+                      className="inline-flex items-center justify-center rounded px-2 py-0.5 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      style={{ background: RESULT_COLOR[m.result] }}
+                      aria-label={`${m.result} ${m.goals_for}-${m.goals_against} ${m.venue === "away" ? "@" : "vs"} ${m.opponent} on ${m.date}`}
+                    >
+                      {m.result}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <span className="tabular-nums">
+                        {m.date} · {team} {m.goals_for}-{m.goals_against}{" "}
+                        {m.opponent} ({m.venue}, {m.tournament})
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>
                 ))}
               </div>
               <p className="text-[11px] text-muted-foreground">
@@ -326,7 +347,10 @@ export default async function TeamProfilePage({
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">xG form</CardTitle>
+          <CardTitle className="text-base inline-flex items-center gap-1">
+            xG form
+            <HelpDot term="xG" />
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {!xg || (xg.last_10.matches === 0 && xg.last_12_months.matches === 0) ? (
@@ -413,9 +437,9 @@ function FifaSummary({ history }: { history: FifaRanks["history"] }) {
           value={latest.points != null ? latest.points.toFixed(0) : "—"}
         />
         <MetricCard
-          label="Δ since prev. snapshot"
+          label={<>Δ since prev. snapshot <HelpDot term="delta" /></>}
           value={delta == null ? "—" : signed(delta, 0)}
-          help="Positive = climbed, negative = fell."
+          help="Positive = climbed (rank went down)."
         />
       </div>
     </div>

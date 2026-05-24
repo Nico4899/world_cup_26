@@ -5,6 +5,7 @@ import { HelpCircle } from "lucide-react";
 
 import { ApiError, apiGet } from "@/lib/api";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { TermHelp } from "@/components/help-dot";
 import { signed, pct } from "@/lib/format";
 
 type Contribution = { feature: string; value: number | null; contribution: number };
@@ -76,8 +77,10 @@ function WhyBody({
   return (
     <div className="space-y-2 text-sm">
       <p>
-        <span className="font-medium">Expected goals:</span> {homeTeam}{" "}
-        <strong>{expectedHomeGoals.toFixed(2)}</strong> vs {awayTeam}{" "}
+        <span className="font-medium">
+          <TermHelp term="xG">Expected goals</TermHelp>:
+        </span>{" "}
+        {homeTeam} <strong>{expectedHomeGoals.toFixed(2)}</strong> vs {awayTeam}{" "}
         <strong>{expectedAwayGoals.toFixed(2)}</strong> ({edge}).
       </p>
       <p>
@@ -118,7 +121,10 @@ function ShapTop3({ matchId }: { matchId: number }) {
   if (contribs.length === 0) return null;
   return (
     <div className="border-t pt-2 space-y-1">
-      <p className="text-xs font-medium">Top model contributions (toward home win):</p>
+      <p className="text-xs font-medium">
+        Top model contributions (
+        <TermHelp term="SHAP">SHAP</TermHelp>, toward home win):
+      </p>
       <ul className="text-xs space-y-0.5">
         {contribs.map((c) => {
           const sign = c.contribution >= 0 ? "↑" : "↓";

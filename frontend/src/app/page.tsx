@@ -45,6 +45,11 @@ export default async function TodayPage({
       <header className="space-y-2">
         <h1 className="ds-h1">Today&apos;s predictions</h1>
         <ForecastHeader />
+        <p className="text-xs text-muted-foreground">
+          Every match scheduled today, with the model&apos;s predicted outcome
+          and the three most-likely scorelines. Tap any card for the full
+          breakdown.
+        </p>
       </header>
 
       <DatePicker initial={date} />
