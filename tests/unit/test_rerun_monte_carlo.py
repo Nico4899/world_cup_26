@@ -112,17 +112,17 @@ def test_rerun_and_persist_writes_to_db_with_no_known_results(
             _ = home, away, neutral
             return (1.0, 0.0)
 
-    monkeypatch.setattr(mcr, "_hydrate_model", lambda *_a, **_k: _FakeModel())
-    monkeypatch.setattr(mcr, "_load_match_id_map", lambda: {})
+    monkeypatch.setattr(mcr, "hydrate_from_artefact", lambda *_a, **_k: _FakeModel())
+    monkeypatch.setattr(mcr, "load_wc_match_id_map", lambda: {})
 
     # Pretend the artefact exists so the pre-flight check passes.
     artefact = tmp_path / "model.npz"
     artefact.write_bytes(b"\x00")
 
     # The simulator uses real fixtures; patch fixtures load too.
-    fixtures = mcr._load_fixtures()
+    fixtures = mcr.load_wc2026_fixtures()
 
-    monkeypatch.setattr(mcr, "_load_fixtures", lambda: fixtures)
+    monkeypatch.setattr(mcr, "load_wc2026_fixtures", lambda: fixtures)
 
     # Use a small n_sims so the test stays fast.
     run_id = mcr.rerun_and_persist(
@@ -156,13 +156,13 @@ def test_rerun_loads_known_results_from_live_events(monkeypatch, sqlite_engine, 
         def expected_goals(self, home, away, *, neutral=False):
             return (1.0, 0.0)
 
-    monkeypatch.setattr(mcr, "_hydrate_model", lambda *_a, **_k: _FakeModel())
-    fixtures = mcr._load_fixtures()
-    monkeypatch.setattr(mcr, "_load_fixtures", lambda: fixtures)
+    monkeypatch.setattr(mcr, "hydrate_from_artefact", lambda *_a, **_k: _FakeModel())
+    fixtures = mcr.load_wc2026_fixtures()
+    monkeypatch.setattr(mcr, "load_wc2026_fixtures", lambda: fixtures)
     # Map FDO match_id 1 → the first WC 2026 fixture (Mexico vs Senegal).
     first = fixtures.matches[0]
     mapping = {1: (date(2026, 6, 11), first.home_team, first.away_team)}
-    monkeypatch.setattr(mcr, "_load_match_id_map", lambda: mapping)
+    monkeypatch.setattr(mcr, "load_wc_match_id_map", lambda: mapping)
     # Seed a FT_WHISTLE row so the known-results map is non-empty.
     _seed_ft_whistle(sqlite_engine, match_id=1, h=4, a=0)
 

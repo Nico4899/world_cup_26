@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from wc2026.db.session import get_engine
 from wc2026.eval.rolling import RollingCalibration, compute_rolling
+from wc2026.ingest.football_data_org import load_wc_match_id_map
 
 logger = logging.getLogger(__name__)
 
@@ -56,48 +57,6 @@ class WC2026TrackRecord(BaseModel):
     per_match: list[PerMatchCalibrationRow]
 
 
-def _build_match_id_map(request: Request) -> dict[int, tuple[date, str, str]]:
-    """Resolve football-data.org match_id → (date, home, away) via the cached fixtures.
-
-    Returns an empty dict when no cache is on disk; callers then surface an
-    empty calibration ("no events ingested yet") rather than 500.
-    """
-    try:
-        from wc2026.ingest.football_data_org import (  # noqa: PLC0415
-            WC_COMPETITION_CODE,
-            fetch_competition_matches,
-        )
-
-        df = fetch_competition_matches(WC_COMPETITION_CODE)
-    except Exception:  # broad: caches/keys/network all roll up the same here
-        logger.debug("football-data.org cache unavailable for track-record map", exc_info=True)
-        return {}
-    out: dict[int, tuple[date, str, str]] = {}
-    if df.empty:
-        return out
-    for _, row in df.iterrows():
-        match_id = row.get("match_id")
-        utc_date = row.get("utc_date")
-        home = row.get("home_team")
-        away = row.get("away_team")
-        if match_id is None or utc_date is None or home is None or away is None:
-            continue
-        try:
-            d = (
-                utc_date.date()
-                if hasattr(utc_date, "date")
-                else date.fromisoformat(str(utc_date)[:10])
-            )
-            out[int(match_id)] = (d, str(home), str(away))
-        except (TypeError, ValueError):
-            continue
-    # The route also has access to ``request.app.state.feature_sources`` etc.,
-    # but football-data.org is the only place the int match_id is defined, so
-    # there's nothing else to merge in here.
-    _ = request
-    return out
-
-
 def _serialize(calibration: RollingCalibration) -> WC2026TrackRecord:
     return WC2026TrackRecord(
         n_completed=calibration.n_completed,
@@ -110,7 +69,8 @@ def _serialize(calibration: RollingCalibration) -> WC2026TrackRecord:
 
 @router.get("/wc2026", response_model=WC2026TrackRecord)
 def wc2026_track_record(request: Request) -> WC2026TrackRecord:
-    mapping = _build_match_id_map(request)
+    _ = request  # FastAPI passes the request; we don't currently need it.
+    mapping = load_wc_match_id_map()
     try:
         eng = get_engine()
         result = compute_rolling(match_id_to_fixture=mapping, engine=eng)

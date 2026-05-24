@@ -690,7 +690,7 @@ def test_wc2026_track_record_returns_zero_when_no_fixtures_or_events(
     """No football-data.org cache + no live events → empty calibration, not 500."""
     from wc2026.api.routes import track_record as tr
 
-    monkeypatch.setattr(tr, "_build_match_id_map", lambda _req: {})
+    monkeypatch.setattr(tr, "load_wc_match_id_map", lambda: {})
     r = client.get("/api/v1/track-record/wc2026")
     assert r.status_code == 200
     body = r.json()
@@ -734,7 +734,7 @@ def test_wc2026_track_record_aggregates_when_event_and_prediction_present(
         ],
     )
     monkeypatch.setattr(
-        tr, "_build_match_id_map", lambda _req: {1: (_dt.date(2026, 6, 11), "Mexico", "Senegal")}
+        tr, "load_wc_match_id_map", lambda: {1: (_dt.date(2026, 6, 11), "Mexico", "Senegal")}
     )
     monkeypatch.setattr(tr, "compute_rolling", lambda **_kw: canned)
     r = client.get("/api/v1/track-record/wc2026")
@@ -912,7 +912,7 @@ def test_wc2026_track_record_returns_503_on_db_error(client: TestClient, monkeyp
     def boom(**_):
         raise RuntimeError("Postgres unreachable")
 
-    monkeypatch.setattr(tr, "_build_match_id_map", lambda _req: {})
+    monkeypatch.setattr(tr, "load_wc_match_id_map", lambda: {})
     monkeypatch.setattr(tr, "compute_rolling", boom)
     r = client.get("/api/v1/track-record/wc2026")
     assert r.status_code == 503

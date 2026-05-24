@@ -39,14 +39,14 @@ def _fitted_model() -> PoissonDC:
 
 
 def test_build_prediction_rows_emits_one_row_per_fixture() -> None:
-    fixtures = p._load_fixtures()
+    fixtures = p.load_wc2026_fixtures()
     rows = p.build_prediction_rows(fixtures.matches, _fitted_model())
     assert len(rows) == 72
     assert {r["model_version"] for r in rows} == {"poisson_dc.v1"}
 
 
 def test_build_prediction_rows_probabilities_sum_to_one() -> None:
-    fixtures = p._load_fixtures()
+    fixtures = p.load_wc2026_fixtures()
     rows = p.build_prediction_rows(fixtures.matches, _fitted_model())
     for row in rows:
         s = row["p_home"] + row["p_draw"] + row["p_away"]
@@ -54,7 +54,7 @@ def test_build_prediction_rows_probabilities_sum_to_one() -> None:
 
 
 def test_build_prediction_rows_carries_score_matrix_by_default() -> None:
-    fixtures = p._load_fixtures()
+    fixtures = p.load_wc2026_fixtures()
     rows = p.build_prediction_rows(fixtures.matches[:3], _fitted_model())
     for row in rows:
         matrix = row["score_matrix_json"]
@@ -65,7 +65,7 @@ def test_build_prediction_rows_carries_score_matrix_by_default() -> None:
 
 
 def test_build_prediction_rows_skips_matrix_when_requested() -> None:
-    fixtures = p._load_fixtures()
+    fixtures = p.load_wc2026_fixtures()
     rows = p.build_prediction_rows(fixtures.matches[:3], _fitted_model(), include_matrix=False)
     for row in rows:
         assert row["score_matrix_json"] is None
@@ -91,7 +91,7 @@ def test_build_prediction_rows_uses_uniform_fallback_for_unknown_team(monkeypatc
 
 
 def test_persist_rows_writes_to_db(sqlite_engine) -> None:
-    fixtures = p._load_fixtures()
+    fixtures = p.load_wc2026_fixtures()
     rows = p.build_prediction_rows(fixtures.matches[:5], _fitted_model())
     n = p.persist_rows(rows, engine=sqlite_engine)
     assert n == 5
@@ -102,7 +102,7 @@ def test_persist_rows_writes_to_db(sqlite_engine) -> None:
 
 def test_persist_rows_accumulates_daily_snapshots(sqlite_engine) -> None:
     """Two calls with different created_at append (no unique key on the natural fields)."""
-    fixtures = p._load_fixtures()
+    fixtures = p.load_wc2026_fixtures()
     day1 = datetime(2026, 5, 23, tzinfo=UTC)
     day2 = datetime(2026, 5, 24, tzinfo=UTC)
     rows1 = p.build_prediction_rows(fixtures.matches[:3], _fitted_model(), now=day1)
