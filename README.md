@@ -23,7 +23,7 @@ Personal / educational project. Honesty about uncertainty is the headline featur
 - [x] Stage 1.A — DB layer (Postgres + Alembic), football-data.org ingester, APScheduler, Dockerfile.app, CI
 - [x] Stage 1.B — Elo prior + isotonic recalibration (research artefacts; degraded WC 2022 log-loss, kept for documentation), real Elo-weighted shootout submodel (integrated)
 - [x] Stage 1.C — FastAPI app + Streamlit dashboard
-- [ ] Stage 2 — revive every deferred blueprint item (XGBoost+SHAP blend, xG features, live win-prob+SSE, Team Profile, interactive bracket, PyDeck map, TheSportsDB assets, Sentry, Fly.io deploy). See [`/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md`](/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md).
+- [x] Stage 2 — every deferred blueprint item shipped over 11 phases (XGBoost+SHAP blend as research artefact, live win-prob + SSE, Team Profile, scenario-comparison bracket, host-city map, TheSportsDB / StatsBomb / FBref / openfootball / Wikipedia ingesters, Sentry, S3/R2 backups, Fly.io config + runbook). Per-phase breakdown below.
 
 ## Decision-gate results (Stage 0.7)
 
@@ -46,19 +46,6 @@ Comparison to published bookmaker numbers (Wheatcroft 2019; Constantinou 2019):
 The 5 most-surprising WC 2022 results the model flagged as long-shots (each given <13% probability) are exactly the famous upsets: Argentina 1-2 Saudi Arabia, Cameroon 1-0 Brazil, Japan 2-1 Spain, Tunisia 1-0 France, South Korea 2-1 Portugal. Calibrated long-shot detection works.
 
 **Dashboard implications**: framing must be "the model thinks X" not "the answer is X". A 14% favourite (Argentina for WC 2026) loses 86% of the time.
-
-## Approach
-
-- **Pre-match model**: weighted bivariate Poisson + Dixon–Coles correction, weighted MLE with analytic gradient, sum-to-zero identifiability on attack/defence vectors. Time decay half-life 10 years (tuned), tournament-importance weights per the World Football Elo K-factor schedule.
-- **Tournament simulator**: Monte Carlo (~3ms per full tournament), respecting 12 groups → 8 best-thirds → R32 with the published 2026 third-placed slot eligibility table (all 495 advancing-set scenarios produce a valid bipartite matching).
-- **Calibration**: every backtest run produces reliability diagrams, Brier score, log-loss, and Ranked Probability Score.
-- **Known limitations** (see also the plan file):
-  - Group letters A-L are derived from fixture dates, not FIFA's published assignment.
-  - FIFA tiebreaker chain follows the 2026 regulations (H2H before overall GD/GS, no drawing of lots); a deterministic rng-seeded fallback is used inside the simulator when FIFA ranking is unavailable for the tied teams.
-  - Penalty shootout is a 50/50 placeholder; a proper Dawson-style submodel is a Stage 1 candidate.
-  - No Elo prior, no injury/suspension override, no XGBoost ensemble layer (deferred).
-
-See [`/Users/nico/.claude/plans/extensively-review-and-understand-iterative-fern.md`](/Users/nico/.claude/plans/extensively-review-and-understand-iterative-fern.md) for the full plan and review.
 
 ## Dev setup
 
