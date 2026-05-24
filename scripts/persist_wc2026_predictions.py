@@ -27,7 +27,6 @@ from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pandas as pd
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -148,15 +147,11 @@ def persist_daily_snapshot(
         )
         return 0
     if not artefact_path.exists():
-        logger.warning(
-            "no PoissonDC artefact at %s — run refit_poisson_dc first", artefact_path
-        )
+        logger.warning("no PoissonDC artefact at %s — run refit_poisson_dc first", artefact_path)
         return 0
     model = _hydrate_model(artefact_path)
     fixtures = _load_fixtures()
-    rows = build_prediction_rows(
-        fixtures.matches, model, model_version=model_version, now=now
-    )
+    rows = build_prediction_rows(fixtures.matches, model, model_version=model_version, now=now)
     eng = engine or get_engine()
     n = persist_rows(rows, engine=eng)
     logger.info("persisted %d WC 2026 prediction rows (model_version=%s)", n, model_version)
@@ -176,9 +171,7 @@ def main() -> int:
         help=f"Model-version tag for the persisted rows (default: {DEFAULT_MODEL_VERSION}).",
     )
     args = parser.parse_args()
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     persist_daily_snapshot(
         artefact_path=Path(args.artefact),
         model_version=args.model_version,

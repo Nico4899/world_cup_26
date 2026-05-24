@@ -10,9 +10,9 @@ from datetime import UTC, datetime
 
 import pandas as pd
 import pytest
+import scripts.persist_wc2026_predictions as p
 from sqlalchemy import create_engine, select
 
-import scripts.persist_wc2026_predictions as p
 from wc2026.db.models import Base, ModelPrediction
 from wc2026.features.match_weights import combined_weight
 from wc2026.ingest.kaggle_intl import load_played
@@ -34,9 +34,7 @@ def _fitted_model() -> PoissonDC:
     df = load_played()
     cutoff = pd.Timestamp("2020-01-01")
     train = df[df["date"] >= cutoff].reset_index(drop=True)
-    weights = combined_weight(
-        train, ref_date=pd.Timestamp("2025-01-01"), half_life_days=3650.0
-    )
+    weights = combined_weight(train, ref_date=pd.Timestamp("2025-01-01"), half_life_days=3650.0)
     return PoissonDC().fit(train, weights=weights)
 
 
@@ -68,9 +66,7 @@ def test_build_prediction_rows_carries_score_matrix_by_default() -> None:
 
 def test_build_prediction_rows_skips_matrix_when_requested() -> None:
     fixtures = p._load_fixtures()
-    rows = p.build_prediction_rows(
-        fixtures.matches[:3], _fitted_model(), include_matrix=False
-    )
+    rows = p.build_prediction_rows(fixtures.matches[:3], _fitted_model(), include_matrix=False)
     for row in rows:
         assert row["score_matrix_json"] is None
 

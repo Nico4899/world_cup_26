@@ -733,7 +733,9 @@ def test_wc2026_track_record_aggregates_when_event_and_prediction_present(
             )
         ],
     )
-    monkeypatch.setattr(tr, "_build_match_id_map", lambda _req: {1: (_dt.date(2026, 6, 11), "Mexico", "Senegal")})
+    monkeypatch.setattr(
+        tr, "_build_match_id_map", lambda _req: {1: (_dt.date(2026, 6, 11), "Mexico", "Senegal")}
+    )
     monkeypatch.setattr(tr, "compute_rolling", lambda **_kw: canned)
     r = client.get("/api/v1/track-record/wc2026")
     assert r.status_code == 200

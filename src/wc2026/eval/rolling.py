@@ -17,7 +17,7 @@ apples comparison against the WC 2018 + WC 2022 baselines.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pandas as pd
@@ -97,9 +97,7 @@ def load_completed_matches(
         )
     with Session(engine, future=True) as session:
         rows = list(
-            session.scalars(
-                select(RawLiveEvent).where(RawLiveEvent.event_type == EVENT_FT_WHISTLE)
-            )
+            session.scalars(select(RawLiveEvent).where(RawLiveEvent.event_type == EVENT_FT_WHISTLE))
         )
     out_rows: list[dict[str, Any]] = []
     for r in rows:
@@ -144,8 +142,6 @@ def _start_of_match_day(match_date: date):
     persisted *after* the match starts (e.g. by a refit job that runs the
     same day) does not.
     """
-    from datetime import UTC, datetime
-
     return datetime(match_date.year, match_date.month, match_date.day, tzinfo=UTC)
 
 
@@ -247,12 +243,10 @@ def compute_rolling(
     eng = engine or get_engine()
     completed = load_completed_matches(eng, match_id_to_fixture=match_id_to_fixture)
     if completed.empty:
-        return RollingCalibration(
-            n_completed=0, log_loss=None, brier=None, rps=None, per_match=[]
-        )
+        return RollingCalibration(n_completed=0, log_loss=None, brier=None, rps=None, per_match=[])
     with Session(eng, future=True) as session:
         # Cheap: pull every WC 2026 prediction row in one query. Even with 14
-        # daily snapshots per fixture × 72 fixtures the result fits in memory.
+        # daily snapshots per fixture x 72 fixtures the result fits in memory.
         match_dates = [c[0] for c in match_id_to_fixture.values()]
         stmt = select(ModelPrediction).where(ModelPrediction.match_date.in_(match_dates))
         preds = pd.DataFrame(

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -84,7 +83,11 @@ def _build_match_id_map(request: Request) -> dict[int, tuple[date, str, str]]:
         if match_id is None or utc_date is None or home is None or away is None:
             continue
         try:
-            d = utc_date.date() if hasattr(utc_date, "date") else date.fromisoformat(str(utc_date)[:10])
+            d = (
+                utc_date.date()
+                if hasattr(utc_date, "date")
+                else date.fromisoformat(str(utc_date)[:10])
+            )
             out[int(match_id)] = (d, str(home), str(away))
         except (TypeError, ValueError):
             continue
@@ -101,9 +104,7 @@ def _serialize(calibration: RollingCalibration) -> WC2026TrackRecord:
         log_loss=calibration.log_loss,
         brier=calibration.brier,
         rps=calibration.rps,
-        per_match=[
-            PerMatchCalibrationRow(**row.__dict__) for row in calibration.per_match
-        ],
+        per_match=[PerMatchCalibrationRow(**row.__dict__) for row in calibration.per_match],
     )
 
 

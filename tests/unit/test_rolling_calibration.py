@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 
 import pandas as pd
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from wc2026.db.models import Base, ModelPrediction, RawLiveEvent
@@ -100,7 +100,11 @@ def test_compute_rolling_picks_latest_pre_match_prediction() -> None:
     )
     preds = pd.DataFrame([older, newer])
     completed = pd.DataFrame(
-        [_completed_row(match_date=match_date, home="Mexico", away="Senegal", home_score=2, away_score=0)]
+        [
+            _completed_row(
+                match_date=match_date, home="Mexico", away="Senegal", home_score=2, away_score=0
+            )
+        ]
     )
     result = compute_rolling_from_dfs(preds, completed)
     assert result.n_completed == 1
@@ -130,7 +134,11 @@ def test_compute_rolling_excludes_predictions_made_after_kickoff() -> None:
     )
     preds = pd.DataFrame([pre, post])
     completed = pd.DataFrame(
-        [_completed_row(match_date=match_date, home="Mexico", away="Senegal", home_score=1, away_score=0)]
+        [
+            _completed_row(
+                match_date=match_date, home="Mexico", away="Senegal", home_score=1, away_score=0
+            )
+        ]
     )
     result = compute_rolling_from_dfs(preds, completed)
     assert result.per_match[0].p_home == 0.45
@@ -155,7 +163,11 @@ def test_compute_rolling_computes_log_loss_brier_rps() -> None:
         ]
     )
     completed = pd.DataFrame(
-        [_completed_row(match_date=match_date, home="Argentina", away="France", home_score=2, away_score=1)]
+        [
+            _completed_row(
+                match_date=match_date, home="Argentina", away="France", home_score=2, away_score=1
+            )
+        ]
     )
     result = compute_rolling_from_dfs(preds, completed)
     assert result.n_completed == 1
@@ -170,21 +182,33 @@ def test_compute_rolling_aggregates_over_multiple_completed_matches() -> None:
     preds = pd.DataFrame(
         [
             _pred_row(
-                match_date=match_a, home="Mexico", away="Senegal",
-                p_h=0.6, p_d=0.25, p_a=0.15,
+                match_date=match_a,
+                home="Mexico",
+                away="Senegal",
+                p_h=0.6,
+                p_d=0.25,
+                p_a=0.15,
                 created_at=datetime(2026, 6, 10, tzinfo=UTC),
             ),
             _pred_row(
-                match_date=match_b, home="Argentina", away="France",
-                p_h=0.4, p_d=0.30, p_a=0.30,
+                match_date=match_b,
+                home="Argentina",
+                away="France",
+                p_h=0.4,
+                p_d=0.30,
+                p_a=0.30,
                 created_at=datetime(2026, 6, 11, tzinfo=UTC),
             ),
         ]
     )
     completed = pd.DataFrame(
         [
-            _completed_row(match_date=match_a, home="Mexico", away="Senegal", home_score=2, away_score=0),
-            _completed_row(match_date=match_b, home="Argentina", away="France", home_score=0, away_score=1),
+            _completed_row(
+                match_date=match_a, home="Mexico", away="Senegal", home_score=2, away_score=0
+            ),
+            _completed_row(
+                match_date=match_b, home="Argentina", away="France", home_score=0, away_score=1
+            ),
         ]
     )
     result = compute_rolling_from_dfs(preds, completed)
@@ -196,7 +220,11 @@ def test_compute_rolling_skips_matches_without_predictions() -> None:
     """A completed match without any pre-match prediction is silently skipped."""
     match_date = date(2026, 6, 11)
     completed = pd.DataFrame(
-        [_completed_row(match_date=match_date, home="Mexico", away="Senegal", home_score=1, away_score=0)]
+        [
+            _completed_row(
+                match_date=match_date, home="Mexico", away="Senegal", home_score=1, away_score=0
+            )
+        ]
     )
     result = compute_rolling_from_dfs(pd.DataFrame(), completed)
     assert result.n_completed == 0
