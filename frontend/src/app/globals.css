@@ -215,6 +215,88 @@
   }
 }
 
+/* =============================================================================
+   Semantic typography (.ds-* classes).
+   Sizes / weights mirror what the React components reach for via Tailwind;
+   the classes exist for elements where the Tailwind utility soup would
+   muddle intent (page headers, captions, big-number tiles).
+   ========================================================================== */
+@layer components {
+  /* Display-tier rule (v2): the page h1 is the ONE place case + weight
+     separate from the rest of the scale. We render uppercase + 700 +
+     tracking so the page title reads as a "title plate" rather than
+     "h2 at a bigger size". Source text stays sentence case — the
+     transform is purely visual, so screen readers and copy/paste are
+     unaffected. Do NOT propagate this treatment to h2, card titles,
+     or scorelines: that's what gives the move its contrast. */
+  .ds-h1 {
+    font-family: var(--font-sans);
+    font-size: 1.5rem; /* text-2xl */
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.035em;
+    line-height: 1.15;
+  }
+  .ds-h2 {
+    font-family: var(--font-sans);
+    font-size: 1.125rem; /* text-lg */
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .ds-h3 {
+    font-family: var(--font-sans);
+    font-size: 1rem; /* text-base */
+    font-weight: 500;
+    line-height: 1.35;
+  }
+  .ds-card-title {
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+  .ds-p {
+    font-size: 0.875rem; /* text-sm */
+    line-height: 1.5;
+    color: var(--foreground);
+  }
+  .ds-caption {
+    font-size: 0.75rem; /* text-xs */
+    color: var(--muted-foreground);
+    line-height: 1.4;
+  }
+  .ds-overline {
+    font-size: 0.75rem;
+    font-weight: 400;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .ds-metric {
+    font-size: 1.5rem; /* text-2xl */
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .ds-nav {
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.2;
+  }
+  .ds-num {
+    font-variant-numeric: tabular-nums;
+  }
+  .ds-code,
+  .ds-mono {
+    font-family: var(--font-geist-mono);
+    font-size: 0.8125rem;
+  }
+  .ds-banner {
+    font-size: 0.75rem;
+    color: var(--muted-foreground);
+    font-style: italic;
+  }
+}
+
 @layer components {
   /* Card variant motifs — paired with the `variant` prop on
      <Card> (data-variant="ribbon"|"live"|"feature"). */

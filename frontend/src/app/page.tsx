@@ -43,9 +43,7 @@ export default async function TodayPage({
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Today&apos;s predictions
-        </h1>
+        <h1 className="ds-h1">Today&apos;s predictions</h1>
         <ForecastHeader />
       </header>
 
