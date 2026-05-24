@@ -68,6 +68,19 @@
   --p-mint: #9fdfc9;
   --p-cream: #f3ead7;
 
+  /* Anchor tints — for hover / track / tonal-background usage. Keep these
+     in sync if any anchor hex changes. Tailwind utilities use `bg-X/N`
+     for opacity, but these named tokens avoid duplicating the rgba()
+     literal across components. */
+  --p-navy-08: rgba(29, 33, 136, 0.08);
+  --p-navy-15: rgba(29, 33, 136, 0.15);
+  --p-navy-30: rgba(29, 33, 136, 0.30);
+  --p-magenta-10: rgba(226, 36, 94, 0.10);
+  --p-magenta-20: rgba(226, 36, 94, 0.20);
+  --p-green-10: rgba(10, 155, 84, 0.10);
+  --p-green-20: rgba(10, 155, 84, 0.20);
+  --p-mint-50: rgba(159, 223, 201, 0.50);
+
   /* Semantic surface tokens (shadcn slots). */
   --background: var(--p-cream);
   --foreground: var(--p-ink);
@@ -84,6 +97,9 @@
   --accent: rgba(159, 223, 201, 0.45);
   --accent-foreground: var(--p-ink);
   --destructive: var(--p-magenta);
+  --destructive-fg: #b51547;
+  --success: var(--p-green);
+  --success-fg: #066a39;
   --border: rgba(29, 33, 136, 0.18);
   --input: rgba(29, 33, 136, 0.18);
   --ring: var(--p-navy);
@@ -105,12 +121,21 @@
   --group-third-out: #f29ebd;
   --group-fourth: rgba(21, 24, 110, 0.35);
 
-  /* Viridis heatmap stops. */
-  --heat-stop-0: #440154;
-  --heat-stop-1: #3b528b;
-  --heat-stop-2: #21908d;
-  --heat-stop-3: #5dc963;
-  --heat-stop-4: #fde725;
+  /* POSTER heatmap ramp (pale-rose → magenta → ink). Lightness-monotonic
+     and free of green hues, so it's CVD-safe (equivalent in structure to
+     Plasma / Rocket). Stop-2 == --p-magenta, stop-4 == --p-ink exactly;
+     keep those two anchored when refining intermediate stops. */
+  --heat-stop-0: #ffedef; /* 0%   pale rose      oklch(0.960 0.020  10) */
+  --heat-stop-1: #f895a4; /* 25%  pink           oklch(0.777 0.120  10) */
+  --heat-stop-2: #e2245e; /* 50%  brand magenta  oklch(0.595 0.220  11) == --p-magenta */
+  --heat-stop-3: #7c1e8d; /* 75%  plum bridge    oklch(0.439 0.181 321) */
+  --heat-stop-4: #15186e; /* 100% brand ink      oklch(0.282 0.143 271) == --p-ink */
+
+  /* Heatmap convenience aliases (light / mid / high) for components that
+     only need the endpoints + midpoint. */
+  --heat-low: var(--heat-stop-0);
+  --heat-mid: var(--heat-stop-2);
+  --heat-high: var(--heat-stop-4);
 
   /* Chart fallback ramp (kept for back-compat — new code references
      named semantic tokens above). */
@@ -138,9 +163,13 @@
   /* Poster palette inverted — cream foreground on navy. */
   --background: var(--p-navy);
   --foreground: var(--p-cream);
-  --card: #2226a3;
+  /* Bumped one step lighter than the previous #2226a3 — that was only
+     ~Δ4 from --p-navy and surfaces flattened against the page. The
+     stronger cream hairline on --border carries the rest of the
+     separation without stepping outside the palette. */
+  --card: #2d31b5;
   --card-foreground: var(--p-cream);
-  --popover: #2226a3;
+  --popover: #2d31b5;
   --popover-foreground: var(--p-cream);
   --primary: var(--p-cream);
   --primary-foreground: var(--p-navy);
@@ -151,8 +180,8 @@
   --accent: rgba(159, 223, 201, 0.22);
   --accent-foreground: var(--p-cream);
   --destructive: var(--p-magenta);
-  --border: rgba(243, 234, 215, 0.18);
-  --input: rgba(243, 234, 215, 0.18);
+  --border: rgba(243, 234, 215, 0.22);
+  --input: rgba(243, 234, 215, 0.22);
   --ring: var(--p-mint);
 
   /* Outcome / result / group / heatmap tokens DO NOT swap in dark mode —

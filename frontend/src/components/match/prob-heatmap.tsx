@@ -14,24 +14,27 @@ type Props = {
   width?: number;
 };
 
-// Viridis ramp (poster-palette v2 default). Hard-coded — mirrors the
+// POSTER heatmap ramp (poster-palette v2). Hard-coded — mirrors the
 // --heat-stop-N CSS variables in globals.css; keep the two in sync.
-const VIRIDIS_STOPS: ReadonlyArray<readonly [number, number, number]> = [
-  [68, 1, 84], // #440154
-  [59, 82, 139], // #3b528b
-  [33, 144, 141], // #21908d
-  [93, 201, 99], // #5dc963
-  [253, 231, 37], // #fde725
+// Pale-rose → pink → brand magenta → plum → brand ink. Lightness is
+// strictly monotonic and the hue path avoids green, so the ramp is
+// CVD-safe (Plasma / Rocket family).
+const POSTER_STOPS: ReadonlyArray<readonly [number, number, number]> = [
+  [255, 237, 239], // #ffedef pale rose
+  [248, 149, 164], // #f895a4 pink
+  [226, 36, 94], // #e2245e brand magenta (== --p-magenta)
+  [124, 30, 141], // #7c1e8d plum bridge
+  [21, 24, 110], // #15186e brand ink (== --p-ink)
 ];
 
-function viridisOf(t: number): string {
-  // 0..1 → purple → teal → yellow, piecewise-linear across 5 stops.
+function heatOf(t: number): string {
+  // 0..1 → pale rose → magenta → ink, piecewise-linear across 5 stops.
   const clamped = Math.max(0, Math.min(1, t));
-  const span = clamped * (VIRIDIS_STOPS.length - 1);
-  const i = Math.min(VIRIDIS_STOPS.length - 2, Math.floor(span));
+  const span = clamped * (POSTER_STOPS.length - 1);
+  const i = Math.min(POSTER_STOPS.length - 2, Math.floor(span));
   const f = span - i;
-  const a = VIRIDIS_STOPS[i];
-  const b = VIRIDIS_STOPS[i + 1];
+  const a = POSTER_STOPS[i];
+  const b = POSTER_STOPS[i + 1];
   const lerp = (x: number, y: number) => Math.round(x + (y - x) * f);
   return `rgb(${lerp(a[0], b[0])}, ${lerp(a[1], b[1])}, ${lerp(a[2], b[2])})`;
 }
@@ -127,11 +130,12 @@ export function ProbHeatmap({ matrix, homeTeam, awayTeam, width = 380 }: Props) 
           {crop.map((row, i) =>
             row.map((v, j) => {
               const t = intensity(v);
-              const fill = viridisOf(t);
+              const fill = heatOf(t);
               const labelOk = v >= 0.02;
-              // Viridis is darkest at the ends — use dark label only on the
-              // bright teal/green/yellow band, else white.
-              const labelColor = t > 0.45 && t < 0.95 ? "#0a0a0a" : "#fafafa";
+              // POSTER ramp is lightness-monotonic — dark label only on
+              // the pale-rose / pink end; once the cell hits brand
+              // magenta or beyond, switch to white.
+              const labelColor = t < 0.35 ? "#15186e" : "#fafafa";
               return (
                 <g key={`${i}-${j}`}>
                   <rect
