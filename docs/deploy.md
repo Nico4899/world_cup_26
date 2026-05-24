@@ -146,39 +146,67 @@ fly ssh console -C "python -c 'import sentry_sdk; sentry_sdk.init(\"<dsn>\"); 1/
 
 The exception should appear in Sentry within ~30 s.
 
-## Phase 10D — Streamlit Community Cloud (dashboard)
+## Phase 10D — Vercel (Next.js dashboard)
 
-The dashboard is a separate runtime that talks to the Fly API over HTTPS.
+The dashboard is a Next.js 16 / React 19 app under [`frontend/`](../frontend/)
+that talks to the Fly API over HTTPS. Vercel handles SSR + edge caching for
+the static routes (Bracket, Map) and request-time fetches for the dynamic
+ones (Today, Groups, Match Detail, Team Profile, Track Record, Ops).
 
 ### 1. Push to GitHub
 
-The Streamlit Cloud workflow requires a GitHub-hosted repo. Make sure
-`dashboard/streamlit_app.py` is the entrypoint.
+Vercel deploys from a GitHub-hosted repo. Make sure your branch is pushed
+before the next step.
 
-### 2. Create the app
+### 2. Create the Vercel project
 
-In [share.streamlit.io](https://share.streamlit.io) → New app:
+In [vercel.com/new](https://vercel.com/new) → Import Git Repository:
 - Repository: `Nico4899/world_cup_26`
-- Branch: `master`
-- Main file path: `dashboard/streamlit_app.py`
-- Python version: 3.12
+- Framework Preset: **Next.js** (auto-detected from `frontend/package.json`)
+- Root Directory: `frontend`
+- Build Command: leave default (`pnpm build` — the `prebuild` script runs
+  `node scripts/sync-methodology.mjs` automatically)
+- Install Command: leave default (Vercel detects pnpm via `pnpm-lock.yaml`)
 
-### 3. Secrets / env
+### 3. Environment variables
 
-In the Streamlit Cloud app settings, add to **Secrets**:
+In Project Settings → Environment Variables:
 
-```toml
-WC2026_API_URL = "https://<your-fly-app>.fly.dev"
+| Name | Value | Scope |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | `https://<your-fly-app>.fly.dev` | Production + Preview |
+| `WC2026_OPS_TOKEN` | _same value set on Fly_ | Production only |
+
+The `WC2026_OPS_TOKEN` is **server-only** (no `NEXT_PUBLIC_` prefix). The
+Operator page's "Run job" buttons are Server Actions that attach the token
+as `X-Ops-Token` server-side; the browser never sees it.
+
+### 4. Allow Vercel origins in the API CORS list
+
+The Fly API already allows `https://*.vercel.app` for preview deployments
+via [`src/wc2026/api/main.py`](../src/wc2026/api/main.py)'s
+`CORS_ALLOW_ORIGIN_REGEX`. For the production custom domain (e.g.
+`wc2026.example.com`), set:
+
+```bash
+fly secrets set WC2026_FRONTEND_ORIGIN=https://wc2026.example.com
+fly machines restart
 ```
 
-(Optional: `WC2026_OPS_TOKEN` if you set one server-side and want the
-Operator page's manual-trigger buttons to work from the cloud-hosted dashboard.)
+### 5. Verify
 
-### 4. Verify
+After the first deploy, walk through:
+- `https://<your-vercel-app>.vercel.app/` — Today's predictions load.
+- `/match/0` — Heatmap renders, SHAP popovers open per outcome tile.
+- `/ops` — Manual job triggers fire (Server Action attaches `X-Ops-Token`).
+- `/api/v1/_ops/scheduler-status` (on Fly) shows the latest `run-job` call.
 
-Open the Streamlit Community Cloud URL and confirm:
-- Home / Today loads predictions
-- Operator page shows green scheduler-job rows after a few daily cycles
+### 6. Decommission the old Streamlit Community Cloud deploy
+
+Once Vercel goes live and parity is verified, delete the old Streamlit
+Cloud app from [share.streamlit.io](https://share.streamlit.io). The
+`dashboard/` directory and `Dockerfile.dashboard` were removed in the
+same PR that introduced Vercel.
 
 ## Cost summary
 
@@ -187,7 +215,7 @@ Open the Streamlit Community Cloud URL and confirm:
 | Fly.io shared-cpu-1x x2 + 2 GB volume + Postgres | — | ~$5–10/mo |
 | Cloudflare R2 | 10 GB storage + 1M reads + 10M writes / mo | $0 expected |
 | Sentry | 5 GB events / mo | $0 expected |
-| Streamlit Community Cloud | yes | $0 |
+| Vercel (Hobby) | 100 GB bandwidth, unlimited static, 1M serverless invocations | $0 expected |
 
 Total: **$5–10/month** for the duration of the tournament window. Set
 `min_machines_running = 0` in `fly.toml` outside the window and the cost

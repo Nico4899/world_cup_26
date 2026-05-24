@@ -1,10 +1,15 @@
 # Architecture
 
-One Python repo. Three runtime processes (API, dashboard, scheduler) talk to
-one PostgreSQL database. All data lives on disk or in Postgres; nothing
-in-process is load-bearing for restart safety.
+A Python backend (FastAPI + APScheduler + Postgres on Fly.io) and a
+**Next.js 16 frontend on Vercel** share the same repo. Three Python runtime
+processes (API, scheduler, Postgres) talk to one PostgreSQL database; the
+Next.js app runs separately and consumes the FastAPI over HTTPS. All data
+lives on disk or in Postgres; nothing in-process is load-bearing for
+restart safety.
 
-Built over 11 Stage 2 phases on top of the Stage 1 baseline. See
+Built over 11 Stage 2 phases on the Stage 1 baseline, plus a Next.js
+migration (Phases A-H) that replaced the Streamlit dashboard with a
+Next.js 16 + React 19 + Visx UI deployed to Vercel. See
 [`README.md#stage-2-roadmap-complete`](../README.md#stage-2-roadmap-complete)
 for the phase-by-phase log; this doc shows the **current as-built**.
 
@@ -65,16 +70,16 @@ flowchart LR
         OPS[/_ops: scheduler-status,<br/>available-jobs, run-job]
     end
 
-    subgraph UI[Streamlit — 9 pages]
-        TODAY[Today]
-        MD[Match Detail<br/>+ SHAP + live chart]
-        GRP[Groups]
-        BR[Bracket Realisation<br/>+ scenario explorer]
-        TR[Track Record]
-        AB[About]
-        OP[Operator]
-        TP[Team Profile]
-        MAP[Host-city map]
+    subgraph UI[Next.js on Vercel — 9 routes]
+        TODAY[/ Today]
+        MD[/match/[id]<br/>SHAP popovers + live SSE chart]
+        GRP[/groups<br/>5-segment Visx bars]
+        BR[/bracket<br/>scenarios + conditional locks]
+        TR[/track-record<br/>+ historical reliability scatter]
+        AB[/about<br/>MDX methodology]
+        OP[/ops<br/>Server Actions for run-job]
+        TP[/team/[name]<br/>path-to-final + xG splits]
+        MAP[/map<br/>deck.gl + MapLibre]
     end
 
     subgraph OPS_LAYER[Phase 10 observability]
@@ -111,8 +116,8 @@ flowchart LR
 
 | Service | Module | Purpose | Restart safety |
 |---|---|---|---|
-| FastAPI | `src/wc2026/api/main.py` | 25 endpoints across 11 routers; loads PoissonDC + shootout + XGB + SHAP + live-win-prob + Elo snapshot in lifespan | Stateless — every artefact reloaded on restart |
-| Streamlit | `dashboard/streamlit_app.py` | 9 pages; cached via `@st.cache_data` (TTLs 5 min for fixtures / 10 min for tournament / 1 h for team assets) | Stateless — no DB writes |
+| FastAPI | `src/wc2026/api/main.py` | 26 endpoints across 11 routers; loads PoissonDC + shootout + XGB + SHAP + live-win-prob + Elo snapshot in lifespan | Stateless — every artefact reloaded on restart |
+| Next.js (Vercel) | `frontend/src/app/` | 9 App Router routes; data via TanStack Query (client) + Next `fetch` with `revalidate` (server). Server Actions inject `WC2026_OPS_TOKEN` from Vercel env for manual job triggers | Stateless; Vercel rebuilds on every push |
 | Scheduler | `src/wc2026/scheduler/jobs.py` | 13 cron jobs + 3 interval-triggered tournament-window jobs + 2 manual-only; logs each run to `scheduler_job_runs` for the Operator page | Re-registers triggers on startup; missed runs skipped (no catch-up) |
 
 ## Scheduled jobs (full list)
@@ -149,19 +154,19 @@ flowchart LR
 | `wikipedia_squads_refresh` | `POST /api/v1/_ops/run-job/wikipedia_squads_refresh` | tournament squad rosters |
 | `statsbomb_refresh` | same | StatsBomb shots corpus + xG shot model refit + live win-prob model refit |
 
-## API surface (25 endpoints, 11 routers)
+## API surface (26 endpoints, 11 routers)
 
 | Router | Endpoints |
 |---|---|
 | `health` | `GET /health` |
 | `matches` | `GET /api/v1/matches`, `GET /api/v1/matches/{id}` |
 | `predictions` | `GET /api/v1/predictions/{home}/{away}` (with `?blend=true`) |
-| `tournament` | `GET /standings` (reads persisted MC by default), `GET /bracket` |
-| `teams` | `GET /{team}/recent`, `/{team}/elo-history`, `/{team}/tournament-probs`, `/{team}/assets`, `/{team}/fifa-rankings`, `/{team}/squad`, `/{team}/xg-form` |
+| `tournament` | `GET /standings`, `GET /bracket`, `GET /groups-live`, `POST /bracket/conditional`, `/teams/{team}/path-to-final` |
+| `teams` | `GET /{team}/recent`, `/{team}/elo-history`, `/{team}/tournament-probs`, `/{team}/assets`, `/{team}/fifa-rankings`, `/{team}/squad`, `/{team}/xg-form`, `/{team}/path-to-final` |
 | `h2h` | `GET /api/v1/h2h/{a}/{b}` |
 | `explain` | `GET /api/v1/explain/{match_id}` (Phase 5 SHAP; 503 when no XGB artefact) |
 | `live` | `GET /api/v1/live/{id}`, `/history`, `/sse` (Phase 6) |
-| `track_record` | `GET /api/v1/track-record/wc2026` (Phase 7 rolling calibration) |
+| `track_record` | `GET /api/v1/track-record/wc2026`, `GET /api/v1/track-record/historical/{tournament}` (24h cache) |
 | `ops` | `GET /_ops/scheduler-status`, `/_ops/available-jobs`, `POST /_ops/run-job/{name}` |
 
 ## Data flow guarantees
@@ -179,9 +184,8 @@ flowchart LR
 - **Paid data feeds** (Opta, Sportradar, Enetpulse, paid StatsBomb) — free corpus is sufficient for tournament-level prediction.
 - **Bidirectional WebSockets** — SSE is one-way (server → client). The dashboard polls + SSE-consumes, never sends.
 - **Prometheus + Grafana stack** — Sentry + `/health` + `/api/v1/_ops/scheduler-status` cover monitoring at this scale.
-- **Click-to-set bracket simulator** — Phase 9 deferred the custom React/SVG component (`streamlit.components.v1`). The multi-seed scenario explorer captures most of the same UX.
+- **Click-to-set SVG bracket** — Tier 3 shipped a Python-friendly equivalent: per-match lock form on `/bracket` driving `POST /api/v1/tournament/bracket/conditional`. A drag-and-drop SVG bracket would be a polish lever, not a feature gap.
 - **Live red-card / sub tracking** — football-data.org's free tier exposes only the score, not detailed events. Phase 6 acknowledges the limitation in `ingest/live_events.py`.
-- **Next.js dashboard rewrite** — Streamlit covers the v1 use case; Next.js was the blueprint's optional v2 lever.
 
 ## Where to look for X
 

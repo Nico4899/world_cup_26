@@ -59,31 +59,33 @@ uv run ruff check .           # lint
 uv run ruff format .          # format
 ```
 
-## Stage 1 — Running locally
+## Running locally
 
-The app is a thin **Streamlit** dashboard over a **FastAPI** model server.
+The app is a **Next.js 16** dashboard (React 19 + TypeScript strict + Tailwind v4 + Visx) over a **FastAPI** model server.
 
 ```bash
 # 1. Start the API (fits a PoissonDC on startup — first request takes ~1s for warmup):
 uv run uvicorn wc2026.api.main:app --port 8000
 
 # 2. In another terminal, start the dashboard:
-WC2026_API_URL=http://localhost:8000 uv run streamlit run dashboard/streamlit_app.py
+cd frontend
+pnpm install
+NEXT_PUBLIC_API_URL=http://localhost:8000 pnpm dev
 ```
 
-Then open http://localhost:8501. Dashboard pages (9 total):
+Then open http://localhost:3000. Dashboard routes (9 total):
 
-| Page | Purpose |
+| Route | Purpose |
 |---|---|
-| **Today** | Prediction cards for any matchday in [2026-06-11, 2026-07-19] |
-| **Match Detail** | 1X2 + scoreline heatmap + SHAP "why" panel + live win-prob chart (auto-refreshes during a live match via `<meta http-equiv="refresh">`) |
-| **Groups** | 12 group blocks with stacked-bar advancement probabilities (1st / 2nd / 3rd→R32 / out) |
-| **Bracket Realisation** | Single-seed view + multi-seed scenario comparison (Phase 9; deferred the custom-JS click-to-set) |
-| **Track Record** | Live WC 2026 rolling calibration (Phase 7) above the WC 2018 + WC 2022 historical hindcasts |
-| **About** | Methodology + references rendered from `docs/methodology.md` |
-| **Operator** | Health, scheduler-job status, and `/_ops/run-job/{name}` manual triggers |
-| **Team Profile** | Per-team Elo history, recent-10 form, FIFA ranking, squad roster, rolling xG-form, and WC 2026 path-to-final probabilities |
-| **Host-city map** | 16 host venues plotted on `st.map`; filter the fixture list by venue |
+| **`/`** (Today) | Prediction cards for any matchday in [2026-06-11, 2026-07-19], with kickoff time in UTC, clickable "Why?" popover (SHAP top-3), and a group-stage advancement strip |
+| **`/match/[id]`** | Outcome popovers (SHAP per class), Visx 6×6 score heatmap, Elo-anchored narrative, live win-prob chart via Server-Sent Events, recent-5 form, H2H table |
+| **`/groups`** | 12 group cards with Visx 5-segment stacked bars (1st / 2nd / 3rd→R32 / 3rd-out / 4th), live points + GD per group, top-10 championship headline |
+| **`/bracket`** | Tabs: Single seed / Scenario comparison / Conditional locks (localStorage-backed). URL-encoded scenarios for shareable links |
+| **`/track-record`** | Live WC 2026 rolling calibration + WC 2018 / WC 2022 historical hindcasts with Visx reliability scatter |
+| **`/about`** | Methodology rendered from `docs/methodology.md` via MDX (synced by `pnpm sync:methodology`) |
+| **`/ops`** | Health, scheduler-job status, manual `run-job` triggers via Next.js **Server Actions** (the ops token stays server-side) |
+| **`/team/[name]`** | Per-team Elo history (Visx), recent-10 form, FIFA ranking, squad roster, rolling xG-form (5 / 10 / 12mo), Monte Carlo path-to-final with most-likely opponent per round |
+| **`/map`** | 16 host venues on a deck.gl + MapLibre map with per-country fill + city filter |
 
 ### API endpoints
 
@@ -108,6 +110,7 @@ Then open http://localhost:8501. Dashboard pages (9 total):
 | `GET /api/v1/live/{match_id}/history` | full per-event timeline + the latest snapshot |
 | `GET /api/v1/live/{match_id}/sse` | Server-Sent Events stream of win-prob frames |
 | `GET /api/v1/track-record/wc2026` | rolling Brier / log-loss / RPS over completed WC 2026 matches |
+| `GET /api/v1/track-record/historical/{tournament}` | WC 2018 / WC 2022 hindcast headline + reliability bins (24h cache) |
 | `GET /api/v1/_ops/scheduler-status` | per-job latest run + status |
 | `GET /api/v1/_ops/available-jobs` | list of manually-triggerable jobs |
 | `POST /api/v1/_ops/run-job/{name}` | enqueue a manual run; gated by `X-Ops-Token` when `WC2026_OPS_TOKEN` is set |
@@ -122,18 +125,17 @@ docker compose logs -f scheduler     # watch the daily cron jobs
 docker compose restart api           # pick up a freshly-refitted model artefact
 ```
 
-Dashboard is a separate image (it can run on your laptop pointing at the API):
+Dashboard runs on Vercel (Next.js); for local dev see the "Running locally" section above. To exercise the production build against a local API:
 
 ```bash
-docker build -f Dockerfile.dashboard -t wc2026-dashboard .
-docker run --rm -p 8501:8501 \
-    -e WC2026_API_URL=http://host.docker.internal:8000 \
-    wc2026-dashboard
+cd frontend
+NEXT_PUBLIC_API_URL=http://localhost:8000 pnpm build
+NEXT_PUBLIC_API_URL=http://localhost:8000 pnpm start
 ```
 
-### Deploying to Fly.io (~$5–10/month hobby tier)
+### Deploying to Fly.io + Vercel (~$5–10/month hobby tier)
 
-See [`docs/deploy.md`](docs/deploy.md) for the full runbook — Fly app + Postgres + volume, Cloudflare R2 (off-site backup), Sentry (error monitoring), Streamlit Community Cloud (dashboard), and rollback procedure. Short version:
+See [`docs/deploy.md`](docs/deploy.md) for the full runbook — Fly app + Postgres + volume, Cloudflare R2 (off-site backup), Sentry (error monitoring), **Vercel (Next.js dashboard)**, and rollback procedure. Short version:
 
 ```bash
 cp fly.toml.example fly.toml          # then edit `app` name + `primary_region`
@@ -190,14 +192,15 @@ Stage 1 shipped a calibrated, locally-runnable platform. Stage 2 expanded it to 
 | 10 | Fly.io config + Sentry SDK + off-site pg_dump to S3/R2 + warmth-keep | ✅ Code shipped (`observability/`, env-gated for graceful degradation). Actual `fly deploy` is operator-side — see [`docs/deploy.md`](docs/deploy.md). |
 | 11 | Final README + ARCHITECTURE.md refresh | ✅ This commit |
 
-### Key Stage 2 numbers (at completion)
+### Key numbers (at completion)
 
-- **547 unit tests**, **9 deselected** as `slow`/`integration` (~18 s for the default suite)
-- **13 cron jobs** + **3 interval-triggered tournament-window jobs** (`standings_cache_warm`, `monte_carlo_rerun`, `live_events_poll`) + **2 manual-only** (`wikipedia_squads_refresh`, `statsbomb_refresh`)
-- **25 API endpoints** across 11 routers
-- **9 dashboard pages**
-- **5 Alembic migrations** (Stage 1 + Phases 2/3/4/6) covering 11 application tables
-- **WC 2022 hindcast log-loss = 1.0379** (unchanged across all 11 phases; identical to the Stage 0.7 decision-gate value)
+- **Backend**: **556 unit tests** pass; ruff clean
+- **Frontend**: **26 Vitest unit tests** + **10 Playwright smoke tests** pass; ESLint + `tsc --noEmit` clean
+- **13 cron jobs** + **3 interval-triggered tournament-window jobs** + **2 manual-only**
+- **26 API endpoints** across 11 routers
+- **9 dashboard routes** in [`frontend/src/app/`](frontend/src/app/)
+- **6 Alembic migrations** (Stage 1 + Phases 2/3/4/6/12) covering 11 application tables
+- **WC 2022 hindcast log-loss = 1.0379** (unchanged across every phase; identical to the Stage 0.7 decision-gate value)
 
 ## Repo layout
 
@@ -218,10 +221,17 @@ src/wc2026/
   db/             # SQLAlchemy 2.0 models + Alembic
   scheduler/      # APScheduler cron + interval jobs
   observability/  # Phase 10: Sentry init + S3/R2 backup upload
-dashboard/        # Streamlit — 9 pages + components
-alembic/          # 5 migrations (Stage 1 + Phases 2/3/4/6)
+frontend/         # Next.js 16 + React 19 + TypeScript + Tailwind v4 + Visx
+  src/app/        # 9 App Router routes (Today / Match Detail / Groups / Bracket /
+                  # Track Record / About / Ops / Team Profile / Map)
+  src/components/ # shadcn-ui primitives + page-scoped chart components
+  src/hooks/      # useLiveWinProb (SSE), useLockedBracket (localStorage),
+                  # usePngDownload (html-to-image), useTeamAssets
+  src/content/    # methodology.mdx — synced from docs/methodology.md
+  e2e/            # Playwright smoke spec
+alembic/          # 6 migrations (Stage 1 + Phases 2/3/4/6/12)
 docs/             # ARCHITECTURE.md, methodology.md, deploy.md, LICENSES.md
-tests/            # 547 unit tests + 1 replay integration test
+tests/            # 556 unit tests
 data/             # local-only, gitignored (raw parquet snapshots + artefacts)
 scripts/          # one-off + scheduler-invoked entrypoints
 notebooks/        # exploratory; not under test
