@@ -348,3 +348,146 @@ def test_run_job_accepts_matching_token(client: TestClient, monkeypatch) -> None
         headers={"X-Ops-Token": "secret"},
     )
     assert r.status_code == 202
+
+
+# --- Phase 5 blend + /api/v1/explain ---------------------------------------
+
+
+def _inject_xgb(client: TestClient):
+    """Train a tiny XGB on synthetic feature rows and attach it to app.state.
+
+    Returns ``(xgb_model, explainer)``; callers swap them in via monkeypatch
+    so we don't have to wait for the real refit script (which is slow).
+    """
+    import numpy as np
+    import pandas as pd
+
+    from wc2026.models.shap_explain import XgbExplainer
+    from wc2026.models.xgb_classifier import (
+        CLASS_AWAY,
+        CLASS_DRAW,
+        CLASS_HOME,
+        DEFAULT_FEATURE_COLUMNS,
+        XgbMatchModel,
+    )
+
+    rng = np.random.default_rng(0)
+    n = 600
+    elo_diff = rng.normal(0.0, 120.0, size=n)
+    base = {col: np.zeros(n) for col in DEFAULT_FEATURE_COLUMNS}
+    base["elo_diff"] = elo_diff
+    base["poisson_p_home"] = np.clip(0.4 + 0.0015 * elo_diff, 0.05, 0.9)
+    base["poisson_p_draw"] = np.full(n, 0.27)
+    base["poisson_p_away"] = 1 - base["poisson_p_home"] - base["poisson_p_draw"]
+    X = pd.DataFrame(base)
+    y = np.where(
+        elo_diff > 60, CLASS_HOME, np.where(elo_diff < -60, CLASS_AWAY, CLASS_DRAW)
+    ).astype(int)
+    model = XgbMatchModel.fit(X, y)
+    explainer = XgbExplainer.from_model(model)
+    return model, explainer
+
+
+def test_predictions_blend_no_op_without_xgb_artefact(client: TestClient) -> None:
+    """With ``blend=true`` but no XGB loaded, the route returns Poisson-only."""
+    r = client.get(
+        "/api/v1/predictions/Argentina/France",
+        params={"neutral": "true", "blend": "true"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["blend"] is None
+    # Outcome still totals 1.
+    s = body["outcome"]["home_win"] + body["outcome"]["draw"] + body["outcome"]["away_win"]
+    assert abs(s - 1.0) < 1e-6
+
+
+def test_predictions_blend_populates_when_xgb_loaded(client: TestClient, monkeypatch) -> None:
+    xgb_model, explainer = _inject_xgb(client)
+    monkeypatch.setattr(client.app.state, "xgb_model", xgb_model)
+    monkeypatch.setattr(client.app.state, "xgb_explainer", explainer)
+    r = client.get(
+        "/api/v1/predictions/Argentina/France",
+        params={"neutral": "true", "blend": "true", "blend_weight": 0.5},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    blend = body["blend"]
+    assert blend is not None
+    assert blend["weight"] == 0.5
+    for triplet_key in ("poisson", "xgb", "blended"):
+        triplet = blend[triplet_key]
+        s = triplet["home_win"] + triplet["draw"] + triplet["away_win"]
+        assert abs(s - 1.0) < 1e-6
+    # The response's headline outcome is now the blend (not Poisson-only).
+    assert body["outcome"] == blend["blended"]
+
+
+def test_predictions_blend_weight_one_returns_pure_poisson(client: TestClient, monkeypatch) -> None:
+    xgb_model, explainer = _inject_xgb(client)
+    monkeypatch.setattr(client.app.state, "xgb_model", xgb_model)
+    monkeypatch.setattr(client.app.state, "xgb_explainer", explainer)
+    r = client.get(
+        "/api/v1/predictions/Argentina/France",
+        params={"blend": "true", "blend_weight": 1.0},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    blend = body["blend"]
+    # weight=1 → blended must equal the Poisson component (up to FP).
+    assert abs(blend["blended"]["home_win"] - blend["poisson"]["home_win"]) < 1e-6
+
+
+def test_predictions_blend_weight_out_of_range_is_422(client: TestClient) -> None:
+    r = client.get(
+        "/api/v1/predictions/Argentina/France",
+        params={"blend": "true", "blend_weight": 1.5},
+    )
+    assert r.status_code == 422
+
+
+# --- /api/v1/explain/{match_id} --------------------------------------------
+
+
+def test_explain_returns_503_without_xgb(client: TestClient) -> None:
+    r = client.get("/api/v1/explain/0")
+    assert r.status_code == 503
+    assert "XGB" in r.json()["detail"]
+
+
+def test_explain_returns_top_features_for_match_when_xgb_loaded(
+    client: TestClient, monkeypatch
+) -> None:
+    xgb_model, explainer = _inject_xgb(client)
+    monkeypatch.setattr(client.app.state, "xgb_model", xgb_model)
+    monkeypatch.setattr(client.app.state, "xgb_explainer", explainer)
+    r = client.get("/api/v1/explain/0", params={"top_n": 4})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["home_team"] == "Mexico"  # First fixture in the WC 2026 corpus
+    assert len(body["contributions"]) == 4
+    for item in body["contributions"]:
+        assert "feature" in item
+        assert "contribution" in item
+    # Sorted by |contribution| desc
+    abs_contribs = [abs(c["contribution"]) for c in body["contributions"]]
+    assert abs_contribs == sorted(abs_contribs, reverse=True)
+    # Both poisson + xgb outcomes are populated.
+    assert body["poisson_outcome"] is not None
+    assert body["xgb_outcome"] is not None
+
+
+def test_explain_rejects_unknown_class_name(client: TestClient, monkeypatch) -> None:
+    xgb_model, explainer = _inject_xgb(client)
+    monkeypatch.setattr(client.app.state, "xgb_model", xgb_model)
+    monkeypatch.setattr(client.app.state, "xgb_explainer", explainer)
+    r = client.get("/api/v1/explain/0", params={"class_name": "victory_dance"})
+    assert r.status_code == 422
+
+
+def test_explain_404_on_out_of_range_match_id(client: TestClient, monkeypatch) -> None:
+    xgb_model, explainer = _inject_xgb(client)
+    monkeypatch.setattr(client.app.state, "xgb_model", xgb_model)
+    monkeypatch.setattr(client.app.state, "xgb_explainer", explainer)
+    r = client.get("/api/v1/explain/999")
+    assert r.status_code == 404

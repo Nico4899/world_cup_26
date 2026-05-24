@@ -59,10 +59,10 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
-    # Skip integration tests (network / Docker / live services) by default.
-    # Run them with: uv run pytest -m integration
+    # Skip integration + slow tests by default.
+    # Run them with: uv run pytest -m integration / -m slow
     "-m",
-    "not integration",
+    "not integration and not slow",
 ]
 markers = [
     "integration: requires Postgres or external services (deselect with '-m \"not integration\"')",

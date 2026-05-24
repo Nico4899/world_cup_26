@@ -65,15 +65,15 @@ class XgbExplainer:
         if isinstance(features, dict):
             features = pd.DataFrame([features])
         if class_index not in CLASS_NAMES:
-            raise ValueError(
-                f"class_index must be in {sorted(CLASS_NAMES)}; got {class_index}"
-            )
+            raise ValueError(f"class_index must be in {sorted(CLASS_NAMES)}; got {class_index}")
         # Reorder columns to match training, NaN-fill missing ones.
         df = features.copy()
         for col in self.model.feature_names:
             if col not in df.columns:
                 df[col] = np.nan
-        ordered = df[list(self.model.feature_names)]
+        ordered = (
+            df[list(self.model.feature_names)].apply(pd.to_numeric, errors="coerce").astype(float)
+        )
         sv = self.explainer.shap_values(ordered)
         # TreeExplainer on a multi-class model returns shape (n, n_features, n_classes)
         # in modern shap; older shap returned a list. Be tolerant.

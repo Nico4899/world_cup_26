@@ -73,17 +73,13 @@ def test_label_from_score_home_draw_away() -> None:
 
 
 def test_labels_for_matches_vectorised() -> None:
-    matches = pd.DataFrame(
-        {"home_score": [3, 1, 1, 0], "away_score": [0, 2, 1, 0]}
-    )
+    matches = pd.DataFrame({"home_score": [3, 1, 1, 0], "away_score": [0, 2, 1, 0]})
     labels = labels_for_matches(matches)
     assert labels.tolist() == [CLASS_HOME, CLASS_AWAY, CLASS_DRAW, CLASS_DRAW]
 
 
 def test_labels_for_matches_rejects_nan_score() -> None:
-    matches = pd.DataFrame(
-        {"home_score": [3, None], "away_score": [0, 0]}
-    )
+    matches = pd.DataFrame({"home_score": [3, None], "away_score": [0, 0]})
     with pytest.raises(ValueError, match="NaN"):
         labels_for_matches(matches)
 

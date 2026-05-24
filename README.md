@@ -150,10 +150,11 @@ These are the gaps the Stage 2 roadmap addresses (see "Stage 2 roadmap" below fo
 
 - **Local-only by default.** The Dockerfiles build, but no deploy target is wired up; you run the stack with `uv run uvicorn …` + `uv run streamlit …` (or via `docker compose`). `fly.toml.example` is provided but `fly deploy` has not been run — Phase 10 of the roadmap.
 - **No live polling / no in-match updates.** The dashboard shows pre-match predictions; updates require a scheduler refresh. Phase 6 adds a Server-Sent Events live win-prob stream.
-- **Two model add-ons are experimental, not used by default**:
+- **Three model add-ons are experimental, not used by default**:
   - `PoissonDCWithPrior` (Elo prior) monotonically degrades WC 2022 log-loss across `prior_strength ∈ [0, 5]` — the base model already extracts team strength from match history.
   - `IsotonicCalibrator` (LOO recalibration) degrades WC 2022 log-loss by +0.077 — isotonic on N=64 is small-sample fragile; likely useful with N≥250.
-  Both are kept as research artefacts; see `scripts/backtest_with_elo_prior.py` and `scripts/backtest_with_isotonic.py`.
+  - `XgbMatchModel` + geometric blend (Phase 5) monotonically degrades on both WC 2018 (+0.000 → +0.005) and WC 2022 (+0.000 → +0.023) hindcasts as the XGB mixing weight rises from 0 to 50%. The pure Poisson is already near the bookmaker-quality ceiling; XGB-on-sparse-features adds noise rather than signal. Re-evaluate once xG-form / squad-age inputs are populated for the historical training corpus. Blend is exposed as `?blend=true&blend_weight=W` on `/api/v1/predictions/...`; defaults to off. SHAP `/api/v1/explain/{match_id}` is valuable independently of whether the blend is enabled.
+  All three are kept as research artefacts; see `scripts/backtest_with_elo_prior.py`, `scripts/backtest_with_isotonic.py`, and `scripts/refit_xgb.py --hindcast`.
 - **No XGBoost + SHAP blend, no xG features, no Team Profile / interactive bracket / map / crests.** Phases 2–5 and 9 of the roadmap.
 
 ## Stage 2 roadmap

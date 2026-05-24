@@ -29,9 +29,9 @@ def _synthetic_corpus(n: int = 400, seed: int = 0) -> tuple[pd.DataFrame, np.nda
     poisson_p_home = np.clip(0.4 + 0.0015 * elo_diff, 0.05, 0.9)
     poisson_p_draw = np.full(n, 0.27)
     poisson_p_away = 1 - poisson_p_home - poisson_p_draw
-    y = np.where(elo_diff > 50, CLASS_HOME, np.where(elo_diff < -50, CLASS_AWAY, CLASS_DRAW)).astype(
-        int
-    )
+    y = np.where(
+        elo_diff > 50, CLASS_HOME, np.where(elo_diff < -50, CLASS_AWAY, CLASS_DRAW)
+    ).astype(int)
     X = pd.DataFrame(
         {
             "elo_diff": elo_diff,
@@ -124,5 +124,5 @@ def test_explain_row_handles_missing_columns_with_nan_fill() -> None:
     contributions = explainer.explain_row(sparse, class_index=CLASS_HOME)
     # Should still cover the full feature space.
     assert {c.feature for c in contributions} == set(DEFAULT_FEATURE_COLUMNS)
-    missing = [c for c in contributions if c.feature == "xg_form_diff"][0]
+    missing = next(c for c in contributions if c.feature == "xg_form_diff")
     assert missing.value is None

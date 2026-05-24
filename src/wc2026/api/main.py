@@ -14,21 +14,43 @@ import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from wc2026.api.routes import h2h, health, matches, ops, predictions, teams, tournament
+from wc2026.api.routes import (
+    explain,
+    h2h,
+    health,
+    matches,
+    ops,
+    predictions,
+    teams,
+    tournament,
+)
+from wc2026.features.build_match_features import FeatureSources
 from wc2026.features.match_weights import combined_weight
 from wc2026.ingest.eloratings_scraper import load_latest_snapshot
 from wc2026.ingest.kaggle_intl import load_played, load_scheduled
 from wc2026.models.poisson_dc import PoissonDC, PoissonDCParams
+from wc2026.models.shap_explain import XgbExplainer
 from wc2026.models.shootout import (
     fit_shootout_model,
     load_historical_shootouts,
     load_shootout_model,
     simulate_shootout,
 )
+from wc2026.models.xgb_classifier import (
+    DEFAULT_META_PATH as XGB_DEFAULT_META_PATH,
+)
+from wc2026.models.xgb_classifier import (
+    DEFAULT_MODEL_PATH as XGB_DEFAULT_MODEL_PATH,
+)
+from wc2026.models.xgb_classifier import (
+    XgbMatchModel,
+)
 from wc2026.sim.fixtures import load_group_assignment, parse_wc2026_fixtures
 
 ARTEFACT_PATH = Path("data/artifacts/poisson_dc/latest.npz")
 SHOOTOUT_ARTEFACT_PATH = Path("data/artifacts/shootout/latest.json")
+XGB_MODEL_PATH = XGB_DEFAULT_MODEL_PATH
+XGB_META_PATH = XGB_DEFAULT_META_PATH
 GROUP_ASSIGNMENT_PATH = Path("data/wc2026_group_assignment.json")
 
 # Match Stage 0.6's tuned defaults.
@@ -83,6 +105,45 @@ def _load_or_fit_model(df: pd.DataFrame) -> tuple[PoissonDC, str, datetime]:
             mtime = datetime.fromtimestamp(ARTEFACT_PATH.stat().st_mtime, tz=UTC)
             return model, "artefact", mtime
     return _fit_model(df), "in_process_fit", datetime.now(UTC)
+
+
+def _load_xgb_model() -> XgbMatchModel | None:
+    """Best-effort load of the Phase 5 XGB H/D/A classifier.
+
+    Returns ``None`` if either the model JSON or its sidecar meta file is
+    missing — callers degrade gracefully to Poisson-only predictions.
+    """
+    if not (XGB_MODEL_PATH.exists() and XGB_META_PATH.exists()):
+        return None
+    try:
+        return XgbMatchModel.load(XGB_MODEL_PATH, XGB_META_PATH)
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _build_xgb_feature_sources(
+    played_df: pd.DataFrame, model: PoissonDC, elo_snapshot
+) -> FeatureSources:
+    """Cache the inputs the /predictions + /explain routes feed into the feature builder.
+
+    We populate ``elo_by_team`` from the snapshot already loaded for the
+    shootout submodel and pass the played-matches df straight through for the
+    rest-days feature. xG history and squad ages are left ``None`` until the
+    relevant ingesters have populated their parquet snapshots — XGBoost
+    handles the resulting NaNs natively.
+    """
+    elo_by_team: dict[str, float] | None = None
+    if elo_snapshot is not None and "team_name" in elo_snapshot.columns:
+        elo_by_team = {
+            str(name): float(rating)
+            for name, rating in zip(elo_snapshot["team_name"], elo_snapshot["rating"], strict=True)
+            if pd.notna(name) and pd.notna(rating)
+        }
+    return FeatureSources(
+        elo_by_team=elo_by_team,
+        matches=played_df,
+        poisson_model=model,
+    )
 
 
 def _build_shootout_strategy():
@@ -153,6 +214,18 @@ async def lifespan(app: FastAPI):
         app.state.shootout_model,
         app.state.elo_snapshot_date,
     ) = _build_shootout_strategy()
+    # Optional Phase 5 XGB classifier + SHAP explainer; both None when no
+    # artefact has been produced yet — predictions then stay Poisson-only.
+    xgb_model = _load_xgb_model()
+    app.state.xgb_model = xgb_model
+    app.state.xgb_explainer = XgbExplainer.from_model(xgb_model) if xgb_model is not None else None
+    # Capture an Elo snapshot once for the feature-builder path (the shootout
+    # branch already loaded it, but its reference isn't otherwise retained).
+    try:
+        elo_snapshot = load_latest_snapshot()
+    except (FileNotFoundError, ValueError):
+        elo_snapshot = None
+    app.state.feature_sources = _build_xgb_feature_sources(app.state.played_df, model, elo_snapshot)
     yield
 
 
@@ -178,3 +251,4 @@ app.include_router(tournament.router)
 app.include_router(teams.router)
 app.include_router(h2h.router)
 app.include_router(ops.router)
+app.include_router(explain.router)

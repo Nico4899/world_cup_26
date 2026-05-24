@@ -111,8 +111,12 @@ class XgbMatchModel:
         params = {**DEFAULT_HYPERPARAMS, **(hyperparams or {})}
         params.setdefault("random_state", random_state)
         clf = XGBClassifier(**params)
+        # Force every feature column to float64 so Python ``None``s in the source
+        # DataFrames (which produce ``object`` dtype) become ``NaN`` — XGBoost
+        # then takes its own missing-value branch instead of rejecting the input.
+        X_numeric = X[list(cols)].apply(pd.to_numeric, errors="coerce").astype(float)
         clf.fit(
-            X[list(cols)],
+            X_numeric,
             np.asarray(y, dtype=int),
             sample_weight=None if sample_weight is None else np.asarray(sample_weight, dtype=float),
         )
@@ -129,7 +133,7 @@ class XgbMatchModel:
         for col in self.feature_names:
             if col not in df.columns:
                 df[col] = np.nan
-        ordered = df[list(self.feature_names)]
+        ordered = df[list(self.feature_names)].apply(pd.to_numeric, errors="coerce").astype(float)
         return self.booster.predict_proba(ordered)
 
     def save(

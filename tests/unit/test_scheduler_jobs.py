@@ -11,10 +11,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 from wc2026.scheduler import jobs as job_mod
 
 
-def test_job_specs_have_eleven_entries_at_distinct_slots():
+def test_job_specs_have_twelve_entries_at_distinct_slots():
     slots = {(s.hour, s.minute, s.day_of_week, s.day) for s in job_mod.JOB_SPECS}
-    assert len(job_mod.JOB_SPECS) == 11
-    assert len(slots) == 11, "expected eleven distinct (hour, minute, day_of_week, day) slots"
+    assert len(job_mod.JOB_SPECS) == 12
+    assert len(slots) == 12, "expected twelve distinct (hour, minute, day_of_week, day) slots"
 
 
 def test_job_specs_use_expected_names_and_window():
@@ -31,10 +31,12 @@ def test_job_specs_use_expected_names_and_window():
         "fifa_ranking_refresh",
         "football_data_co_uk_refresh",
         "fbref_refresh",
+        "xgb_refit",
     }
     for spec in job_mod.JOB_SPECS:
         # 02:xx backup, 03:xx weekly metadata + odds, 04:xx ingest, 05:00 refit,
-        # 05:15 daily feature rebuild, 05:30 weekly FBref, 06:00 monthly ranking.
+        # 05:15 daily feature rebuild, 05:30 weekly FBref, 05:45 weekly XGB refit,
+        # 06:00 monthly ranking.
         assert spec.hour in (2, 3, 4, 5, 6)
         assert spec.minute in {0, 15, 30, 45}
 

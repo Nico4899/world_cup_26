@@ -256,6 +256,19 @@ def _job_poisson_refit() -> None:
     refit_and_save(ref_date=pd.Timestamp(datetime.now(UTC).date()))
 
 
+def _job_xgb_refit() -> None:
+    """Refit the Phase 5 XGB H/D/A classifier on the latest training corpus.
+
+    Weekly cadence: the underlying corpus only updates after fresh ingest
+    runs, and the XGB is a slow learner — daily refit would burn cycles with
+    little change. After the artefact is written, restart the API to pick it
+    up (the lifespan loader caches XGB + SHAP explainer at startup).
+    """
+    from scripts.refit_xgb import refit_and_save  # noqa: PLC0415
+
+    refit_and_save()
+
+
 def _job_features_rebuild() -> None:
     """Rebuild the materialised features_match_features table.
 
@@ -342,6 +355,15 @@ JOB_SPECS: tuple[JobSpec, ...] = (
         hour=5,
         minute=30,
         func=_job_fbref_refresh,
+        day_of_week="sun",
+    ),
+    # Weekly Sunday 05:45 — XGB H/D/A classifier refit (runs after the daily
+    # poisson_refit at 05:00 + features_rebuild at 05:15 + fbref at 05:30).
+    JobSpec(
+        name="xgb_refit",
+        hour=5,
+        minute=45,
+        func=_job_xgb_refit,
         day_of_week="sun",
     ),
 )

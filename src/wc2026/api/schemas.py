@@ -69,6 +69,19 @@ class OutcomeProbabilities(BaseModel):
     away_win: float
 
 
+class BlendedOutcome(BaseModel):
+    """Phase 5 blended-probability triplet, with provenance for both engines.
+
+    Populated on ``PredictionResponse`` only when the optional XGB classifier
+    is loaded and the caller requested a blend.
+    """
+
+    poisson: OutcomeProbabilities
+    xgb: OutcomeProbabilities
+    blended: OutcomeProbabilities
+    weight: float = Field(description="Poisson mixing weight in [0, 1]; XGB gets 1 - weight.")
+
+
 class PredictionResponse(BaseModel):
     home_team: str
     away_team: str
@@ -85,6 +98,39 @@ class PredictionResponse(BaseModel):
             "/api/v1/matches/{id}; omitted (null) where not needed to keep responses small."
         ),
     )
+    blend: BlendedOutcome | None = Field(
+        default=None,
+        description=(
+            "Phase 5 blended 1X2 from the geometric mean of PoissonDC and XGB. "
+            "Populated only when the optional XGB classifier is loaded and the "
+            "caller passed ``blend=true``."
+        ),
+    )
+
+
+class FeatureContributionItem(BaseModel):
+    """One feature's SHAP contribution toward a class prediction."""
+
+    feature: str
+    value: float | None = Field(
+        default=None,
+        description="The feature value at the predicted match (None if NaN/missing).",
+    )
+    contribution: float = Field(
+        description="Signed SHAP value; positive pushes probability up, negative down."
+    )
+
+
+class MatchExplanation(BaseModel):
+    """Top-N SHAP feature contributions for one match's predicted class."""
+
+    home_team: str
+    away_team: str
+    match_date: date
+    class_name: str = Field(description="The class being explained: home_win / draw / away_win.")
+    contributions: list[FeatureContributionItem]
+    poisson_outcome: OutcomeProbabilities
+    xgb_outcome: OutcomeProbabilities | None = None
 
 
 class FixtureWithPrediction(BaseModel):

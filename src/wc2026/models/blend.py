@@ -62,7 +62,7 @@ def blend_geometric(
         )
     poisson_arr = np.clip(poisson_arr, EPS, 1.0)
     xgb_arr = np.clip(xgb_arr, EPS, 1.0)
-    blended = poisson_arr ** weight * xgb_arr ** (1.0 - weight)
+    blended = poisson_arr**weight * xgb_arr ** (1.0 - weight)
     row_sums = blended.sum(axis=-1, keepdims=True)
     out = blended / np.where(row_sums == 0.0, 1.0, row_sums)
     # Squeeze back to (3,) when both inputs were scalar.
