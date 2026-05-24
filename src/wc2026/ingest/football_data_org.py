@@ -227,6 +227,41 @@ def load_fixture(path: Path) -> dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def load_wc_match_id_map() -> dict[int, tuple[Any, str, str]]:
+    """Best-effort: pull the cached WC fixtures and map ``match_id -> (date, home, away)``.
+
+    Returns ``{}`` if the API key is unset, the cache is empty, or the upstream
+    can't be reached — callers degrade gracefully to "no FDO id resolution".
+    """
+    from datetime import date as _date  # noqa: PLC0415
+
+    try:
+        df = fetch_competition_matches(WC_COMPETITION_CODE)
+    except Exception:
+        # Caches/keys/network errors all roll up the same: no map.
+        return {}
+    out: dict[int, tuple[Any, str, str]] = {}
+    if df.empty:
+        return out
+    for _, row in df.iterrows():
+        match_id = row.get("match_id")
+        utc_date = row.get("utc_date")
+        home = row.get("home_team")
+        away = row.get("away_team")
+        if match_id is None or utc_date is None or home is None or away is None:
+            continue
+        try:
+            d = (
+                utc_date.date()
+                if hasattr(utc_date, "date")
+                else _date.fromisoformat(str(utc_date)[:10])
+            )
+            out[int(match_id)] = (d, str(home), str(away))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 __all__ = [
     "BASE_URL",
     "ENV_API_KEY",
@@ -238,5 +273,6 @@ __all__ = [
     "fetch_competition_matches",
     "fetch_match",
     "load_fixture",
+    "load_wc_match_id_map",
     "parse_competition_matches",
 ]

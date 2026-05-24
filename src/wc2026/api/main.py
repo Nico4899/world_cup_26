@@ -29,14 +29,14 @@ from wc2026.api.routes import (
 from wc2026.features.build_match_features import FeatureSources
 from wc2026.features.match_weights import combined_weight
 from wc2026.ingest.eloratings_scraper import load_latest_snapshot
-from wc2026.ingest.kaggle_intl import load_played, load_scheduled
+from wc2026.ingest.kaggle_intl import load_played
 from wc2026.models.live_win_prob import (
     DEFAULT_ARTIFACT_PATH as LIVE_WIN_PROB_PATH,
 )
 from wc2026.models.live_win_prob import (
     LiveWinProbModel,
 )
-from wc2026.models.poisson_dc import PoissonDC, PoissonDCParams
+from wc2026.models.poisson_dc import PoissonDC, hydrate_from_artefact
 from wc2026.models.shap_explain import XgbExplainer
 from wc2026.models.shootout import (
     fit_shootout_model,
@@ -54,13 +54,12 @@ from wc2026.models.xgb_classifier import (
     XgbMatchModel,
 )
 from wc2026.observability.sentry import init_sentry
-from wc2026.sim.fixtures import load_group_assignment, parse_wc2026_fixtures
+from wc2026.sim.fixtures import load_wc2026_fixtures
 
 ARTEFACT_PATH = Path("data/artifacts/poisson_dc/latest.npz")
 SHOOTOUT_ARTEFACT_PATH = Path("data/artifacts/shootout/latest.json")
 XGB_MODEL_PATH = XGB_DEFAULT_MODEL_PATH
 XGB_META_PATH = XGB_DEFAULT_META_PATH
-GROUP_ASSIGNMENT_PATH = Path("data/wc2026_group_assignment.json")
 
 # Match Stage 0.6's tuned defaults.
 MODEL_HALF_LIFE_DAYS = 3650.0
@@ -102,15 +101,11 @@ def _load_or_fit_model(df: pd.DataFrame) -> tuple[PoissonDC, str, datetime]:
     """
     if ARTEFACT_PATH.exists():
         try:
-            params = PoissonDCParams.load(ARTEFACT_PATH)
+            model = hydrate_from_artefact(ARTEFACT_PATH)
         except (OSError, ValueError, KeyError):
             # Corrupt or schema-mismatched artefact: silently re-fit from scratch.
             pass
         else:
-            model = PoissonDC()
-            model.params_ = params
-            model._team_idx = {t: i for i, t in enumerate(params.teams)}
-            model.converged_ = True
             mtime = datetime.fromtimestamp(ARTEFACT_PATH.stat().st_mtime, tz=UTC)
             return model, "artefact", mtime
     return _fit_model(df), "in_process_fit", datetime.now(UTC)
@@ -225,14 +220,7 @@ async def lifespan(app: FastAPI):
     app.state.model = model
     app.state.model_source = source
     app.state.model_fit_at = fit_at
-    override = None
-    if GROUP_ASSIGNMENT_PATH.exists():
-        try:
-            override = load_group_assignment(GROUP_ASSIGNMENT_PATH)
-        except (OSError, ValueError):
-            # Bad/stale JSON — fall back to derived-from-dates labelling.
-            override = None
-    app.state.fixtures = parse_wc2026_fixtures(load_scheduled(), override_assignment=override)
+    app.state.fixtures = load_wc2026_fixtures()
     app.state.model_version = MODEL_VERSION
     # Optional Elo-based shootout model; None falls back to the 50/50 placeholder.
     (

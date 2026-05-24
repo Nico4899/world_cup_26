@@ -32,36 +32,13 @@ from sqlalchemy.orm import Session
 
 from wc2026.db.models import ModelPrediction
 from wc2026.db.session import get_engine
-from wc2026.ingest.kaggle_intl import load_scheduled
-from wc2026.models.poisson_dc import PoissonDC, PoissonDCParams
-from wc2026.sim.fixtures import FixtureMatch, load_group_assignment, parse_wc2026_fixtures
+from wc2026.models.poisson_dc import PoissonDC, hydrate_from_artefact
+from wc2026.sim.fixtures import FixtureMatch, load_wc2026_fixtures
 
 DEFAULT_ARTEFACT_PATH = Path("data/artifacts/poisson_dc/latest.npz")
-DEFAULT_GROUP_ASSIGNMENT_PATH = Path("data/wc2026_group_assignment.json")
 DEFAULT_MODEL_VERSION = "poisson_dc.v1"
 
 logger = logging.getLogger(__name__)
-
-
-def _hydrate_model(artefact_path: Path) -> PoissonDC:
-    """Build a ``PoissonDC`` from a saved ``.npz`` artefact."""
-    params = PoissonDCParams.load(artefact_path)
-    model = PoissonDC()
-    model.params_ = params
-    model._team_idx = {t: i for i, t in enumerate(params.teams)}
-    model.converged_ = True
-    return model
-
-
-def _load_fixtures():
-    """Load the 72 scheduled WC 2026 fixtures, honoring an official override if present."""
-    override = None
-    if DEFAULT_GROUP_ASSIGNMENT_PATH.exists():
-        try:
-            override = load_group_assignment(DEFAULT_GROUP_ASSIGNMENT_PATH)
-        except (OSError, ValueError):
-            override = None
-    return parse_wc2026_fixtures(load_scheduled(), override_assignment=override)
 
 
 def build_prediction_rows(
@@ -149,8 +126,8 @@ def persist_daily_snapshot(
     if not artefact_path.exists():
         logger.warning("no PoissonDC artefact at %s — run refit_poisson_dc first", artefact_path)
         return 0
-    model = _hydrate_model(artefact_path)
-    fixtures = _load_fixtures()
+    model = hydrate_from_artefact(artefact_path)
+    fixtures = load_wc2026_fixtures()
     rows = build_prediction_rows(fixtures.matches, model, model_version=model_version, now=now)
     eng = engine or get_engine()
     n = persist_rows(rows, engine=eng)

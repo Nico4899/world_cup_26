@@ -34,77 +34,16 @@ from sqlalchemy.orm import Session
 
 from wc2026.db.models import TournamentSimRun, TournamentSimTeamOutcome
 from wc2026.db.session import get_engine
-from wc2026.ingest.kaggle_intl import load_scheduled
-from wc2026.models.poisson_dc import PoissonDC, PoissonDCParams
+from wc2026.ingest.football_data_org import load_wc_match_id_map
+from wc2026.models.poisson_dc import hydrate_from_artefact
 from wc2026.sim.conditional import known_group_results_from_live_events
-from wc2026.sim.fixtures import load_group_assignment, parse_wc2026_fixtures
+from wc2026.sim.fixtures import load_wc2026_fixtures
 from wc2026.sim.tournament import simulate_tournament_monte_carlo
 
 DEFAULT_ARTEFACT_PATH = Path("data/artifacts/poisson_dc/latest.npz")
-DEFAULT_GROUP_ASSIGNMENT_PATH = Path("data/wc2026_group_assignment.json")
 DEFAULT_MODEL_VERSION = "poisson_dc.v1"
 
 logger = logging.getLogger(__name__)
-
-
-def _hydrate_model(artefact_path: Path) -> PoissonDC:
-    params = PoissonDCParams.load(artefact_path)
-    model = PoissonDC()
-    model.params_ = params
-    model._team_idx = {t: i for i, t in enumerate(params.teams)}
-    model.converged_ = True
-    return model
-
-
-def _load_fixtures():
-    override = None
-    if DEFAULT_GROUP_ASSIGNMENT_PATH.exists():
-        try:
-            override = load_group_assignment(DEFAULT_GROUP_ASSIGNMENT_PATH)
-        except (OSError, ValueError):
-            override = None
-    return parse_wc2026_fixtures(load_scheduled(), override_assignment=override)
-
-
-def _load_match_id_map() -> dict:
-    """Best-effort: pull the football-data.org fixture cache to map match_id → fixture.
-
-    Returns an empty dict when there's no cache or no API key — the conditional
-    rerun then degenerates to an unconditional one (still useful: persists a
-    fresh snapshot of standings).
-    """
-    try:
-        from wc2026.ingest.football_data_org import (  # noqa: PLC0415
-            WC_COMPETITION_CODE,
-            fetch_competition_matches,
-        )
-
-        df = fetch_competition_matches(WC_COMPETITION_CODE)
-    except Exception:
-        logger.debug("football-data.org cache unavailable for MC rerun mapping", exc_info=True)
-        return {}
-    out = {}
-    if df.empty:
-        return out
-    from datetime import date as _date  # noqa: PLC0415
-
-    for _, row in df.iterrows():
-        match_id = row.get("match_id")
-        utc_date = row.get("utc_date")
-        home = row.get("home_team")
-        away = row.get("away_team")
-        if match_id is None or utc_date is None or home is None or away is None:
-            continue
-        try:
-            d = (
-                utc_date.date()
-                if hasattr(utc_date, "date")
-                else _date.fromisoformat(str(utc_date)[:10])
-            )
-            out[int(match_id)] = (d, str(home), str(away))
-        except (TypeError, ValueError):
-            continue
-    return out
 
 
 def persist_run(
@@ -159,9 +98,9 @@ def rerun_and_persist(
     if not artefact_path.exists():
         logger.warning("no PoissonDC artefact at %s — run refit_poisson_dc first", artefact_path)
         return None
-    model = _hydrate_model(artefact_path)
-    fixtures = _load_fixtures()
-    mapping = _load_match_id_map()
+    model = hydrate_from_artefact(artefact_path)
+    fixtures = load_wc2026_fixtures()
+    mapping = load_wc_match_id_map()
     eng = engine or get_engine()
     known = known_group_results_from_live_events(mapping, engine=eng)
     summary = simulate_tournament_monte_carlo(
