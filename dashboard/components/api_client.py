@@ -114,3 +114,16 @@ def get_live_history(match_id: int) -> dict[str, Any]:
     live win-prob line chart. Uncached for the same reason as
     :func:`get_live_snapshot`."""
     return get_json(f"/api/v1/live/{match_id}/history")
+
+
+@st.cache_data(ttl=300, show_spinner="Computing SHAP explanation…")
+def get_explanation(match_id: int, *, class_name: str = "home_win", top_n: int = 5) -> dict[str, Any]:
+    """SHAP top-features explanation for one WC 2026 fixture (Phase 5 endpoint).
+
+    Returns ``MatchExplanation``-shaped JSON. The caller decides how to
+    handle the 503 case (no XGB artefact loaded) — this helper just raises.
+    """
+    return get_json(
+        f"/api/v1/explain/{match_id}",
+        params={"class_name": class_name, "top_n": top_n},
+    )

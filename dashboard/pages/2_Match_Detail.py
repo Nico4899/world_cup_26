@@ -16,6 +16,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from dashboard.components.api_client import (
     APIUnreachable,
+    get_explanation,
     get_h2h,
     get_live_history,
     get_match,
@@ -261,6 +262,71 @@ st.markdown(
     - Remember: a 60% favourite still loses 40% of the time. These are probabilities, not predictions.
     """
 )
+
+st.divider()
+
+# --- Phase 9 SHAP panel ----------------------------------------------------
+
+st.subheader("Why (model contributions)")
+class_label = st.radio(
+    "Outcome to explain",
+    options=("home_win", "draw", "away_win"),
+    horizontal=True,
+    format_func=lambda v: {"home_win": fx["home_team"], "draw": "Draw", "away_win": fx["away_team"]}[v],
+)
+explanation = None
+try:
+    explanation = get_explanation(int(match_id), class_name=class_label, top_n=6)
+except APIUnreachable:
+    pass  # already warned about above
+except httpx.HTTPStatusError as exc:
+    if exc.response.status_code == 503:
+        st.caption(
+            "_SHAP explanations require the optional XGB classifier. Train it with_ "
+            "`uv run python scripts/refit_xgb.py` _and restart the API to enable this panel._"
+        )
+    elif exc.response.status_code == 404:
+        st.caption("_`/api/v1/explain` not deployed yet — restart the API after Phase 5._")
+    else:
+        raise
+
+if explanation is not None:
+    contribs = explanation.get("contributions") or []
+    if not contribs:
+        st.caption("_No contributions returned._")
+    else:
+        # Order by absolute contribution descending (the API already does this);
+        # render as a horizontal bar chart with signed values + colour coding.
+        names = [c["feature"] for c in contribs]
+        values = [c["contribution"] for c in contribs]
+        colors = ["#1f9d55" if v > 0 else "#d62728" for v in values]
+        shap_fig = go.Figure(
+            go.Bar(
+                x=values,
+                y=names,
+                orientation="h",
+                marker_color=colors,
+                text=[f"{v:+.3f}" for v in values],
+                textposition="outside",
+            )
+        )
+        shap_fig.update_layout(
+            height=320,
+            xaxis_title=f"SHAP value (signed; positive ⇒ pushes {class_label} prob up)",
+            yaxis={"autorange": "reversed"},
+            margin={"l": 140, "r": 60, "t": 10, "b": 40},
+        )
+        st.plotly_chart(shap_fig, config={"displayModeBar": False})
+        # Per-row "feature value" annotations as a compact caption.
+        rows = [
+            {
+                "Feature": c["feature"],
+                "Value": "n/a" if c.get("value") is None else f"{c['value']:+.3f}",
+                "Contribution": f"{c['contribution']:+.4f}",
+            }
+            for c in contribs
+        ]
+        st.dataframe(rows, hide_index=True, width="stretch")
 
 st.divider()
 
