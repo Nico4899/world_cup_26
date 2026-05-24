@@ -1,4 +1,11 @@
-"""Match Detail — per-match probability + 11x11 score heatmap + plain-language why."""
+"""Match Detail — per-match probability + 11x11 score heatmap + plain-language why.
+
+Phase 6 addition: a "LIVE" section appears whenever the API reports a non-
+pre-match win-prob source for the fixture. It renders the current state, an
+in-running win-prob bar, and a per-event timeline chart. The page auto-
+refreshes every 5 seconds while the match is live (via a meta-refresh tag —
+no external dependency).
+"""
 
 from __future__ import annotations
 
@@ -9,6 +16,7 @@ import streamlit as st
 from dashboard.components.api_client import (
     APIUnreachable,
     get_h2h,
+    get_live_history,
     get_match,
     get_recent_form,
     render_unreachable_warning,
@@ -59,6 +67,118 @@ col_a, col_b, col_c = st.columns(3)
 col_a.metric(fx["home_team"], f"{pred['outcome']['home_win']:.1%}")
 col_b.metric("Draw", f"{pred['outcome']['draw']:.1%}")
 col_c.metric(fx["away_team"], f"{pred['outcome']['away_win']:.1%}")
+
+# --- Phase 6 live section --------------------------------------------------
+# A non-"poisson_pre_match" snapshot source means events have been ingested
+# for this fixture; render the in-running state above the historical detail.
+live_payload = None
+try:
+    live_payload = get_live_history(int(match_id))
+except APIUnreachable:
+    # The /live endpoints share the same upstream as the rest of the page —
+    # the earlier render_unreachable_warning would have stopped us already, so
+    # we shouldn't get here. Belt-and-braces fallback: silently skip.
+    live_payload = None
+
+snapshot = (live_payload or {}).get("snapshot")
+events = (live_payload or {}).get("events") or []
+if snapshot is not None and snapshot.get("win_prob_source") in (
+    "live_win_prob",
+    "final",
+):
+    is_live = snapshot["win_prob_source"] == "live_win_prob"
+    if is_live:
+        # Embed a meta-refresh so the page reloads every 5 seconds while the
+        # match is in progress. The browser handles it; no streamlit-autorefresh
+        # dependency needed.
+        st.markdown(
+            "<meta http-equiv='refresh' content='5'>", unsafe_allow_html=True
+        )
+
+    st.divider()
+    badge = "🔴 LIVE" if is_live else "✅ FULL TIME"
+    st.markdown(
+        f"<span style='background:#d62728;color:white;padding:4px 10px;"
+        f"border-radius:6px;font-weight:700'>{badge}</span>",
+        unsafe_allow_html=True,
+    )
+
+    score_text = f"{snapshot['home_score']}–{snapshot['away_score']}"
+    state_text = f"min {snapshot['minute']} · last: {snapshot['last_event_type']}"
+    if snapshot["home_red_cards"] or snapshot["away_red_cards"]:
+        state_text += (
+            f" · 🟥 {snapshot['home_red_cards']}–{snapshot['away_red_cards']}"
+        )
+    st.subheader(
+        f"{fx['home_team']} {score_text} {fx['away_team']}"
+    )
+    st.caption(state_text)
+
+    live_col_a, live_col_b, live_col_c = st.columns(3)
+    wp = snapshot["win_prob"]
+    live_col_a.metric(f"{fx['home_team']} (live)", f"{wp['home_win']:.1%}")
+    live_col_b.metric("Draw (live)", f"{wp['draw']:.1%}")
+    live_col_c.metric(f"{fx['away_team']} (live)", f"{wp['away_win']:.1%}")
+
+    if events:
+        # Stack the three probability series over the per-event timeline.
+        minutes = [ev["minute"] for ev in events]
+        line = go.Figure()
+        line.add_trace(
+            go.Scatter(
+                x=minutes,
+                y=[ev["win_prob"]["home_win"] for ev in events],
+                name=fx["home_team"],
+                mode="lines+markers",
+                line={"color": "#1f77b4"},
+            )
+        )
+        line.add_trace(
+            go.Scatter(
+                x=minutes,
+                y=[ev["win_prob"]["draw"] for ev in events],
+                name="Draw",
+                mode="lines+markers",
+                line={"color": "#7f7f7f"},
+            )
+        )
+        line.add_trace(
+            go.Scatter(
+                x=minutes,
+                y=[ev["win_prob"]["away_win"] for ev in events],
+                name=fx["away_team"],
+                mode="lines+markers",
+                line={"color": "#d62728"},
+            )
+        )
+        # Annotation pins for goals + red cards
+        for ev in events:
+            if ev["event_type"] == "GOAL":
+                line.add_vline(
+                    x=ev["minute"],
+                    line_color="#1f9d55",
+                    line_dash="dash",
+                    annotation_text=f"⚽ {ev['team'] or ''}".strip(),
+                    annotation_position="top",
+                )
+            elif ev["event_type"] == "FT_WHISTLE":
+                line.add_vline(
+                    x=ev["minute"],
+                    line_color="#888888",
+                    line_dash="dot",
+                    annotation_text="FT",
+                    annotation_position="top",
+                )
+        line.update_layout(
+            title="Live win probability",
+            xaxis_title="minute",
+            yaxis={"range": [0, 1.0], "tickformat": ".0%"},
+            height=300,
+            margin={"l": 60, "r": 20, "t": 50, "b": 40},
+        )
+        st.plotly_chart(line, config={"displayModeBar": False})
+
+    st.divider()
 
 # 1X2 bar chart at the top.
 bar = go.Figure(

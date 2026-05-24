@@ -100,3 +100,17 @@ def get_h2h(team_a: str, team_b: str, n: int = 10) -> list[dict[str, Any]]:
 def get_standings(n_sims: int = 2000, seed: int = 42) -> dict[str, Any]:
     """Aggregated Monte Carlo standings (cached 10 min)."""
     return get_json("/api/v1/tournament/standings", params={"n_sims": n_sims, "seed": seed})
+
+
+def get_live_snapshot(match_id: int) -> dict[str, Any]:
+    """Current live state + win-prob for one fixture. Intentionally uncached —
+    callers (the Match Detail page during a live match) want fresh state on
+    every render."""
+    return get_json(f"/api/v1/live/{match_id}")
+
+
+def get_live_history(match_id: int) -> dict[str, Any]:
+    """Full per-event timeline + the latest snapshot. Used by the dashboard's
+    live win-prob line chart. Uncached for the same reason as
+    :func:`get_live_snapshot`."""
+    return get_json(f"/api/v1/live/{match_id}/history")
