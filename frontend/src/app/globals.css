@@ -39,6 +39,17 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-outcome-home: var(--outcome-home);
+  --color-outcome-draw: var(--outcome-draw);
+  --color-outcome-away: var(--outcome-away);
+  --color-result-win: var(--result-win);
+  --color-result-draw: var(--result-draw);
+  --color-result-loss: var(--result-loss);
+  --color-group-first: var(--group-first);
+  --color-group-second: var(--group-second);
+  --color-group-third-adv: var(--group-third-adv);
+  --color-group-third-out: var(--group-third-out);
+  --color-group-fourth: var(--group-fourth);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -49,72 +60,112 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  /* Poster-palette v2 anchors — FIFA WC 26 Monterrey poster art. */
+  --p-navy: #1d2188;
+  --p-ink: #15186e;
+  --p-magenta: #e2245e;
+  --p-green: #0a9b54;
+  --p-mint: #9fdfc9;
+  --p-cream: #f3ead7;
+
+  /* Semantic surface tokens (shadcn slots). */
+  --background: var(--p-cream);
+  --foreground: var(--p-ink);
+  --card: #ffffff;
+  --card-foreground: var(--p-ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--p-ink);
+  --primary: var(--p-navy);
+  --primary-foreground: #ffffff;
+  --secondary: var(--p-mint);
+  --secondary-foreground: var(--p-ink);
+  --muted: rgba(255, 255, 255, 0.55);
+  --muted-foreground: rgba(21, 24, 110, 0.65);
+  --accent: rgba(159, 223, 201, 0.45);
+  --accent-foreground: var(--p-ink);
+  --destructive: var(--p-magenta);
+  --border: rgba(29, 33, 136, 0.18);
+  --input: rgba(29, 33, 136, 0.18);
+  --ring: var(--p-navy);
+
+  /* Outcome triad (1X2) — also doubles as W/D/L and host fills. */
+  --outcome-home: var(--p-green);
+  --outcome-draw: var(--p-navy);
+  --outcome-away: var(--p-magenta);
+
+  /* Result badges (W/D/L). */
+  --result-win: var(--p-green);
+  --result-draw: var(--p-navy);
+  --result-loss: var(--p-magenta);
+
+  /* Group-stage 5-segment ramp (navy → magenta-tonal → faded). */
+  --group-first: var(--p-navy);
+  --group-second: #6b6fc9;
+  --group-third-adv: #57c2a3;
+  --group-third-out: #f29ebd;
+  --group-fourth: rgba(21, 24, 110, 0.35);
+
+  /* Viridis heatmap stops. */
+  --heat-stop-0: #440154;
+  --heat-stop-1: #3b528b;
+  --heat-stop-2: #21908d;
+  --heat-stop-3: #5dc963;
+  --heat-stop-4: #fde725;
+
+  /* Chart fallback ramp (kept for back-compat — new code references
+     named semantic tokens above). */
+  --chart-1: var(--outcome-home);
+  --chart-2: var(--outcome-draw);
+  --chart-3: var(--outcome-away);
+  --chart-4: var(--p-mint);
+  --chart-5: var(--group-second);
+
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+
+  /* Sidebar tokens retained so any leftover shadcn primitives that
+     still reference them stay coherent. */
+  --sidebar: #ffffff;
+  --sidebar-foreground: var(--p-ink);
+  --sidebar-primary: var(--p-navy);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--p-ink);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Poster palette inverted — cream foreground on navy. */
+  --background: var(--p-navy);
+  --foreground: var(--p-cream);
+  --card: #2226a3;
+  --card-foreground: var(--p-cream);
+  --popover: #2226a3;
+  --popover-foreground: var(--p-cream);
+  --primary: var(--p-cream);
+  --primary-foreground: var(--p-navy);
+  --secondary: rgba(159, 223, 201, 0.18);
+  --secondary-foreground: var(--p-cream);
+  --muted: rgba(159, 223, 201, 0.12);
+  --muted-foreground: rgba(243, 234, 215, 0.65);
+  --accent: rgba(159, 223, 201, 0.22);
+  --accent-foreground: var(--p-cream);
+  --destructive: var(--p-magenta);
+  --border: rgba(243, 234, 215, 0.18);
+  --input: rgba(243, 234, 215, 0.18);
+  --ring: var(--p-mint);
+
+  /* Outcome / result / group / heatmap tokens DO NOT swap in dark mode —
+     they keep identity across themes (v2 rule, mirrors v1). */
+
+  --sidebar: #2226a3;
+  --sidebar-foreground: var(--p-cream);
+  --sidebar-primary: var(--p-cream);
+  --sidebar-primary-foreground: var(--p-navy);
+  --sidebar-accent: rgba(159, 223, 201, 0.22);
+  --sidebar-accent-foreground: var(--p-cream);
+  --sidebar-border: rgba(243, 234, 215, 0.18);
+  --sidebar-ring: var(--p-mint);
 }
 
 @layer base {
@@ -126,5 +177,77 @@
   }
   html {
     @apply font-sans;
+  }
+  /* Bump every lucide icon to a slightly bolder stroke so they hold up
+     against the saturated poster surface (v2 design rule). Override
+     locally with `strokeWidth={1.6}` to restore the v1 weight. */
+  svg[class*="lucide-"] {
+    stroke-width: 2.25;
+  }
+}
+
+@layer components {
+  /* Card variant motifs — paired with the `variant` prop on
+     <Card> (data-variant="ribbon"|"live"|"feature"). */
+  [data-slot="card"][data-variant="ribbon"] {
+    padding-top: 22px;
+    position: relative;
+  }
+  [data-slot="card"][data-variant="ribbon"]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: var(--p-navy);
+  }
+  .dark [data-slot="card"][data-variant="ribbon"]::before {
+    background: var(--p-mint);
+  }
+
+  [data-slot="card"][data-variant="live"] {
+    padding-top: 22px;
+    position: relative;
+    background: rgba(159, 223, 201, 0.18);
+  }
+  .dark [data-slot="card"][data-variant="live"] {
+    background: rgba(226, 36, 94, 0.10);
+  }
+  [data-slot="card"][data-variant="live"]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: var(--p-magenta);
+  }
+
+  [data-slot="card"][data-variant="feature"] {
+    padding-top: 22px;
+    position: relative;
+  }
+  [data-slot="card"][data-variant="feature"]::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: var(--p-green);
+  }
+  [data-slot="card"][data-variant="feature"]::after {
+    content: "";
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 24px;
+    height: 24px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'><polygon points='14,2 16.5,9 23.5,10 18,14.5 19.5,21.5 14,18 8.5,21.5 10,14.5 4.5,10 11.5,9' fill='%239fdfc9'/><circle cx='14' cy='14' r='2' fill='%23e2245e'/></svg>");
+    background-size: contain;
+    background-repeat: no-repeat;
+    opacity: 0.85;
+    pointer-events: none;
   }
 }

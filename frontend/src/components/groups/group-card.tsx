@@ -33,11 +33,11 @@ export type LiveGroupTeam = {
 };
 
 const SEGMENT_COLORS = {
-  first: "#1f4e79",
-  second: "#5b9bd5",
-  thirdAdv: "#ed7d31",
-  thirdOut: "#d9a679",
-  fourth: "#a6a6a6",
+  first: "var(--group-first)",
+  second: "var(--group-second)",
+  thirdAdv: "var(--group-third-adv)",
+  thirdOut: "var(--group-third-out)",
+  fourth: "var(--group-fourth)",
 };
 
 export function GroupCard({

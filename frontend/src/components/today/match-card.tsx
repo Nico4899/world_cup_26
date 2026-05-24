@@ -16,9 +16,9 @@ import { utcTimeOfDay } from "@/lib/format";
 import type { FixtureSummary, FixtureWithPrediction } from "@/lib/types";
 
 const COLORS = {
-  home: "var(--chart-1, #1f77b4)",
-  draw: "var(--chart-2, #7f7f7f)",
-  away: "var(--chart-3, #d62728)",
+  home: "var(--outcome-home)",
+  draw: "var(--outcome-draw)",
+  away: "var(--outcome-away)",
 } as const;
 
 export async function MatchCard({ fixture }: { fixture: FixtureSummary }) {

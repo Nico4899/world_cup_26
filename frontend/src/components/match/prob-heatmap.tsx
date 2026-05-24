@@ -14,10 +14,26 @@ type Props = {
   width?: number;
 };
 
-function blueOf(t: number): string {
-  // 0..1 → light → deep blue, matplotlib "Blues" colormap-like.
-  const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
-  return `rgb(${lerp(247, 8)}, ${lerp(251, 81)}, ${lerp(255, 156)})`;
+// Viridis ramp (poster-palette v2 default). Hard-coded — mirrors the
+// --heat-stop-N CSS variables in globals.css; keep the two in sync.
+const VIRIDIS_STOPS: ReadonlyArray<readonly [number, number, number]> = [
+  [68, 1, 84], // #440154
+  [59, 82, 139], // #3b528b
+  [33, 144, 141], // #21908d
+  [93, 201, 99], // #5dc963
+  [253, 231, 37], // #fde725
+];
+
+function viridisOf(t: number): string {
+  // 0..1 → purple → teal → yellow, piecewise-linear across 5 stops.
+  const clamped = Math.max(0, Math.min(1, t));
+  const span = clamped * (VIRIDIS_STOPS.length - 1);
+  const i = Math.min(VIRIDIS_STOPS.length - 2, Math.floor(span));
+  const f = span - i;
+  const a = VIRIDIS_STOPS[i];
+  const b = VIRIDIS_STOPS[i + 1];
+  const lerp = (x: number, y: number) => Math.round(x + (y - x) * f);
+  return `rgb(${lerp(a[0], b[0])}, ${lerp(a[1], b[1])}, ${lerp(a[2], b[2])})`;
 }
 
 export function ProbHeatmap({ matrix, homeTeam, awayTeam, width = 380 }: Props) {
@@ -110,8 +126,12 @@ export function ProbHeatmap({ matrix, homeTeam, awayTeam, width = 380 }: Props) 
           {/* Cells */}
           {crop.map((row, i) =>
             row.map((v, j) => {
-              const fill = blueOf(intensity(v));
+              const t = intensity(v);
+              const fill = viridisOf(t);
               const labelOk = v >= 0.02;
+              // Viridis is darkest at the ends — use dark label only on the
+              // bright teal/green/yellow band, else white.
+              const labelColor = t > 0.45 && t < 0.95 ? "#0a0a0a" : "#fafafa";
               return (
                 <g key={`${i}-${j}`}>
                   <rect
@@ -131,8 +151,8 @@ export function ProbHeatmap({ matrix, homeTeam, awayTeam, width = 380 }: Props) 
                       y={i * cell + cell / 2}
                       textAnchor="middle"
                       dominantBaseline="central"
-                      className="text-[9px] fill-current pointer-events-none tabular-nums"
-                      style={{ color: intensity(v) > 0.55 ? "white" : "#1a365d" }}
+                      className="text-[9px] pointer-events-none tabular-nums"
+                      fill={labelColor}
                     >
                       {`${(v * 100).toFixed(1)}%`}
                     </text>

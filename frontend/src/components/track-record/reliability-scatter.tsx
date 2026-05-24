@@ -20,9 +20,9 @@ export type ReliabilityBin = {
 };
 
 const TRACE: Record<ReliabilityBin["outcome"], { color: string; label: string }> = {
-  H: { color: "#1f77b4", label: "Home" },
-  D: { color: "#7f7f7f", label: "Draw" },
-  A: { color: "#d62728", label: "Away" },
+  H: { color: "var(--outcome-home)", label: "Home" },
+  D: { color: "var(--outcome-draw)", label: "Draw" },
+  A: { color: "var(--outcome-away)", label: "Away" },
 };
 
 export function ReliabilityScatter({

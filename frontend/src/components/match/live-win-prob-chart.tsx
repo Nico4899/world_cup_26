@@ -12,11 +12,11 @@ import type { LiveSnapshot } from "@/hooks/use-live-win-prob";
 
 const MARGIN = { top: 16, right: 20, bottom: 32, left: 44 };
 const COLORS = {
-  home: "#1f77b4",
-  draw: "#7f7f7f",
-  away: "#d62728",
-  goal: "#1f9d55",
-  ft: "#888888",
+  home: "var(--outcome-home)",
+  draw: "var(--outcome-draw)",
+  away: "var(--outcome-away)",
+  goal: "var(--result-win)",
+  ft: "var(--muted-foreground)",
 };
 
 /**

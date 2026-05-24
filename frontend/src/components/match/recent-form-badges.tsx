@@ -1,9 +1,9 @@
 import { apiGet, ApiError, ApiUnreachable } from "@/lib/api";
 
 const COLOR: Record<string, string> = {
-  W: "#1f9d55",
-  D: "#888888",
-  L: "#d62728",
+  W: "var(--result-win)",
+  D: "var(--result-draw)",
+  L: "var(--result-loss)",
 };
 
 type RecentMatch = {

@@ -18,7 +18,7 @@ type Props = {
 };
 
 /** Visx line chart of a team's Elo rating over time. */
-export function EloLine({ history, height = 240, color = "#1f77b4" }: Props) {
+export function EloLine({ history, height = 240, color = "var(--outcome-draw)" }: Props) {
   if (history.length === 0) return null;
   return (
     <div style={{ height }}>

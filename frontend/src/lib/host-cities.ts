@@ -1,7 +1,11 @@
 /**
  * Curated host-city coordinates for FIFA WC 2026. Ships with the repo so the
- * map page works without an external geocoding API. Country colours:
- * USA navy, Mexico green, Canada red.
+ * map page works without an external geocoding API.
+ *
+ * COUNTRY_FILL mirrors the --outcome-* / --result-* triad
+ * (USA navy = draw axis, Mexico green = home axis, Canada magenta = away
+ * axis); when those CSS tokens move, update these RGB tuples to match.
+ * Tuples (not CSS vars) because deck.gl wants raw [r, g, b] arrays.
  */
 export type HostCity = {
   city: string;
@@ -43,7 +47,7 @@ export const HOST_CITIES: HostCity[] = [
 ];
 
 export const COUNTRY_FILL: Record<HostCity["country"], [number, number, number]> = {
-  "United States": [31, 119, 180], // navy
-  Mexico: [44, 160, 44], // green
-  Canada: [214, 39, 40], // red
+  "United States": [29, 33, 136], // navy — mirrors --outcome-draw / --p-navy
+  Mexico: [10, 155, 84], // green — mirrors --outcome-home / --p-green
+  Canada: [226, 36, 94], // magenta — mirrors --outcome-away / --p-magenta
 };
