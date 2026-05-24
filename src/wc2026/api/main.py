@@ -24,6 +24,7 @@ from wc2026.api.routes import (
     predictions,
     teams,
     tournament,
+    track_record,
 )
 from wc2026.features.build_match_features import FeatureSources
 from wc2026.features.match_weights import combined_weight
@@ -276,3 +277,4 @@ app.include_router(h2h.router)
 app.include_router(ops.router)
 app.include_router(explain.router)
 app.include_router(live.router)
+app.include_router(track_record.router)

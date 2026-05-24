@@ -679,3 +679,78 @@ def test_live_history_empty_when_no_events(client: TestClient, monkeypatch) -> N
 def test_live_history_out_of_range_match_id(client: TestClient) -> None:
     r = client.get("/api/v1/live/999/history")
     assert r.status_code == 404
+
+
+# --- /api/v1/track-record/wc2026 ------------------------------------------
+
+
+def test_wc2026_track_record_returns_zero_when_no_fixtures_or_events(
+    client: TestClient, monkeypatch
+) -> None:
+    """No football-data.org cache + no live events → empty calibration, not 500."""
+    from wc2026.api.routes import track_record as tr
+
+    monkeypatch.setattr(tr, "_build_match_id_map", lambda _req: {})
+    r = client.get("/api/v1/track-record/wc2026")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["n_completed"] == 0
+    assert body["log_loss"] is None
+    assert body["per_match"] == []
+
+
+def test_wc2026_track_record_aggregates_when_event_and_prediction_present(
+    client: TestClient, monkeypatch
+) -> None:
+    """Synthetic prediction + FT_WHISTLE row produce a non-zero calibration."""
+    import datetime as _dt
+
+    from wc2026.api.routes import track_record as tr
+    from wc2026.eval.rolling import PerMatchCalibration, RollingCalibration
+
+    # Bypass the DB completely; serve a synthetic RollingCalibration so the
+    # test doesn't depend on whether the test env has Postgres.
+    canned = RollingCalibration(
+        n_completed=1,
+        log_loss=0.6931,
+        brier=0.5,
+        rps=0.25,
+        per_match=[
+            PerMatchCalibration(
+                match_date=_dt.date(2026, 6, 11),
+                home_team="Mexico",
+                away_team="Senegal",
+                home_score=2,
+                away_score=0,
+                p_home=0.5,
+                p_draw=0.25,
+                p_away=0.25,
+                observed="H",
+                log_loss=0.6931,
+                brier=0.5,
+                rps=0.25,
+                model_version="poisson_dc.v1",
+            )
+        ],
+    )
+    monkeypatch.setattr(tr, "_build_match_id_map", lambda _req: {1: (_dt.date(2026, 6, 11), "Mexico", "Senegal")})
+    monkeypatch.setattr(tr, "compute_rolling", lambda **_kw: canned)
+    r = client.get("/api/v1/track-record/wc2026")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["n_completed"] == 1
+    assert body["per_match"][0]["observed"] == "H"
+    assert abs(body["log_loss"] - 0.6931) < 1e-6
+
+
+def test_wc2026_track_record_returns_503_on_db_error(client: TestClient, monkeypatch) -> None:
+    from wc2026.api.routes import track_record as tr
+
+    def boom(**_):
+        raise RuntimeError("Postgres unreachable")
+
+    monkeypatch.setattr(tr, "_build_match_id_map", lambda _req: {})
+    monkeypatch.setattr(tr, "compute_rolling", boom)
+    r = client.get("/api/v1/track-record/wc2026")
+    assert r.status_code == 503
+    assert "track-record" in r.json()["detail"]
