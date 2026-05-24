@@ -63,7 +63,7 @@ export default async function GroupsPage({
   if (unreachable || !data) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Group-stage advancement</h1>
+        <h1 className="ds-h1">Group-stage advancement</h1>
         <ApiUnreachableBanner />
       </div>
     );
@@ -81,9 +81,7 @@ export default async function GroupsPage({
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Group-stage advancement probabilities
-        </h1>
+        <h1 className="ds-h1">Group-stage advancement probabilities</h1>
         <ForecastHeader />
       </header>
 

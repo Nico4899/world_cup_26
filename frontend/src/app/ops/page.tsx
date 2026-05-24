@@ -48,7 +48,7 @@ export default async function OperatorPage() {
   if (unreachable || !health) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-semibold">Operator</h1>
+        <h1 className="ds-h1">Operator</h1>
         <ApiUnreachableBanner />
       </div>
     );
@@ -57,7 +57,7 @@ export default async function OperatorPage() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Operator</h1>
+        <h1 className="ds-h1">Operator</h1>
         <p className="text-xs text-muted-foreground">
           Operational health + manual scheduler-job triggers. Token validation
           happens server-side via the <code>WC2026_OPS_TOKEN</code> env var.

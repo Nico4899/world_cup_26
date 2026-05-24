@@ -30,9 +30,7 @@ export default async function AboutPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          About / Methodology
-        </h1>
+        <h1 className="ds-h1">About / Methodology</h1>
       </header>
 
       <Card>

@@ -140,7 +140,7 @@ export default async function TeamProfilePage({
   if (unreachable) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-semibold">Team Profile</h1>
+        <h1 className="ds-h1">Team Profile</h1>
         <ApiUnreachableBanner />
       </div>
     );
@@ -180,7 +180,7 @@ export default async function TeamProfilePage({
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Team Profile</h1>
+        <h1 className="ds-h1">Team Profile</h1>
         <ForecastHeader />
       </header>
 

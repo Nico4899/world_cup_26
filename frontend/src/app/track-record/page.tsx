@@ -78,7 +78,7 @@ export default async function TrackRecordPage({
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Track record</h1>
+        <h1 className="ds-h1">Track record</h1>
         <ForecastHeader />
         <p className="text-xs text-muted-foreground">
           Calibration check on completed World Cups (out-of-sample). Each point

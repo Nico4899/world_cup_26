@@ -49,7 +49,7 @@ export default async function MatchDetailPage({
   if (unreachable || !detail) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-semibold">Match detail</h1>
+        <h1 className="ds-h1">Match detail</h1>
         <ApiUnreachableBanner />
       </div>
     );
@@ -63,7 +63,7 @@ export default async function MatchDetailPage({
     <div className="space-y-6">
       <header className="space-y-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h1 className="text-2xl font-semibold tracking-tight">Match detail</h1>
+          <h1 className="ds-h1">Match detail</h1>
           <div className="flex items-center gap-3">
             <MatchIdInput current={matchId} />
             <BlendOverlay

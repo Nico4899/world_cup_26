@@ -97,9 +97,7 @@ function BracketPageInner() {
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Knockout bracket realisation(s)
-        </h1>
+        <h1 className="ds-h1">Knockout bracket realisation(s)</h1>
         <p className="text-xs text-muted-foreground">
           Each seed gives one Monte Carlo sample of the full knockout bracket.
           Compare scenarios to see how much the predicted champion / finalists

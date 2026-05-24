@@ -54,7 +54,7 @@ export function MetricCard({
           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
         ) : null}
       </div>
-      <p className="text-2xl font-semibold leading-tight">{value}</p>
+      <p className="ds-metric">{value}</p>
       {delta ? (
         <p className="text-xs text-muted-foreground">{delta}</p>
       ) : null}

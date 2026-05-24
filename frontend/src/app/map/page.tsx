@@ -16,7 +16,7 @@ export default function MapPage() {
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Host-city map</h1>
+        <h1 className="ds-h1">Host-city map</h1>
         <p className="text-xs text-muted-foreground">
           16 host venues across USA (11) + Mexico (3) + Canada (2).
           Click a pin to filter the fixture list, or pick a city from the
