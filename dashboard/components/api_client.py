@@ -157,3 +157,21 @@ def get_team_elo_history(team: str) -> dict[str, Any]:
 def get_team_tournament_probs(team: str) -> dict[str, Any]:
     """Cached per-team advancement probabilities from the latest persisted MC run."""
     return get_json(f"/api/v1/teams/{team}/tournament-probs")
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_team_fifa_rankings(team: str) -> dict[str, Any]:
+    """FIFA Men's Ranking history (monthly snapshots) for one team."""
+    return get_json(f"/api/v1/teams/{team}/fifa-rankings")
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_team_squad(team: str) -> dict[str, Any]:
+    """Latest tournament-squad snapshot for one team."""
+    return get_json(f"/api/v1/teams/{team}/squad")
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_team_xg_form(team: str) -> dict[str, Any]:
+    """Rolling xG-for / xG-against over the last 5 and 10 matches with xG data."""
+    return get_json(f"/api/v1/teams/{team}/xg-form")

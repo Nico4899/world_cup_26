@@ -15,7 +15,10 @@ from dashboard.components.api_client import (
     get_json,
     get_recent_form,
     get_team_elo_history,
+    get_team_fifa_rankings,
+    get_team_squad,
     get_team_tournament_probs,
+    get_team_xg_form,
     render_unreachable_warning,
 )
 from dashboard.components.team_assets import (

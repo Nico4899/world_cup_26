@@ -249,3 +249,59 @@ class H2HMatch(BaseModel):
     away_score: int
     tournament: str
     neutral: bool
+
+
+class FifaRankingPoint(BaseModel):
+    """One row of FIFA Men's Ranking history for a single team."""
+
+    ranking_date: date
+    rank: int
+    points: float | None = None
+    previous_rank: int | None = None
+
+
+class TeamFifaRankingHistory(BaseModel):
+    """Chronological FIFA ranking history (oldest → newest) for one team."""
+
+    team: str
+    history: list[FifaRankingPoint]
+
+
+class SquadMember(BaseModel):
+    """One player on a tournament squad snapshot."""
+
+    player_name: str
+    shirt_number: int | None = None
+    position: str | None = None
+    birth_date: date | None = None
+    club: str | None = None
+    caps: int | None = None
+    goals: int | None = None
+
+
+class TeamSquadResponse(BaseModel):
+    """Latest tournament-squad snapshot for one team."""
+
+    team: str
+    tournament: str | None = None
+    snapshot_date: date | None = None
+    players: list[SquadMember] = []
+
+
+class XgFormSplit(BaseModel):
+    """Aggregate xG-for / xG-against over a rolling window."""
+
+    matches: int
+    xg_for: float | None = None
+    xg_against: float | None = None
+    xg_diff: float | None = None
+    goals_for: int | None = None
+    goals_against: int | None = None
+
+
+class TeamXgFormResponse(BaseModel):
+    """Last-N xG form, derived from the most recent ``raw_match_xg`` rows."""
+
+    team: str
+    last_5: XgFormSplit
+    last_10: XgFormSplit

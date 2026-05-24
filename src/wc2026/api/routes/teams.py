@@ -12,13 +12,22 @@ from sqlalchemy.orm import Session
 from wc2026.api.dependencies import get_played_df
 from wc2026.api.schemas import (
     EloHistoryPoint,
+    FifaRankingPoint,
+    SquadMember,
     TeamAssetsResponse,
     TeamEloHistory,
+    TeamFifaRankingHistory,
     TeamRecentMatch,
+    TeamSquadResponse,
     TeamTournamentProbabilities,
+    TeamXgFormResponse,
+    XgFormSplit,
 )
 from wc2026.db.models import (
     RawEloSnapshot,
+    RawFifaRanking,
+    RawMatchXg,
+    RawSquad,
     RawTeamAsset,
     TournamentSimRun,
     TournamentSimTeamOutcome,
@@ -159,6 +168,140 @@ def team_tournament_probs(team: str) -> TeamTournamentProbabilities:
             status_code=503,
             detail=f"team_tournament_probs DB query failed: {exc.__class__.__name__}",
         ) from exc
+
+
+@router.get("/{team}/fifa-rankings", response_model=TeamFifaRankingHistory)
+def team_fifa_rankings(team: str) -> TeamFifaRankingHistory:
+    """Monthly FIFA Men's Ranking history for ``team`` (oldest → newest).
+
+    Empty when no rows exist; the dashboard then explains the
+    ``fifa_ranking_refresh`` scheduler job hasn't populated them yet.
+    """
+    try:
+        eng = get_engine()
+        with Session(eng, future=True) as session:
+            rows = list(
+                session.scalars(
+                    select(RawFifaRanking)
+                    .where(RawFifaRanking.team == team)
+                    .order_by(RawFifaRanking.ranking_date)
+                )
+            )
+    except Exception as exc:
+        logger.debug("team_fifa_rankings: DB error for %s", team, exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail=f"team_fifa_rankings DB query failed: {exc.__class__.__name__}",
+        ) from exc
+    return TeamFifaRankingHistory(
+        team=team,
+        history=[
+            FifaRankingPoint(
+                ranking_date=r.ranking_date,
+                rank=int(r.rank),
+                points=None if r.points is None else float(r.points),
+                previous_rank=r.previous_rank,
+            )
+            for r in rows
+        ],
+    )
+
+
+@router.get("/{team}/squad", response_model=TeamSquadResponse)
+def team_squad(team: str) -> TeamSquadResponse:
+    """Latest tournament-squad snapshot for ``team`` from ``raw_squads``.
+
+    Picks the freshest ``snapshot_date`` and returns every player on it,
+    sorted by shirt number when present. Empty payload when no row exists.
+    """
+    try:
+        eng = get_engine()
+        with Session(eng, future=True) as session:
+            latest_row = session.execute(
+                select(RawSquad.tournament, RawSquad.snapshot_date)
+                .where(RawSquad.team == team)
+                .order_by(RawSquad.snapshot_date.desc())
+                .limit(1)
+            ).first()
+            if latest_row is None:
+                return TeamSquadResponse(team=team)
+            tournament, snapshot_date = latest_row
+            rows = list(
+                session.scalars(
+                    select(RawSquad).where(
+                        RawSquad.team == team,
+                        RawSquad.tournament == tournament,
+                        RawSquad.snapshot_date == snapshot_date,
+                    )
+                )
+            )
+    except Exception as exc:
+        logger.debug("team_squad: DB error for %s", team, exc_info=True)
+        raise HTTPException(
+            status_code=503, detail=f"team_squad DB query failed: {exc.__class__.__name__}"
+        ) from exc
+    rows.sort(key=lambda r: (r.shirt_number is None, r.shirt_number or 0, r.player_name))
+    return TeamSquadResponse(
+        team=team,
+        tournament=tournament,
+        snapshot_date=snapshot_date,
+        players=[
+            SquadMember(
+                player_name=r.player_name,
+                shirt_number=r.shirt_number,
+                position=r.position,
+                birth_date=r.birth_date,
+                club=r.club,
+                caps=r.caps,
+                goals=r.goals,
+            )
+            for r in rows
+        ],
+    )
+
+
+@router.get("/{team}/xg-form", response_model=TeamXgFormResponse)
+def team_xg_form(team: str) -> TeamXgFormResponse:
+    """Rolling xG aggregates over the last 5 and 10 matches with xG data.
+
+    Reads from ``raw_match_xg`` filtered to ``team`` (regardless of whether
+    they were home or away). Splits with no rows return ``matches=0`` and
+    null aggregates so the dashboard can render a clean "no data" state.
+    """
+    try:
+        eng = get_engine()
+        with Session(eng, future=True) as session:
+            rows = list(
+                session.scalars(
+                    select(RawMatchXg)
+                    .where(RawMatchXg.team == team)
+                    .order_by(RawMatchXg.match_date.desc())
+                    .limit(10)
+                )
+            )
+    except Exception as exc:
+        logger.debug("team_xg_form: DB error for %s", team, exc_info=True)
+        raise HTTPException(
+            status_code=503, detail=f"team_xg_form DB query failed: {exc.__class__.__name__}"
+        ) from exc
+
+    def _aggregate(window: list[RawMatchXg]) -> XgFormSplit:
+        if not window:
+            return XgFormSplit(matches=0)
+        xg_for = sum(float(r.xg_for) for r in window) / len(window)
+        xg_against = sum(float(r.xg_against) for r in window) / len(window)
+        return XgFormSplit(
+            matches=len(window),
+            xg_for=xg_for,
+            xg_against=xg_against,
+            xg_diff=xg_for - xg_against,
+        )
+
+    return TeamXgFormResponse(
+        team=team,
+        last_5=_aggregate(rows[:5]),
+        last_10=_aggregate(rows),
+    )
 
 
 @router.get("/{team}/assets", response_model=TeamAssetsResponse)
