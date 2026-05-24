@@ -5,9 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   CalendarClock,
+  Command,
   GitBranch,
   LayoutGrid,
   LineChart,
+  Menu,
   Trophy,
   type LucideIcon,
 } from "lucide-react";
@@ -15,6 +17,7 @@ import {
 import { BrandLockup } from "@/components/brand-mark";
 import { CommandPalette } from "@/components/command-palette";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 type Tab = { href: string; label: string; Icon: LucideIcon };
@@ -36,6 +39,7 @@ function isActive(pathname: string, href: string) {
 export function TopNav() {
   const pathname = usePathname();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -48,17 +52,40 @@ export function TopNav() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Close the mobile sheet automatically when the route changes.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSheetOpen(false);
+  }, [pathname]);
+
   return (
     <>
       <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-card px-4">
+        {/* Mobile hamburger — collapses the 5 primary tabs into a Sheet. */}
+        <button
+          type="button"
+          onClick={() => setSheetOpen(true)}
+          className="md:hidden inline-flex items-center justify-center rounded-md p-1.5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Open primary navigation"
+          aria-controls="primary-nav-sheet"
+          aria-expanded={sheetOpen}
+        >
+          <Menu className="h-5 w-5" aria-hidden />
+        </button>
+
         <Link
           href="/"
-          className="flex-shrink-0 border-r border-border pr-4"
+          className="flex-shrink-0 md:border-r md:border-border md:pr-4"
           aria-label="WC 2026 home"
         >
           <BrandLockup size={28} />
         </Link>
-        <nav className="flex flex-1 min-w-0 gap-0.5 overflow-hidden" aria-label="Primary">
+
+        {/* Desktop inline tabs — hidden below the md breakpoint. */}
+        <nav
+          className="hidden md:flex flex-1 min-w-0 gap-0.5 overflow-hidden"
+          aria-label="Primary"
+        >
           {TABS.map(({ href, label, Icon }) => {
             const active = isActive(pathname, href);
             return (
@@ -83,19 +110,72 @@ export function TopNav() {
             );
           })}
         </nav>
+
+        {/* Spacer pushes the right-side actions to the edge on mobile too. */}
+        <div className="flex-1 md:hidden" />
+
         <button
           type="button"
           onClick={() => setPaletteOpen(true)}
-          className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent"
+          className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent"
           aria-label="Open command palette"
         >
-          <span>Jump to…</span>
+          <Command className="h-3.5 w-3.5 md:hidden" aria-hidden />
+          <span className="hidden md:inline">Jump to…</span>
           <kbd className="rounded border bg-accent px-1 py-px font-mono text-[10px] text-foreground">
             ⌘K
           </kbd>
         </button>
         <ThemeToggle />
       </header>
+
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent side="left" id="primary-nav-sheet" className="p-0 flex flex-col gap-0">
+          <SheetHeader className="border-b">
+            <SheetTitle>Navigation</SheetTitle>
+          </SheetHeader>
+          <nav className="flex flex-col p-2 gap-0.5" aria-label="Primary mobile">
+            {TABS.map(({ href, label, Icon }) => {
+              const active = isActive(pathname, href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "inline-flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                    "hover:bg-accent",
+                    active && "bg-accent font-semibold",
+                  )}
+                >
+                  <Icon
+                    className="h-4 w-4"
+                    aria-hidden
+                    style={{ color: active ? "var(--foreground)" : "var(--muted-foreground)" }}
+                  />
+                  {label}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="border-t p-2">
+            <button
+              type="button"
+              onClick={() => {
+                setSheetOpen(false);
+                setPaletteOpen(true);
+              }}
+              className="w-full inline-flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <Command className="h-4 w-4" aria-hidden />
+              Jump to anything…
+              <kbd className="ml-auto rounded border bg-accent px-1 py-px font-mono text-[10px] text-foreground">
+                ⌘K
+              </kbd>
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </>
   );

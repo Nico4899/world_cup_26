@@ -4,6 +4,7 @@ import { apiGet, ApiError, ApiUnreachable } from "@/lib/api";
 import { ApiUnreachableBanner } from "@/components/api-unreachable-banner";
 import { ForecastHeader } from "@/components/forecast-header";
 import { DatePicker } from "@/components/today/date-picker";
+import { FirstVisitTour } from "@/components/first-visit-tour";
 import { GroupStrip } from "@/components/today/group-strip";
 import { MatchCard } from "@/components/today/match-card";
 import { MatchCardSkeleton } from "@/components/today/match-card-skeleton";
@@ -78,6 +79,10 @@ export default async function TodayPage({
 
       <Suspense fallback={null}>
         <GroupStrip />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <FirstVisitTour />
       </Suspense>
     </div>
   );

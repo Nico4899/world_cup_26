@@ -46,6 +46,9 @@ test("top nav lists 5 primary tabs", async ({ page }) => {
 
 test("command palette reaches every route", async ({ page }) => {
   await page.goto("/");
+  // Dismiss the first-visit tour if it shows so the click below isn't intercepted.
+  await page.evaluate(() => window.localStorage.setItem("wc2026-onboarded", "1"));
+  await page.reload();
   // Open the palette via the visible "Jump to…" trigger (works on any OS).
   await page.getByRole("button", { name: /open command palette/i }).click();
   // The palette renders all 9 route labels under the "Routes" group.
@@ -63,5 +66,34 @@ test("command palette reaches every route", async ({ page }) => {
     "Operator",
   ]) {
     await expect(palette.getByRole("button", { name: new RegExp(`^${label}\\b`) })).toBeVisible();
+  }
+});
+
+test("first-visit tour opens once, then localStorage gates it", async ({ page }) => {
+  // Clear the flag, visit /, expect the modal.
+  await page.goto("/");
+  await page.evaluate(() => window.localStorage.removeItem("wc2026-onboarded"));
+  await page.reload();
+  const tour = page.getByRole("dialog", { name: /each card is one match/i });
+  await expect(tour).toBeVisible({ timeout: 10_000 });
+  // Skip dismisses + persists the flag.
+  await tour.getByRole("button", { name: /skip tour/i }).click();
+  await expect(tour).toBeHidden();
+  // Reload — flag is set, tour does NOT reappear.
+  await page.reload();
+  await expect(page.getByRole("dialog", { name: /each card is one match/i })).toBeHidden();
+});
+
+test("mobile hamburger sheet exposes the 5 primary tabs", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 720 });
+  await page.goto("/");
+  // Persist the tour flag so it doesn't block the hamburger.
+  await page.evaluate(() => window.localStorage.setItem("wc2026-onboarded", "1"));
+  await page.reload();
+  await page.getByRole("button", { name: /open primary navigation/i }).click();
+  const sheet = page.locator("[data-slot='sheet-content']");
+  await expect(sheet).toBeVisible();
+  for (const label of ["Today", "Match Detail", "Groups", "Bracket", "Track Record"]) {
+    await expect(sheet.getByRole("link", { name: label })).toBeVisible();
   }
 });
