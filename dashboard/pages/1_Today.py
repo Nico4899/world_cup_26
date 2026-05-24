@@ -13,6 +13,7 @@ from dashboard.components.api_client import (
     list_matches,
     render_unreachable_warning,
 )
+from dashboard.components.team_assets import render_team_chip, render_versus_header
 
 
 def _navigate_to_detail(match_id: int) -> None:
@@ -101,7 +102,10 @@ for i in range(0, len(matches), 2):
     cols = st.columns(2)
     for col, m in zip(cols, row, strict=False):
         with col, st.container(border=True):
-            st.subheader(f"{m['home_team']} vs {m['away_team']}")
+            st.markdown(
+                render_versus_header(m["home_team"], m["away_team"]),
+                unsafe_allow_html=True,
+            )
             st.caption(
                 f"Group {m['group']} · {m['city']}, {m['country']} · "
                 + ("neutral" if m["neutral"] else "home advantage")

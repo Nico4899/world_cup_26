@@ -79,9 +79,25 @@ def get_match(match_id: int) -> dict[str, Any]:
 
 
 @st.cache_data(ttl=300, show_spinner="Computing prediction…")
-def get_prediction(home: str, away: str, neutral: bool = True) -> dict[str, Any]:
-    """Pairwise prediction with full score_matrix; useful for non-fixture matchups."""
-    return get_json(f"/api/v1/predictions/{home}/{away}", params={"neutral": str(neutral).lower()})
+def get_prediction(
+    home: str,
+    away: str,
+    neutral: bool = True,
+    *,
+    blend: bool = False,
+    blend_weight: float = 0.5,
+) -> dict[str, Any]:
+    """Pairwise prediction with full score_matrix; useful for non-fixture matchups.
+
+    Set ``blend=True`` to surface the Phase 5 XGB-blended outcome in the
+    response's ``blend`` field. Silently falls back to Poisson-only when the
+    XGB artefact isn't loaded server-side.
+    """
+    params: dict[str, Any] = {"neutral": str(neutral).lower()}
+    if blend:
+        params["blend"] = "true"
+        params["blend_weight"] = blend_weight
+    return get_json(f"/api/v1/predictions/{home}/{away}", params=params)
 
 
 @st.cache_data(ttl=300, show_spinner="Loading recent form…")

@@ -20,6 +20,7 @@ from dashboard.components.api_client import (
     get_h2h,
     get_live_history,
     get_match,
+    get_prediction,
     get_recent_form,
     render_unreachable_warning,
 )
@@ -69,6 +70,66 @@ col_a, col_b, col_c = st.columns(3)
 col_a.metric(fx["home_team"], f"{pred['outcome']['home_win']:.1%}")
 col_b.metric("Draw", f"{pred['outcome']['draw']:.1%}")
 col_c.metric(fx["away_team"], f"{pred['outcome']['away_win']:.1%}")
+
+# --- Phase 5 blend overlay --------------------------------------------------
+# Opt-in sidebar toggle that surfaces the Poisson × XGB geometric mean
+# alongside the headline Poisson numbers. Pulled via the /predictions
+# endpoint with ?blend=true so the Match Detail score-heatmap (which is
+# Poisson-only by construction) stays untouched.
+with st.sidebar:
+    st.markdown("### XGB blend (Phase 5)")
+    show_blend = st.checkbox(
+        "Show Poisson × XGB blend",
+        value=False,
+        help=(
+            "Overlays the Phase 5 XGBoost classifier alongside the Poisson outcome. "
+            "The blend is opt-in: WC 2018/2022 hindcasts show it regressing log-loss, "
+            "so it's surfaced as a research artefact rather than the default."
+        ),
+    )
+    blend_weight = st.slider(
+        "Poisson weight",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.5,
+        step=0.05,
+        disabled=not show_blend,
+        help="Geometric-mean mixing weight; XGB gets 1 − weight.",
+    )
+
+if show_blend:
+    try:
+        blended = get_prediction(
+            fx["home_team"],
+            fx["away_team"],
+            neutral=fx["neutral"],
+            blend=True,
+            blend_weight=blend_weight,
+        )
+    except APIUnreachable:
+        blended = None  # warning already rendered above
+    except httpx.HTTPStatusError as exc:
+        st.caption(f"_blend overlay unavailable: HTTP {exc.response.status_code}_")
+        blended = None
+    payload = (blended or {}).get("blend")
+    if blended is not None and payload is None:
+        st.caption(
+            "_XGB artefact not loaded server-side — train it with "
+            "`uv run python scripts/refit_xgb.py` and restart the API._"
+        )
+    elif payload is not None:
+        st.markdown("**Blended outcome (Poisson × XGB)**")
+        b_a, b_b, b_c = st.columns(3)
+        b_a.metric(fx["home_team"], f"{payload['blended']['home_win']:.1%}")
+        b_b.metric("Draw", f"{payload['blended']['draw']:.1%}")
+        b_c.metric(fx["away_team"], f"{payload['blended']['away_win']:.1%}")
+        st.caption(
+            f"Poisson weight {payload['weight']:.2f}, XGB weight {1 - payload['weight']:.2f}. "
+            f"Poisson H/D/A: {payload['poisson']['home_win']:.1%} / "
+            f"{payload['poisson']['draw']:.1%} / {payload['poisson']['away_win']:.1%} · "
+            f"XGB H/D/A: {payload['xgb']['home_win']:.1%} / "
+            f"{payload['xgb']['draw']:.1%} / {payload['xgb']['away_win']:.1%}."
+        )
 
 # --- Phase 6 live section --------------------------------------------------
 # A non-"poisson_pre_match" snapshot source means events have been ingested
