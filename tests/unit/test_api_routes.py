@@ -491,3 +491,193 @@ def test_explain_404_on_out_of_range_match_id(client: TestClient, monkeypatch) -
     monkeypatch.setattr(client.app.state, "xgb_explainer", explainer)
     r = client.get("/api/v1/explain/999")
     assert r.status_code == 404
+
+
+# --- /api/v1/live/{match_id} ----------------------------------------------
+
+
+def _inject_live_model(client: TestClient):
+    """Train a tiny live-win-prob model on synthetic snapshots."""
+    import numpy as np
+    import pandas as pd
+
+    from wc2026.models.live_win_prob import LiveWinProbModel
+
+    rng = np.random.default_rng(0)
+    n = 600
+    elo_diff = rng.normal(0.0, 80.0, size=n)
+    goal_diff = rng.integers(-3, 4, size=n)
+    minutes_remaining = rng.integers(0, 90, size=n)
+    red_diff = rng.choice([-1, 0, 1], size=n, p=[0.05, 0.9, 0.05])
+    logits = 0.01 * elo_diff + 1.4 * goal_diff - 0.4 * red_diff
+    noise = rng.normal(0, 1.0, size=n)
+    y = np.where(logits + noise > 0.8, 0, np.where(logits + noise < -0.8, 2, 1)).astype(int)
+    X = pd.DataFrame(
+        {
+            "elo_diff": elo_diff,
+            "goal_diff": goal_diff,
+            "minutes_remaining": minutes_remaining,
+            "red_diff": red_diff,
+        }
+    )
+    return LiveWinProbModel.fit(X, y)
+
+
+def test_live_snapshot_returns_pre_match_fallback_without_events(
+    client: TestClient, monkeypatch
+) -> None:
+    """No DB / no live model → snapshot returns the Poisson pre-match prob."""
+    monkeypatch.setattr(client.app.state, "live_win_prob_model", None)
+    r = client.get("/api/v1/live/0")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["match_id"] == 0
+    assert body["win_prob_source"] == "poisson_pre_match"
+    s = sum(body["win_prob"].values())
+    assert abs(s - 1.0) < 1e-6
+    assert body["last_event_type"] == "KICKOFF"
+
+
+def test_live_snapshot_uses_live_model_when_events_present(
+    client: TestClient, monkeypatch
+) -> None:
+    """Stub the DB-history loader so the snapshot route sees a 1-0 home goal."""
+    import datetime as _dt
+
+    from wc2026.api.routes import live as live_route
+    from wc2026.db.models import RawLiveEvent
+
+    monkeypatch.setattr(client.app.state, "live_win_prob_model", _inject_live_model(client))
+    event = RawLiveEvent(
+        match_id=0,
+        seq=2,
+        minute=23,
+        period=1,
+        event_type="GOAL",
+        team="Mexico",
+        player=None,
+        home_score_after=1,
+        away_score_after=0,
+        home_red_cards_after=0,
+        away_red_cards_after=0,
+        ingested_at=_dt.datetime.now(_dt.UTC),
+    )
+    monkeypatch.setattr(live_route, "_latest_event", lambda _mid: event)
+    r = client.get("/api/v1/live/0")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["win_prob_source"] == "live_win_prob"
+    assert body["last_event_type"] == "GOAL"
+    assert body["home_score"] == 1
+    assert body["away_score"] == 0
+
+
+def test_live_snapshot_final_score_collapses_to_realised_outcome(
+    client: TestClient, monkeypatch
+) -> None:
+    """FT_WHISTLE → win_prob_source='final', probs are degenerate on the result."""
+    import datetime as _dt
+
+    from wc2026.api.routes import live as live_route
+    from wc2026.db.models import RawLiveEvent
+
+    monkeypatch.setattr(client.app.state, "live_win_prob_model", _inject_live_model(client))
+    event = RawLiveEvent(
+        match_id=0,
+        seq=4,
+        minute=90,
+        period=2,
+        event_type="FT_WHISTLE",
+        team=None,
+        player=None,
+        home_score_after=2,
+        away_score_after=1,
+        home_red_cards_after=0,
+        away_red_cards_after=0,
+        ingested_at=_dt.datetime.now(_dt.UTC),
+    )
+    monkeypatch.setattr(live_route, "_latest_event", lambda _mid: event)
+    r = client.get("/api/v1/live/0")
+    body = r.json()
+    assert body["win_prob_source"] == "final"
+    assert body["win_prob"] == {"home_win": 1.0, "draw": 0.0, "away_win": 0.0}
+
+
+def test_live_snapshot_out_of_range_match_id(client: TestClient) -> None:
+    r = client.get("/api/v1/live/999")
+    assert r.status_code == 404
+
+
+# --- /api/v1/live/{match_id}/history (used by the dashboard chart) -------
+
+
+def test_live_history_returns_traces_with_per_event_win_probs(
+    client: TestClient, monkeypatch
+) -> None:
+    import datetime as _dt
+
+    from wc2026.api.routes import live as live_route
+    from wc2026.db.models import RawLiveEvent
+
+    monkeypatch.setattr(client.app.state, "live_win_prob_model", _inject_live_model(client))
+    now = _dt.datetime.now(_dt.UTC)
+    events = [
+        RawLiveEvent(
+            match_id=0,
+            seq=1,
+            minute=0,
+            period=1,
+            event_type="KICKOFF",
+            team=None,
+            player=None,
+            home_score_after=0,
+            away_score_after=0,
+            home_red_cards_after=0,
+            away_red_cards_after=0,
+            ingested_at=now,
+        ),
+        RawLiveEvent(
+            match_id=0,
+            seq=2,
+            minute=23,
+            period=1,
+            event_type="GOAL",
+            team="Mexico",
+            player=None,
+            home_score_after=1,
+            away_score_after=0,
+            home_red_cards_after=0,
+            away_red_cards_after=0,
+            ingested_at=now,
+        ),
+    ]
+    monkeypatch.setattr(live_route, "_all_events", lambda _mid: events)
+    r = client.get("/api/v1/live/0/history")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["events"]) == 2
+    assert [e["event_type"] for e in body["events"]] == ["KICKOFF", "GOAL"]
+    # Snapshot reflects the most recent event.
+    assert body["snapshot"]["last_event_type"] == "GOAL"
+    assert body["snapshot"]["home_score"] == 1
+    # Every event trace has a win_prob triplet summing to 1.
+    for ev in body["events"]:
+        s = sum(ev["win_prob"].values())
+        assert abs(s - 1.0) < 1e-6
+
+
+def test_live_history_empty_when_no_events(client: TestClient, monkeypatch) -> None:
+    from wc2026.api.routes import live as live_route
+
+    monkeypatch.setattr(live_route, "_all_events", lambda _mid: [])
+    r = client.get("/api/v1/live/0/history")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["events"] == []
+    assert body["snapshot"]["last_event_type"] == "KICKOFF"
+    assert body["snapshot"]["win_prob_source"] == "poisson_pre_match"
+
+
+def test_live_history_out_of_range_match_id(client: TestClient) -> None:
+    r = client.get("/api/v1/live/999/history")
+    assert r.status_code == 404

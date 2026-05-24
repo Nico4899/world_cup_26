@@ -18,6 +18,7 @@ from wc2026.api.routes import (
     explain,
     h2h,
     health,
+    live,
     matches,
     ops,
     predictions,
@@ -44,6 +45,10 @@ from wc2026.models.xgb_classifier import (
 )
 from wc2026.models.xgb_classifier import (
     XgbMatchModel,
+)
+from wc2026.models.live_win_prob import (
+    DEFAULT_ARTIFACT_PATH as LIVE_WIN_PROB_PATH,
+    LiveWinProbModel,
 )
 from wc2026.sim.fixtures import load_group_assignment, parse_wc2026_fixtures
 
@@ -105,6 +110,20 @@ def _load_or_fit_model(df: pd.DataFrame) -> tuple[PoissonDC, str, datetime]:
             mtime = datetime.fromtimestamp(ARTEFACT_PATH.stat().st_mtime, tz=UTC)
             return model, "artefact", mtime
     return _fit_model(df), "in_process_fit", datetime.now(UTC)
+
+
+def _load_live_win_prob_model() -> LiveWinProbModel | None:
+    """Optional load of the Phase 6 live in-running win-prob model.
+
+    Returns ``None`` when no artefact is on disk — the /live endpoints then
+    fall back to the pre-match Poisson probability.
+    """
+    if not LIVE_WIN_PROB_PATH.exists():
+        return None
+    try:
+        return LiveWinProbModel.load(LIVE_WIN_PROB_PATH)
+    except (OSError, ValueError, KeyError):
+        return None
 
 
 def _load_xgb_model() -> XgbMatchModel | None:
@@ -226,6 +245,8 @@ async def lifespan(app: FastAPI):
     except (FileNotFoundError, ValueError):
         elo_snapshot = None
     app.state.feature_sources = _build_xgb_feature_sources(app.state.played_df, model, elo_snapshot)
+    # Optional Phase 6 live in-running win-prob model.
+    app.state.live_win_prob_model = _load_live_win_prob_model()
     yield
 
 
@@ -252,3 +273,4 @@ app.include_router(teams.router)
 app.include_router(h2h.router)
 app.include_router(ops.router)
 app.include_router(explain.router)
+app.include_router(live.router)

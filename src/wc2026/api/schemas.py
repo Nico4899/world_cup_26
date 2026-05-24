@@ -133,6 +133,53 @@ class MatchExplanation(BaseModel):
     xgb_outcome: OutcomeProbabilities | None = None
 
 
+class LiveStateSnapshot(BaseModel):
+    """Phase 6 live-match state + in-running win probabilities."""
+
+    match_id: int
+    home_team: str
+    away_team: str
+    minute: int
+    period: int
+    home_score: int
+    away_score: int
+    home_red_cards: int
+    away_red_cards: int
+    last_event_type: str = Field(
+        description="Type of the most recent observed event: KICKOFF / GOAL / FT_WHISTLE."
+    )
+    win_prob: OutcomeProbabilities
+    win_prob_source: str = Field(
+        description=(
+            "Where the win-prob came from: 'live_win_prob' (Phase 6 in-running model), "
+            "'poisson_pre_match' (no events yet or live model unavailable), or "
+            "'final' (match finished — the probability degenerates onto the realised outcome)."
+        )
+    )
+
+
+class LiveEventTrace(BaseModel):
+    """One in-running observation in the per-match timeline."""
+
+    seq: int
+    minute: int
+    period: int
+    event_type: str
+    team: str | None = None
+    home_score_after: int
+    away_score_after: int
+    home_red_cards_after: int
+    away_red_cards_after: int
+    win_prob: OutcomeProbabilities
+
+
+class LiveHistory(BaseModel):
+    """Snapshot + chronological list of every observed event for one fixture."""
+
+    snapshot: LiveStateSnapshot
+    events: list[LiveEventTrace]
+
+
 class FixtureWithPrediction(BaseModel):
     fixture: FixtureSummary
     prediction: PredictionResponse
