@@ -20,9 +20,11 @@ from dashboard.components.api_client import (
     get_json,
     render_unreachable_warning,
 )
+from dashboard.components.forecast_header import render_forecast_header
 from dashboard.components.team_assets import render_team_chip
 
 st.title("Knockout bracket realisation(s)")
+render_forecast_header()
 
 st.caption(
     "Each seed gives one Monte Carlo sample of the full knockout bracket. "

@@ -21,6 +21,7 @@ from dashboard.components.api_client import (
     get_team_xg_form,
     render_unreachable_warning,
 )
+from dashboard.components.forecast_header import render_forecast_header
 from dashboard.components.plot_config import PLOTLY_CONFIG
 from dashboard.components.team_assets import (
     crest_img_html,
@@ -30,6 +31,7 @@ from dashboard.components.team_assets import (
 _RESULT_COLOR = {"W": "#1f9d55", "D": "#888888", "L": "#d62728"}
 
 st.title("Team Profile")
+render_forecast_header()
 
 # Pull the 48 WC 2026 teams from /api/v1/matches and dedupe.
 try:

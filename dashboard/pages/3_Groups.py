@@ -9,10 +9,12 @@ from dashboard.components.api_client import (
     get_json,
     render_unreachable_warning,
 )
+from dashboard.components.forecast_header import render_forecast_header
 from dashboard.components.plot_config import PLOTLY_CONFIG
 from dashboard.components.team_assets import render_team_chip
 
 st.title("Group-stage advancement probabilities")
+render_forecast_header()
 
 st.caption(
     "Each row shows where the model thinks a team will finish. Top 2 + 8 best 3rd-placed "

@@ -49,6 +49,14 @@ class FixtureSummary(BaseModel):
 
     match_id: int = Field(description="0-indexed position in the fixtures list (0..71)")
     date: date
+    utc_kickoff: datetime | None = Field(
+        default=None,
+        description=(
+            "Match kick-off in UTC, sourced from the football-data.org cache when an "
+            "API key has been configured. ``null`` when no FDO row was found for this "
+            "fixture — the dashboard then renders the date only."
+        ),
+    )
     home_team: str
     away_team: str
     group: str

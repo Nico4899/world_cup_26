@@ -13,6 +13,7 @@ from dashboard.components.api_client import (
     list_matches,
     render_unreachable_warning,
 )
+from dashboard.components.forecast_header import render_forecast_header
 from dashboard.components.plot_config import PLOTLY_CONFIG
 from dashboard.components.team_assets import render_team_chip, render_versus_header
 
@@ -24,6 +25,7 @@ def _navigate_to_detail(match_id: int) -> None:
 
 
 st.title("Today's predictions")
+render_forecast_header()
 
 WC_START = date(2026, 6, 11)
 WC_END = date(2026, 6, 27)

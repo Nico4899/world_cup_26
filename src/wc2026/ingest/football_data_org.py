@@ -262,6 +262,41 @@ def load_wc_match_id_map() -> dict[int, tuple[Any, str, str]]:
     return out
 
 
+def load_wc_kickoff_map() -> dict[tuple[Any, str, str], Any]:
+    """Best-effort: ``(match_date, home_team, away_team) -> utc_kickoff datetime``.
+
+    Same lazy semantics as :func:`load_wc_match_id_map` — returns ``{}`` when
+    no FDO cache is present. The Jürisoo dataset that drives our fixture
+    parser carries dates only (no kick-off times), so this is the only path
+    to surface time-of-day on the dashboard.
+    """
+    from datetime import date as _date  # noqa: PLC0415
+
+    try:
+        df = fetch_competition_matches(WC_COMPETITION_CODE)
+    except Exception:
+        return {}
+    if df.empty:
+        return {}
+    out: dict[tuple[Any, str, str], Any] = {}
+    for _, row in df.iterrows():
+        utc_date = row.get("utc_date")
+        home = row.get("home_team")
+        away = row.get("away_team")
+        if utc_date is None or home is None or away is None:
+            continue
+        try:
+            d = (
+                utc_date.date()
+                if hasattr(utc_date, "date")
+                else _date.fromisoformat(str(utc_date)[:10])
+            )
+        except (TypeError, ValueError):
+            continue
+        out[(d, str(home), str(away))] = utc_date
+    return out
+
+
 __all__ = [
     "BASE_URL",
     "ENV_API_KEY",
@@ -273,6 +308,7 @@ __all__ = [
     "fetch_competition_matches",
     "fetch_match",
     "load_fixture",
+    "load_wc_kickoff_map",
     "load_wc_match_id_map",
     "parse_competition_matches",
 ]
