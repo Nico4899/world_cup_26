@@ -1,5 +1,6 @@
 import { apiGet, ApiError, ApiUnreachable } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
+import { MethodologyToC } from "@/components/methodology-toc";
 import Methodology from "@/content/methodology.mdx";
 import type { HealthResponse } from "@/lib/types";
 
@@ -28,7 +29,7 @@ export default async function AboutPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <header>
         <h1 className="ds-h1">About / Methodology</h1>
       </header>
@@ -51,9 +52,14 @@ export default async function AboutPage() {
         </CardContent>
       </Card>
 
-      <article className="prose prose-sm dark:prose-invert max-w-none">
-        <Methodology />
-      </article>
+      <div className="grid lg:grid-cols-[1fr_220px] gap-8">
+        <article className="prose prose-sm dark:prose-invert max-w-3xl">
+          <Methodology />
+        </article>
+        <aside>
+          <MethodologyToC />
+        </aside>
+      </div>
     </div>
   );
 }

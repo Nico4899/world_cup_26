@@ -37,6 +37,7 @@ import { ApiError, ApiUnreachable, apiGet, apiPost } from "@/lib/api";
 import { pct } from "@/lib/format";
 import { useLockedBracket, type Lock } from "@/hooks/use-locked-bracket";
 import { HelpDot, TermHelp } from "@/components/help-dot";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { FixtureSummary } from "@/lib/types";
 
 type Mode = "single" | "scenarios" | "locks";
@@ -191,9 +192,35 @@ function SingleSeed({ seed }: { seed: number }) {
   if (error instanceof ApiError)
     return <p className="text-sm text-destructive">HTTP {error.status}</p>;
   if (error) return <p className="text-sm text-destructive">{String(error)}</p>;
-  if (isPending || !data)
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (isPending || !data) return <BracketSkeleton />;
   return <BracketDetail data={data} />;
+}
+
+function BracketSkeleton() {
+  // Five round-sections mirroring R32 / R16 / QF / SF / Final so the
+  // layout doesn't reflow when the seed query resolves.
+  const ROUNDS = [
+    { label: "R32", rows: 8 },
+    { label: "R16", rows: 4 },
+    { label: "QF", rows: 2 },
+    { label: "SF", rows: 1 },
+    { label: "Final", rows: 1 },
+  ];
+  return (
+    <div className="space-y-4" aria-label="Loading bracket">
+      <Skeleton className="h-10 w-72" />
+      {ROUNDS.map((r) => (
+        <div key={r.label} className="space-y-1">
+          <Skeleton className="h-4 w-32" />
+          <div className="space-y-1">
+            {Array.from({ length: r.rows }, (_, i) => (
+              <Skeleton key={i} className="h-7 w-full" />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function ScenarioComparison({

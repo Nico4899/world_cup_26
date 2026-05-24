@@ -6,6 +6,7 @@ import { ForecastHeader } from "@/components/forecast-header";
 import { DatePicker } from "@/components/today/date-picker";
 import { GroupStrip } from "@/components/today/group-strip";
 import { MatchCard } from "@/components/today/match-card";
+import { MatchCardSkeleton } from "@/components/today/match-card-skeleton";
 import type { FixtureSummary } from "@/lib/types";
 
 const DEFAULT_DATE = "2026-06-11";
@@ -67,7 +68,9 @@ export default async function TodayPage({
           </p>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {matches.map((m) => (
-              <MatchCard key={m.match_id} fixture={m} />
+              <Suspense key={m.match_id} fallback={<MatchCardSkeleton />}>
+                <MatchCard fixture={m} />
+              </Suspense>
             ))}
           </div>
         </>

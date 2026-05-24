@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EmptyPanel } from "@/components/empty-panel";
 import { HelpDot } from "@/components/help-dot";
 import {
   Tooltip,
@@ -199,15 +200,17 @@ export default async function TeamProfilePage({
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">WC 2026 advancement probabilities</h2>
         {!probs || probs.run_id == null ? (
-          <p className="text-xs text-muted-foreground italic">
-            No Monte Carlo run on disk yet. Once the daily refit + persist job
-            has written a run, these probabilities appear here.
-          </p>
+          <EmptyPanel
+            title="No Monte Carlo run on disk yet"
+            hint="Advancement odds will appear here once the daily refit + persist job has written a run."
+            cta={{ href: "/groups", label: "See group-stage forecasts" }}
+          />
         ) : probs.champion_p == null ? (
-          <p className="text-xs text-muted-foreground italic">
-            Latest run (id {probs.run_id}, {probs.n_sims} sims) had no row for
-            this team — perhaps the team list changed since the last refit.
-          </p>
+          <EmptyPanel
+            title={`No row for ${team} in run #${probs.run_id}`}
+            hint={`The latest run (${probs.n_sims} sims) didn't include this team — likely a team-list change since the last refit.`}
+            cta={{ href: "/groups", label: "See group-stage forecasts" }}
+          />
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <MetricCard
@@ -246,9 +249,10 @@ export default async function TeamProfilePage({
           {path ? (
             <PathToFinal rounds={path.rounds} nSims={path.n_sims} />
           ) : (
-            <p className="text-xs text-muted-foreground">
-              Path-to-final endpoint unavailable.
-            </p>
+            <EmptyPanel
+              title="Path-to-final not available"
+              hint="The model couldn't sample 2,000 knockout paths for this team — usually because the persisted Monte Carlo run is empty or this team isn't in the bracket."
+            />
           )}
         </CardContent>
       </Card>
