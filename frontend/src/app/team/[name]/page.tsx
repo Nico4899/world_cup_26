@@ -3,6 +3,7 @@ import { ApiUnreachableBanner } from "@/components/api-unreachable-banner";
 import { ForecastHeader } from "@/components/forecast-header";
 import { MetricCard } from "@/components/metric-card";
 import { TeamChip } from "@/components/team-chip";
+import { DownloadableCard } from "@/components/downloadable-card";
 import { EloLine } from "@/components/team/elo-line";
 import { PathToFinal } from "@/components/team/path-to-final";
 import { TeamPicker } from "@/components/team/team-picker";
@@ -246,27 +247,27 @@ export default async function TeamProfilePage({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Elo rating history</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {elo && elo.history.length > 0 ? (
-            <>
-              <EloLine history={elo.history} />
-              <p className="text-xs text-muted-foreground mt-2">
-                {elo.history.length} daily snapshots. Most recent:{" "}
-                {elo.history[elo.history.length - 1].snapshot_date} →{" "}
-                {elo.history[elo.history.length - 1].rating.toFixed(1)}
-              </p>
-            </>
-          ) : (
+      {elo && elo.history.length > 0 ? (
+        <DownloadableCard title="Elo rating history" filename={`elo-history-${team}`}>
+          <EloLine history={elo.history} />
+          <p className="text-xs text-muted-foreground mt-2">
+            {elo.history.length} daily snapshots. Most recent:{" "}
+            {elo.history[elo.history.length - 1].snapshot_date} →{" "}
+            {elo.history[elo.history.length - 1].rating.toFixed(1)}
+          </p>
+        </DownloadableCard>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Elo rating history</CardTitle>
+          </CardHeader>
+          <CardContent>
             <p className="text-xs text-muted-foreground italic">
               No Elo snapshots on disk for this team.
             </p>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

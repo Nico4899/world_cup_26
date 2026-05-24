@@ -35,6 +35,7 @@ import {
 } from "@/components/bracket/bracket-detail";
 import { ApiError, ApiUnreachable, apiGet, apiPost } from "@/lib/api";
 import { pct } from "@/lib/format";
+import { useLockedBracket, type Lock } from "@/hooks/use-locked-bracket";
 import type { FixtureSummary } from "@/lib/types";
 
 type Mode = "single" | "scenarios" | "locks";
@@ -299,7 +300,6 @@ function ScenarioComparison({
   );
 }
 
-type Lock = { match_id: number; winner: string };
 type ConditionalResponse = {
   n_sims: number;
   seed: number;
@@ -314,7 +314,7 @@ type ConditionalResponse = {
 };
 
 function ConditionalLocks() {
-  const [locks, setLocks] = useState<Lock[]>([]);
+  const { locks, add, clear } = useLockedBracket();
   const [nSims, setNSims] = useState(5000);
   const [seed, setSeed] = useState(42);
   const [round, setRound] = useState<Round>("R32");
@@ -356,10 +356,7 @@ function ConditionalLocks() {
   function addLock(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!winner) return;
-    setLocks((prev) => [
-      ...prev.filter((l) => l.match_id !== matchId),
-      { match_id: matchId, winner },
-    ]);
+    add({ match_id: matchId, winner });
   }
 
   return (
@@ -436,7 +433,7 @@ function ConditionalLocks() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setLocks([])}
+              onClick={() => clear()}
               data-icon="inline-start"
             >
               <Trash2 className="h-3.5 w-3.5 mr-1" aria-hidden />

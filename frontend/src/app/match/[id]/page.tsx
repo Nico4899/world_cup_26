@@ -10,6 +10,7 @@ import { OutcomeTiles } from "@/components/match/outcome-tiles";
 import { ProbHeatmap } from "@/components/match/prob-heatmap";
 import { RecentFormBadges } from "@/components/match/recent-form-badges";
 import { LiveSection } from "@/components/match/live-section";
+import { DownloadableCard } from "@/components/downloadable-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { utcTimeOfDay } from "@/lib/format";
 import type { FixtureWithPrediction } from "@/lib/types";
@@ -81,18 +82,16 @@ export default async function MatchDetailPage({
       />
 
       {prediction.score_matrix ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Joint score probability</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ProbHeatmap
-              matrix={prediction.score_matrix}
-              homeTeam={fixture.home_team}
-              awayTeam={fixture.away_team}
-            />
-          </CardContent>
-        </Card>
+        <DownloadableCard
+          title="Joint score probability"
+          filename={`heatmap-${fixture.home_team}-${fixture.away_team}`}
+        >
+          <ProbHeatmap
+            matrix={prediction.score_matrix}
+            homeTeam={fixture.home_team}
+            awayTeam={fixture.away_team}
+          />
+        </DownloadableCard>
       ) : null}
 
       <Card>
