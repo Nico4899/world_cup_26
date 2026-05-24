@@ -112,6 +112,10 @@ class TournamentSimTeamOutcome(Base):
     team: Mapped[str] = mapped_column(String(128), primary_key=True)
     group_winner_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     group_runner_up_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    # Phase 12: split eliminated mass into 3rd-place-but-not-best-8 (third_out_p)
+    # and 4th-place (fourth_p). Nullable so pre-Phase-12 rows still load.
+    third_out_p: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fourth_p: Mapped[float | None] = mapped_column(Float, nullable=True)
     advance_r32_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     advance_r16_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     quarterfinal_p: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)

@@ -18,8 +18,8 @@ render_forecast_header()
 
 st.caption(
     "Each row shows where the model thinks a team will finish. Top 2 + 8 best 3rd-placed "
-    "teams advance to the Round of 32. Bars stack: 1st (blue), 2nd (sky), 3rd-advance "
-    "(amber), eliminated (grey)."
+    "teams advance to the Round of 32. Bars stack: 1st (dark blue), 2nd (sky), "
+    "3rd→R32 (amber), 3rd-out (light), 4th (grey)."
 )
 
 n_sims = st.sidebar.slider(
@@ -55,54 +55,31 @@ def _group_fig(block: dict) -> go.Figure:
     teams = [r["team"] for r in block["teams"]]
     p_first = [r["p_first"] for r in block["teams"]]
     p_second = [r["p_second"] for r in block["teams"]]
-    p_third = [r["p_third_advance"] for r in block["teams"]]
-    p_out = [r["p_eliminated"] for r in block["teams"]]
+    p_third_adv = [r["p_third_advance"] for r in block["teams"]]
+    # Old persisted runs (pre-Phase-12) lack the granular split — fall back to a
+    # 50/50 distribution of the eliminated mass so the bar still totals to 1.
+    p_third_out = [r.get("p_third_out", r["p_eliminated"] / 2) for r in block["teams"]]
+    p_fourth = [r.get("p_fourth", r["p_eliminated"] / 2) for r in block["teams"]]
 
     fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            y=teams,
-            x=p_first,
-            orientation="h",
-            name="1st",
-            marker_color="#1f4e79",
-            text=[f"{p:.0%}" if p > 0.05 else "" for p in p_first],
-            textposition="inside",
+    for x, name, color in (
+        (p_first, "1st", "#1f4e79"),
+        (p_second, "2nd", "#5b9bd5"),
+        (p_third_adv, "3rd → R32", "#ed7d31"),
+        (p_third_out, "3rd-out", "#d9a679"),
+        (p_fourth, "4th", "#a6a6a6"),
+    ):
+        fig.add_trace(
+            go.Bar(
+                y=teams,
+                x=x,
+                orientation="h",
+                name=name,
+                marker_color=color,
+                text=[f"{p:.0%}" if p > 0.05 else "" for p in x],
+                textposition="inside",
+            )
         )
-    )
-    fig.add_trace(
-        go.Bar(
-            y=teams,
-            x=p_second,
-            orientation="h",
-            name="2nd",
-            marker_color="#5b9bd5",
-            text=[f"{p:.0%}" if p > 0.05 else "" for p in p_second],
-            textposition="inside",
-        )
-    )
-    fig.add_trace(
-        go.Bar(
-            y=teams,
-            x=p_third,
-            orientation="h",
-            name="3rd → R32",
-            marker_color="#ed7d31",
-            text=[f"{p:.0%}" if p > 0.05 else "" for p in p_third],
-            textposition="inside",
-        )
-    )
-    fig.add_trace(
-        go.Bar(
-            y=teams,
-            x=p_out,
-            orientation="h",
-            name="eliminated",
-            marker_color="#a6a6a6",
-            text=[f"{p:.0%}" if p > 0.05 else "" for p in p_out],
-            textposition="inside",
-        )
-    )
     fig.update_layout(
         barmode="stack",
         height=180,

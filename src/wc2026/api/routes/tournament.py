@@ -72,6 +72,18 @@ def _load_persisted_summary() -> tuple[TournamentSummary, int, str] | None:
             )
             if not outcomes:
                 return None
+            # third_advance = advance_r32_p - group_winner_p - group_runner_up_p
+            # is recoverable from existing columns. third_out_p + fourth_p are
+            # nullable (Phase 12 added them); when null, fall back to splitting
+            # the residual 50/50 so the dashboard still renders five segments
+            # without misleading absolutes — old runs are clearly marked.
+            def _split_eliminated(o: TournamentSimTeamOutcome) -> tuple[float, float]:
+                if o.third_out_p is not None and o.fourth_p is not None:
+                    return float(o.third_out_p), float(o.fourth_p)
+                eliminated = max(1.0 - float(o.advance_r32_p), 0.0)
+                return eliminated / 2, eliminated / 2
+
+            split = [_split_eliminated(o) for o in outcomes]
             data = {
                 "group_winner": [o.group_winner_p for o in outcomes],
                 "runner_up": [o.group_runner_up_p for o in outcomes],
@@ -79,6 +91,8 @@ def _load_persisted_summary() -> tuple[TournamentSummary, int, str] | None:
                     max(o.advance_r32_p - o.group_winner_p - o.group_runner_up_p, 0.0)
                     for o in outcomes
                 ],
+                "third_out": [s[0] for s in split],
+                "fourth": [s[1] for s in split],
                 "r32_reached": [o.advance_r32_p for o in outcomes],
                 "r16_reached": [o.advance_r16_p for o in outcomes],
                 "qf_reached": [o.quarterfinal_p for o in outcomes],
@@ -146,19 +160,22 @@ def _build_group_block(letter: str, summary, fixtures: WC2026Fixtures) -> dict[s
     rows = []
     for team in teams:
         row = summary.probabilities.loc[team]
+        third_out = float(row.get("third_out", 0.0)) if "third_out" in row.index else 0.0
+        fourth = float(row.get("fourth", 0.0)) if "fourth" in row.index else 0.0
+        eliminated_total = float(
+            max(0.0, 1.0 - row["group_winner"] - row["runner_up"] - row["third_advance"])
+        )
+        # P(eliminated) stays for back-compat callers; the new 5-segment fields
+        # let the dashboard render the spec'd bars.
         rows.append(
             {
                 "team": team,
                 "p_first": float(row["group_winner"]),
                 "p_second": float(row["runner_up"]),
                 "p_third_advance": float(row["third_advance"]),
-                # P(eliminated in group) = 1 - (sum of three advance routes)
-                "p_eliminated": float(
-                    max(
-                        0.0,
-                        1.0 - row["group_winner"] - row["runner_up"] - row["third_advance"],
-                    )
-                ),
+                "p_third_out": third_out,
+                "p_fourth": fourth,
+                "p_eliminated": eliminated_total,
             }
         )
     rows.sort(key=lambda r: r["p_first"] + r["p_second"] + r["p_third_advance"], reverse=True)

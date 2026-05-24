@@ -63,12 +63,17 @@ def persist_run(
         session.flush()  # gets run.run_id
         for team in summary.probabilities.index:
             row = summary.probabilities.loc[team]
+            # Older summaries (pre-Phase-12) don't carry third_out / fourth.
+            third_out = float(row["third_out"]) if "third_out" in row.index else None
+            fourth = float(row["fourth"]) if "fourth" in row.index else None
             session.add(
                 TournamentSimTeamOutcome(
                     run_id=run.run_id,
                     team=team,
                     group_winner_p=float(row["group_winner"]),
                     group_runner_up_p=float(row["runner_up"]),
+                    third_out_p=third_out,
+                    fourth_p=fourth,
                     advance_r32_p=float(row["r32_reached"]),
                     advance_r16_p=float(row["r16_reached"]),
                     quarterfinal_p=float(row["qf_reached"]),

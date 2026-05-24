@@ -30,10 +30,17 @@ from wc2026.sim.knockout import KnockoutOutcome, ShootoutStrategy, simulate_knoc
 from wc2026.sim.third_place import ThirdPlacedEntry, rank_third_placed
 
 # Columns of the aggregated probability table.
+#
+# ``third_out`` and ``fourth`` were added to support the 5-segment group-stage
+# bars on the dashboard (1st / 2nd / 3rd→R32 / 3rd-out / 4th). Older persisted
+# runs that don't carry these columns degrade to a single "eliminated" bucket
+# in the loader.
 ROUND_COLUMNS: tuple[str, ...] = (
     "group_winner",
     "runner_up",
     "third_advance",
+    "third_out",
+    "fourth",
     "r32_reached",
     "r16_reached",
     "qf_reached",
@@ -216,6 +223,9 @@ def _update_counters_from_result(
         third_team = gr.standings[2].team
         if third_team in advancing_thirds_set:
             counters[third_team]["third_advance"] += 1
+        else:
+            counters[third_team]["third_out"] += 1
+        counters[gr.standings[3].team]["fourth"] += 1
 
     # R32 reached: every team in an R32 matchup
     for a, b in result.r32_matchups.values():
