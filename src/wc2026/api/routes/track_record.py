@@ -4,9 +4,9 @@
   completed WC 2026 match: aggregate log-loss / Brier / RPS + per-match
   diagnostics. Backs the dashboard's live Track Record panel.
 * ``GET /api/v1/track-record/historical/{tournament}`` — headline metrics +
-  reliability bins for WC 2018 / WC 2022. The Streamlit dashboard used to
-  call ``wc2026.eval.backtest.hindcast()`` in-process; the Next.js frontend
-  consumes this endpoint instead so the heavy compute stays on the API host.
+  reliability bins for WC 2018 / WC 2022. The frontend consumes this endpoint
+  so the heavy hindcast compute (refits ~10 PoissonDC models) stays on the
+  API host instead of running in the browser session.
 
 Implementation notes
 --------------------
@@ -218,9 +218,9 @@ def _compute_historical(tournament: str) -> HistoricalTrackRecord:
     response_model=HistoricalTrackRecord,
     description=(
         "Headline calibration metrics + per-outcome reliability bins for a "
-        "completed World Cup. Cached for 24 hours per (tournament). The "
-        "Streamlit dashboard used to compute these in-process; the Next.js "
-        "frontend consumes this endpoint instead so the cost stays server-side."
+        "completed World Cup. Cached for 24 hours per (tournament); the "
+        "underlying hindcast refits ~10 PoissonDC models so we run it once "
+        "per day and serve every dashboard request from the cache."
     ),
 )
 def historical_track_record(

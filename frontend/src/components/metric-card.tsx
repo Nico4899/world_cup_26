@@ -24,7 +24,7 @@ type MetricCardProps = {
 };
 
 /**
- * Replaces Streamlit's `st.metric`. The popover variant satisfies the spec's
+ * Labelled big-number tile. The popover variant satisfies the spec's
  * "every probability shown must be clickable to reveal a 'what drives this'
  * panel" principle — clicking the tile opens a Radix popover.
  */

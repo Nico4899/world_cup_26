@@ -28,8 +28,7 @@ function read(): Lock[] {
 /**
  * localStorage-backed lock list for the Bracket page's conditional-MC mode.
  *
- * - Replaces Streamlit's `st.session_state["bracket_locks"]`.
- * - Survives page refresh and tab restore (unlike the Streamlit version).
+ * - Survives page refresh and tab restore.
  * - Adding a lock for a match_id that already has one overwrites it, so the
  *   form can be reused to change a previously-picked winner.
  *

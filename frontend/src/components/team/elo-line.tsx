@@ -17,7 +17,7 @@ type Props = {
   color?: string;
 };
 
-/** Visx replacement for Streamlit's Elo Plotly scatter. */
+/** Visx line chart of a team's Elo rating over time. */
 export function EloLine({ history, height = 240, color = "#1f77b4" }: Props) {
   if (history.length === 0) return null;
   return (

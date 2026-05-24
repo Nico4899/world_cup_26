@@ -31,10 +31,10 @@ type Props = {
 /**
  * Phase 5 Poisson × XGB blend overlay.
  *
- * Mirrors the Streamlit sidebar checkbox + slider. Lives behind a Sheet so
- * it doesn't push the headline tiles off the Match Detail viewport. The
- * blend is opt-in because WC 2018 / 2022 hindcasts show it regressing
- * log-loss — kept as a research artefact, not the default outcome.
+ * Sheet-based UI with a checkbox + weight slider so it doesn't push the
+ * headline tiles off the Match Detail viewport. The blend is opt-in
+ * because WC 2018 / 2022 hindcasts show it regressing log-loss — kept as
+ * a research artefact, not the default outcome.
  */
 export function BlendOverlay({ homeTeam, awayTeam, neutral }: Props) {
   const [showBlend, setShowBlend] = useState(false);

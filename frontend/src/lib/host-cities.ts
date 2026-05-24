@@ -1,7 +1,7 @@
 /**
  * Curated host-city coordinates for FIFA WC 2026. Ships with the repo so the
- * map page works without an external geocoding API. Country colours match
- * the Streamlit PyDeck layer (USA navy, Mexico green, Canada red).
+ * map page works without an external geocoding API. Country colours:
+ * USA navy, Mexico green, Canada red.
  */
 export type HostCity = {
   city: string;

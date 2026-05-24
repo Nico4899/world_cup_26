@@ -7,10 +7,7 @@ Next.js app runs separately and consumes the FastAPI over HTTPS. All data
 lives on disk or in Postgres; nothing in-process is load-bearing for
 restart safety.
 
-Built over 11 Stage 2 phases on the Stage 1 baseline, plus a Next.js
-migration (Phases A-H) that replaced the Streamlit dashboard with a
-Next.js 16 + React 19 + Visx UI deployed to Vercel. See
-[`README.md#stage-2-roadmap-complete`](../README.md#stage-2-roadmap-complete)
+See [`README.md#stage-2-roadmap-complete`](../README.md#stage-2-roadmap-complete)
 for the phase-by-phase log; this doc shows the **current as-built**.
 
 ## High-level (the whole platform on one diagram)

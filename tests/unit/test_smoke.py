@@ -19,9 +19,7 @@ def test_core_scientific_stack_imports() -> None:
     import numpy as np
     import pandas as pd
     import scipy
-    import statsmodels.api as sm
 
     assert np.__version__
     assert pd.__version__
     assert scipy.__version__
-    assert sm is not None

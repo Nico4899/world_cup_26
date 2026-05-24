@@ -15,7 +15,7 @@ type Props = {
 };
 
 function blueOf(t: number): string {
-  // 0..1 → light → deep blue; matches Streamlit's "Blues" cmap roughly.
+  // 0..1 → light → deep blue, matplotlib "Blues" colormap-like.
   const lerp = (a: number, b: number) => Math.round(a + (b - a) * t);
   return `rgb(${lerp(247, 8)}, ${lerp(251, 81)}, ${lerp(255, 156)})`;
 }

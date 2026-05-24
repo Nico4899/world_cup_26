@@ -20,7 +20,7 @@ const EMPTY = (team: string): TeamAssetsResponse => ({
  * 1-hour cached crest / kit / stadium lookup for one team.
  *
  * Falls back to an all-null payload on 404 / 503 so callers don't have to
- * branch on error state — same shape as the Streamlit team_assets helper.
+ * branch on error state.
  */
 export function useTeamAssets(team: string) {
   return useQuery({
@@ -35,7 +35,7 @@ export function useTeamAssets(team: string) {
         throw err;
       }
     },
-    staleTime: 60 * 60 * 1000, // 1 hour, mirroring the Streamlit cache TTL
+    staleTime: 60 * 60 * 1000, // 1 hour — TheSportsDB only refreshes weekly
     placeholderData: EMPTY(team),
   });
 }

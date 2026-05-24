@@ -3,8 +3,7 @@ import { test, expect } from "@playwright/test";
 /**
  * Cross-route smoke test: each of the 9 dashboard routes must render its
  * chrome + a recognisable page header even when the FastAPI backend is
- * unreachable. Replaces the old Streamlit AppTest smoke at
- * `tests/integration/test_full_stack_smoke.py`.
+ * unreachable.
  *
  * When `NEXT_PUBLIC_API_URL` points at a live backend (set on staging),
  * Playwright also asserts that at least one `<svg>` chart is present per

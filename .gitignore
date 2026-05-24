@@ -49,3 +49,10 @@ notebooks/*.ipynb_checkpoints/
 # Build artifacts
 dist/
 build/
+
+# Node / Next.js (anything that lands at the repo root, e.g. from running
+# pnpm in the wrong directory; the frontend has its own .gitignore for its
+# own node_modules etc.)
+node_modules/
+.next/
+.vercel/

@@ -21,7 +21,7 @@ const COLORS = {
 
 /**
  * Stacked three-line live win-prob chart with vlines for every GOAL +
- * FT_WHISTLE event. Replaces Streamlit's Plotly scatter implementation.
+ * FT_WHISTLE event.
  */
 export function LiveWinProbChart({
   events,

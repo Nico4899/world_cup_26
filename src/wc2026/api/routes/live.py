@@ -1,6 +1,6 @@
 """Live in-match endpoints: snapshot + Server-Sent Events stream.
 
-``GET /api/v1/live/{match_id}``       — JSON snapshot used by Streamlit polling.
+``GET /api/v1/live/{match_id}``       — JSON snapshot used by polling clients.
 ``GET /api/v1/live/{match_id}/sse``   — SSE stream for any client that prefers
                                          push over poll.
 

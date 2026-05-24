@@ -12,10 +12,9 @@ type Props = {
 };
 
 /**
- * Mirrors the Streamlit `render_unreachable_warning` helper: a single visible
- * banner that names the API URL the caller failed to reach. Used by every
- * page that fetches client-side data; server components surface a similar
- * message from their own catch blocks.
+ * Single visible banner that names the API URL the caller failed to reach.
+ * Used by every page that fetches client-side data; server components
+ * surface a similar message from their own catch blocks.
  */
 export function ApiUnreachableBanner({ message, onRetry }: Props) {
   return (

@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /**
- * In-page Match ID jumper. Mirrors the Streamlit `st.number_input(0..71)`
- * affordance; pressing Enter or blurring with a valid id navigates without
- * a full page reload (the Server Component on the new route re-fetches).
+ * In-page Match ID jumper for the 72 group-stage fixtures (0..71).
+ * Pressing Enter or blurring with a valid id navigates without a full
+ * page reload (the Server Component on the new route re-fetches).
  */
 export function MatchIdInput({ current }: { current: number }) {
   const router = useRouter();

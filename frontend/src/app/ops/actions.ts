@@ -14,8 +14,7 @@ type RunJobResult = {
  *
  * The `WC2026_OPS_TOKEN` is read from server-only env (never reaches the
  * browser) and attached as `X-Ops-Token`. The FastAPI op route checks it
- * against its own env-loaded token. Streamlit's old "paste token in a text
- * input" UX is gone — Vercel env is the source of truth.
+ * against its own env-loaded token; the operator just clicks the button.
  */
 export async function runJob(jobName: string): Promise<RunJobResult> {
   const token = process.env.WC2026_OPS_TOKEN;

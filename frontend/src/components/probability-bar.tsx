@@ -30,7 +30,7 @@ type Props = {
  * Horizontal stacked probability bar built directly from `<rect>` so the
  * dashboard can use the same primitive for the 1X2 outcome bar (3 segments),
  * the group-stage stack (5 segments: 1st / 2nd / 3rd-adv / 3rd-out / 4th),
- * and the Today summary strip. Replaces the Streamlit Plotly Bar+stack.
+ * and the Today summary strip.
  */
 export function ProbabilityBar({
   segments,

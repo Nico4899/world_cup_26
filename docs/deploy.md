@@ -201,13 +201,6 @@ After the first deploy, walk through:
 - `/ops` — Manual job triggers fire (Server Action attaches `X-Ops-Token`).
 - `/api/v1/_ops/scheduler-status` (on Fly) shows the latest `run-job` call.
 
-### 6. Decommission the old Streamlit Community Cloud deploy
-
-Once Vercel goes live and parity is verified, delete the old Streamlit
-Cloud app from [share.streamlit.io](https://share.streamlit.io). The
-`dashboard/` directory and `Dockerfile.dashboard` were removed in the
-same PR that introduced Vercel.
-
 ## Cost summary
 
 | Item | Free tier | Paid tier (hobby) |
