@@ -5,6 +5,33 @@ prediction platform. It covers the Stage 0 core (Poisson + Dixon-Coles with
 weighted MLE, tournament simulator, backtest harness) and the Stage 1 model
 enhancements (Elo-anchored prior, shootout submodel, isotonic recalibration).
 
+## 0. Lineage
+
+This work stands on four public lines of football-forecasting research:
+
+- **Elo ratings** as the team-strength backbone — see Lasek, Szlávik &
+  Bhulai (2013), *The predictive power of ranking systems in association
+  football* (Int. J. Applied Pattern Recognition 1.1: 27-46), which
+  benchmarks Elo against FIFA's official ranking on a 979-match corpus
+  and shows Elo wins on log-loss + Brier across every horizon. We use
+  the eloratings.net implementation (which closely follows the paper)
+  as our prior + shootout feature.
+- **Bivariate Poisson with low-score correction** — Dixon & Coles (1997),
+  *Modelling association football scores and inefficiencies in the football
+  betting market* (J. Royal Stat. Soc. C 46.2: 265-280).
+- **Time-decay weighted MLE for international football** — Groll, Ley,
+  Schauberger & Van Eetvelde (2019), *A hybrid random forest to predict
+  soccer matches in international tournaments* (J. Quantitative Analysis
+  in Sports 15.4: 271-287); we also borrow their feature set
+  (Elo diff, recent-form xG diff, neutral/host flags) for the Phase 5
+  XGBoost component.
+- **Public-facing calibration as a product feature** — FiveThirtyEight's
+  Soccer Power Index (SPI) demonstrated that publishing per-team
+  probability tables + transparent backtests builds trust without
+  compromising rigor. The Track Record page mirrors that practice
+  (live Brier / log-loss / RPS over completed WC 2026 matches alongside
+  the WC 2018 + WC 2022 hindcasts).
+
 ## 1. Match model
 
 We model each international fixture as an independent bivariate Poisson with
