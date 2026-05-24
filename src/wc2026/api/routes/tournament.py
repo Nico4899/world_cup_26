@@ -76,6 +76,7 @@ def _load_persisted_summary() -> tuple[TournamentSummary, int, str] | None:
             )
             if not outcomes:
                 return None
+
             # third_advance = advance_r32_p - group_winner_p - group_runner_up_p
             # is recoverable from existing columns. third_out_p + fourth_p are
             # nullable (Phase 12 added them); when null, fall back to splitting

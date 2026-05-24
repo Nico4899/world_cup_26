@@ -106,8 +106,7 @@ def _fetch_bracket(seed_value: int) -> dict | None:
 
 def _render_bracket_detail(data: dict) -> None:
     st.markdown(
-        f"🏆 **Champion (seed {data['seed']})**: "
-        f"{render_team_chip(data['champion'], bold=True)}",
+        f"🏆 **Champion (seed {data['seed']})**: {render_team_chip(data['champion'], bold=True)}",
         unsafe_allow_html=True,
     )
     df = pd.DataFrame(data["matches"])
@@ -128,9 +127,7 @@ def _render_bracket_detail(data: dict) -> None:
 
 if mode == "Single seed":
     seed_default = _read_int_param("seed", default=42, lo=0, hi=1_000_000)
-    seed = st.number_input(
-        "Seed", min_value=0, max_value=1_000_000, value=seed_default, step=1
-    )
+    seed = st.number_input("Seed", min_value=0, max_value=1_000_000, value=seed_default, step=1)
     _write_params(seed=str(int(seed)))
     data = _fetch_bracket(int(seed))
     if data is None:
@@ -154,9 +151,7 @@ elif mode == "Scenario comparison":
         value=base_default,
         step=1,
     )
-    _write_params(
-        scenarios=str(int(n_scenarios)), base_seed=str(int(base_seed))
-    )
+    _write_params(scenarios=str(int(n_scenarios)), base_seed=str(int(base_seed)))
     scenarios = []
     for i in range(int(n_scenarios)):
         data = _fetch_bracket(int(base_seed) + i)
@@ -240,9 +235,7 @@ else:
 
     with st.form("add_lock_form"):
         lock_cols = st.columns([1, 1, 1, 1])
-        round_label = lock_cols[0].selectbox(
-            "Round", [name for name, _ in _ROUND_RANGES]
-        )
+        round_label = lock_cols[0].selectbox("Round", [name for name, _ in _ROUND_RANGES])
         match_range = next(r for name, r in _ROUND_RANGES if name == round_label)
         match_id_pick = lock_cols[1].selectbox(
             "Match ID", list(match_range), format_func=lambda mid: f"#{mid}"
@@ -251,7 +244,8 @@ else:
         submitted = lock_cols[3].form_submit_button("Add lock", width="stretch")
         if submitted:
             st.session_state["bracket_locks"] = [
-                lock for lock in st.session_state["bracket_locks"]
+                lock
+                for lock in st.session_state["bracket_locks"]
                 if lock["match_id"] != int(match_id_pick)
             ]
             st.session_state["bracket_locks"].append(
@@ -306,6 +300,4 @@ else:
         ]
         st.dataframe(rows, hide_index=True, width="stretch")
     else:
-        st.caption(
-            "_Press_ **Run conditional MC** _to score the bracket under the active locks._"
-        )
+        st.caption("_Press_ **Run conditional MC** _to score the bracket under the active locks._")

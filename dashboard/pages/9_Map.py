@@ -18,8 +18,8 @@ _COUNTRY_FILL: dict[str, list[int]] = {
     # Roughly matches the host countries' flag accent so each cluster is
     # recognisable at a glance. RGBA channel triples, alpha implied 200.
     "United States": [31, 119, 180],  # navy
-    "Mexico": [44, 160, 44],          # green
-    "Canada": [214, 39, 40],          # red
+    "Mexico": [44, 160, 44],  # green
+    "Canada": [214, 39, 40],  # red
 }
 
 # Curated host-city coordinates (publicly documented FIFA venues for WC 2026).

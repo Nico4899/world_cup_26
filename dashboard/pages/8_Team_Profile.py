@@ -81,8 +81,7 @@ else:
     except (APIUnreachable, httpx.HTTPStatusError):
         _path_for_tiles = {"team": team, "n_sims": 0, "rounds": []}
     _opp_by_round = {
-        r["round"]: r.get("most_likely_opponent")
-        for r in _path_for_tiles.get("rounds", [])
+        r["round"]: r.get("most_likely_opponent") for r in _path_for_tiles.get("rounds", [])
     }
 
     def _render_round_tile(column, label: str, value: float | None, round_key: str) -> None:
@@ -100,9 +99,7 @@ else:
                     f"({float(opp['p_conditional']):.0%} of paths)."
                 )
             else:
-                st.caption(
-                    "_Most-likely opponent not yet observed in the path-to-final sample._"
-                )
+                st.caption("_Most-likely opponent not yet observed in the path-to-final sample._")
 
     cols = st.columns(4)
     _render_round_tile(cols[0], "Champion", probs.get("champion_p"), "final")
@@ -366,9 +363,7 @@ if not players:
 else:
     snap = squad.get("snapshot_date")
     src = squad.get("tournament") or "tournament"
-    st.caption(
-        f"{len(players)} players · snapshot {snap or 'unknown date'} ({src})."
-    )
+    st.caption(f"{len(players)} players · snapshot {snap or 'unknown date'} ({src}).")
     rows = [
         {
             "#": p.get("shirt_number") if p.get("shirt_number") is not None else "—",

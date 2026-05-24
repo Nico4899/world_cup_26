@@ -145,9 +145,7 @@ for i in range(0, len(matches), 2):
             why_col, detail_col = st.columns([1, 1])
             with why_col, st.popover("Why?", width="stretch"):
                 xg_diff = xg_h - xg_a
-                favourite = (
-                    m["home_team"] if xg_diff >= 0 else m["away_team"]
-                )
+                favourite = m["home_team"] if xg_diff >= 0 else m["away_team"]
                 st.markdown(
                     f"**Expected goals**: {m['home_team']} **{xg_h:.2f}** vs "
                     f"{m['away_team']} **{xg_a:.2f}** "
@@ -160,9 +158,7 @@ for i in range(0, len(matches), 2):
                 )
                 # Best-effort SHAP top-3 (silently skipped when XGB isn't loaded).
                 try:
-                    explanation = get_explanation(
-                        m["match_id"], class_name="home_win", top_n=3
-                    )
+                    explanation = get_explanation(m["match_id"], class_name="home_win", top_n=3)
                 except (APIUnreachable, httpx.HTTPStatusError):
                     explanation = None
                 contribs = (explanation or {}).get("contributions") or []
@@ -170,10 +166,7 @@ for i in range(0, len(matches), 2):
                     st.markdown("**Top model contributions** _(toward home win)_:")
                     for c in contribs:
                         sign = "↑" if c["contribution"] >= 0 else "↓"
-                        st.write(
-                            f"- {sign} **{c['feature']}** "
-                            f"({c['contribution']:+.3f})"
-                        )
+                        st.write(f"- {sign} **{c['feature']}** ({c['contribution']:+.3f})")
             with detail_col:
                 st.button(
                     "Open detail →",

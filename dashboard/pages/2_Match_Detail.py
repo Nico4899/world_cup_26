@@ -47,6 +47,7 @@ def _latest_elo(team: str) -> float | None:
     except (KeyError, TypeError, ValueError):
         return None
 
+
 # Color tokens for W/D/L form bubbles.
 _RESULT_COLOR = {"W": "#1f9d55", "D": "#888888", "L": "#d62728"}
 
@@ -95,18 +96,15 @@ st.caption(
     + ("neutral venue" if fx["neutral"] else f"{fx['home_team']} at home")
 )
 
-def _render_outcome_popover(
-    *, column, label: str, probability: float, class_name: str
-) -> None:
+
+def _render_outcome_popover(*, column, label: str, probability: float, class_name: str) -> None:
     """Per-outcome clickable cell that reveals the SHAP top-3 driver list.
 
     Trades ``st.metric``'s bold visual for a popover button so every probability
     on the page is reachable from a single click — the spec's "interpretability
     as headline feature" principle.
     """
-    with column, st.popover(
-        f"{label}\n\n**{probability:.1%}**", width="stretch"
-    ):
+    with column, st.popover(f"{label}\n\n**{probability:.1%}**", width="stretch"):
         st.markdown(f"**Why {label} = {probability:.1%}?**")
         try:
             ex = get_explanation(int(match_id), class_name=class_name, top_n=3)
@@ -128,7 +126,7 @@ def _render_outcome_popover(
             sign = "↑" if c["contribution"] >= 0 else "↓"
             st.write(
                 f"- {sign} **{c['feature']}** "
-                f"(value {('—' if c.get('value') is None else f'{c['value']:+.3f}')}, "
+                f"(value {('—' if c.get('value') is None else f'{c["value"]:+.3f}')}, "
                 f"contribution {c['contribution']:+.3f})"
             )
 
