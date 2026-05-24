@@ -49,7 +49,7 @@ export async function MatchCard({ fixture }: { fixture: FixtureSummary }) {
 
   if (!detail) {
     return (
-      <Card>
+      <Card variant="ribbon">
         <CardContent className="space-y-2 py-4">
           <VersusHeader home={fixture.home_team} away={fixture.away_team} />
           <p className="text-xs text-muted-foreground">{caption}</p>
@@ -69,7 +69,7 @@ export async function MatchCard({ fixture }: { fixture: FixtureSummary }) {
   ];
 
   return (
-    <Card>
+    <Card variant="ribbon">
       <CardContent className="space-y-3 py-4">
         <VersusHeader home={fixture.home_team} away={fixture.away_team} />
         <p className="text-xs text-muted-foreground">{caption}</p>

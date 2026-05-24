@@ -120,12 +120,13 @@ export function CommandPalette({ open, onClose }: Props) {
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const safeActive = Math.min(active, Math.max(0, flat.length - 1));
 
-  // Reset input + focus when the palette opens.
+  // Reset input + focus when the palette opens. State resets here are the
+  // canonical pattern (cf. theme-toggle.tsx) — the alternative `key` reset
+  // would unmount the dialog mid-keystroke.
   useEffect(() => {
     if (!open) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setQuery("");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActive(0);
     const t = setTimeout(() => inputRef.current?.focus(), 10);
     return () => clearTimeout(t);
@@ -167,7 +168,7 @@ export function CommandPalette({ open, onClose }: Props) {
       role="dialog"
       aria-modal="true"
       aria-label="Command palette"
-      className="fixed inset-0 z-50 flex justify-center pt-[120px] bg-primary/20 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex justify-center pt-30 bg-primary/20 backdrop-blur-sm"
       onClick={onClose}
     >
       <div

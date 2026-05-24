@@ -35,21 +35,33 @@ for (const { path, heading, charts } of ROUTES) {
   });
 }
 
-test("sidebar nav lists all 9 routes", async ({ page }) => {
+test("top nav lists 5 primary tabs", async ({ page }) => {
   await page.goto("/");
-  // Sidebar is hidden on small viewports; Playwright's Desktop Chrome
-  // default is >= lg breakpoint so the nav should be visible.
+  // Top-nav has the 5 high-frequency routes; the other 4 utility routes
+  // are reachable via the ⌘K command palette (see next test).
+  for (const label of ["Today", "Match Detail", "Groups", "Bracket", "Track Record"]) {
+    await expect(page.getByRole("link", { name: label })).toBeVisible();
+  }
+});
+
+test("command palette reaches every route", async ({ page }) => {
+  await page.goto("/");
+  // Open the palette via the visible "Jump to…" trigger (works on any OS).
+  await page.getByRole("button", { name: /open command palette/i }).click();
+  // The palette renders all 9 route labels under the "Routes" group.
+  const palette = page.getByRole("dialog", { name: /command palette/i });
+  await expect(palette).toBeVisible();
   for (const label of [
     "Today",
     "Match Detail",
     "Groups",
     "Bracket",
     "Track Record",
-    "About",
-    "Operator",
     "Team Profile",
     "Map",
+    "About",
+    "Operator",
   ]) {
-    await expect(page.getByRole("link", { name: label })).toBeVisible();
+    await expect(palette.getByRole("button", { name: new RegExp(`^${label}\\b`) })).toBeVisible();
   }
 });
