@@ -127,3 +127,15 @@ def get_explanation(match_id: int, *, class_name: str = "home_win", top_n: int =
         f"/api/v1/explain/{match_id}",
         params={"class_name": class_name, "top_n": top_n},
     )
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_team_elo_history(team: str) -> dict[str, Any]:
+    """Cached Elo daily snapshots for one team."""
+    return get_json(f"/api/v1/teams/{team}/elo-history")
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def get_team_tournament_probs(team: str) -> dict[str, Any]:
+    """Cached per-team advancement probabilities from the latest persisted MC run."""
+    return get_json(f"/api/v1/teams/{team}/tournament-probs")

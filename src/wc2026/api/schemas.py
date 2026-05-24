@@ -158,6 +158,34 @@ class LiveStateSnapshot(BaseModel):
     )
 
 
+class EloHistoryPoint(BaseModel):
+    snapshot_date: date
+    rating: float
+    global_rank: int | None = None
+
+
+class TeamEloHistory(BaseModel):
+    team: str
+    history: list[EloHistoryPoint]
+
+
+class TeamTournamentProbabilities(BaseModel):
+    """Per-team advancement probabilities pulled from the latest persisted MC run."""
+
+    team: str
+    run_id: int | None = None
+    n_sims: int | None = None
+    model_version: str | None = None
+    group_winner_p: float | None = None
+    group_runner_up_p: float | None = None
+    advance_r32_p: float | None = None
+    advance_r16_p: float | None = None
+    quarterfinal_p: float | None = None
+    semifinal_p: float | None = None
+    final_p: float | None = None
+    champion_p: float | None = None
+
+
 class TeamAssetsResponse(BaseModel):
     """TheSportsDB-sourced UI assets for one team. ``null`` fields mean the
     upstream record exists but the field was blank."""
