@@ -154,16 +154,23 @@ def test_features_rebuild_job_no_ops_without_database_url(monkeypatch):
 def test_features_rebuild_job_calls_build_when_database_url_set(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@z/db")
     import scripts.build_features as bf
+    import scripts.persist_wc2026_predictions as pp
 
-    called = {"n": 0}
+    called = {"features": 0, "predictions": 0}
 
     def fake_build(**_):
-        called["n"] += 1
+        called["features"] += 1
+        return 72
+
+    def fake_persist(**_):
+        called["predictions"] += 1
         return 72
 
     monkeypatch.setattr(bf, "build_and_persist_features", fake_build)
+    monkeypatch.setattr(pp, "persist_daily_snapshot", fake_persist)
     job_mod._job_features_rebuild()
-    assert called["n"] == 1
+    # Both downstream pieces run on a successful pass.
+    assert called == {"features": 1, "predictions": 1}
 
 
 def test_football_data_job_no_ops_without_api_key(monkeypatch):

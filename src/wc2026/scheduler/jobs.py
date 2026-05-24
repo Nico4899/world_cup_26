@@ -272,6 +272,11 @@ def _job_xgb_refit() -> None:
 def _job_features_rebuild() -> None:
     """Rebuild the materialised features_match_features table.
 
+    Also writes a daily WC 2026 prediction snapshot to ``model_predictions``
+    against the same freshly-fit PoissonDC artefact — Phase 7's rolling
+    calibration job (``/api/v1/track-record/wc2026``) reads from that table.
+    Both steps share the same DB dependency, so we run them together.
+
     Runs after ``poisson_refit`` so the Poisson outputs in each row match the
     freshly-fit artefact. Skipped (with a logged warning) when no
     ``DATABASE_URL`` / ``WC2026_DATABASE_URL`` is set — without a DB there's
@@ -283,8 +288,10 @@ def _job_features_rebuild() -> None:
         )
         return
     from scripts.build_features import build_and_persist_features  # noqa: PLC0415
+    from scripts.persist_wc2026_predictions import persist_daily_snapshot  # noqa: PLC0415
 
     build_and_persist_features()
+    persist_daily_snapshot()
 
 
 def _job_warm_standings_cache(api_url: str | None = None, timeout_s: float = 60.0) -> None:
