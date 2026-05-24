@@ -22,10 +22,30 @@ from dashboard.components.api_client import (
     get_match,
     get_prediction,
     get_recent_form,
+    get_team_elo_history,
     render_unreachable_warning,
 )
 from dashboard.components.plot_config import PLOTLY_CONFIG
 from dashboard.components.team_assets import render_team_chip, render_versus_header
+
+
+def _latest_elo(team: str) -> float | None:
+    """Pull the most-recent Elo rating for ``team`` from the API.
+
+    Returns ``None`` when no snapshot exists or the API is unreachable so
+    the narrative can degrade gracefully to an xG-only sentence.
+    """
+    try:
+        payload = get_team_elo_history(team)
+    except (APIUnreachable, httpx.HTTPStatusError):
+        return None
+    history = (payload or {}).get("history") or []
+    if not history:
+        return None
+    try:
+        return float(history[-1]["rating"])
+    except (KeyError, TypeError, ValueError):
+        return None
 
 # Color tokens for W/D/L form bubbles.
 _RESULT_COLOR = {"W": "#1f9d55", "D": "#888888", "L": "#d62728"}
@@ -323,15 +343,46 @@ elif xg_diff > 0:
 else:
     edge = f"The model gives **{fx['away_team']} a +{-xg_diff:.2f} expected-goal edge**"
 
+# Sentence-level Elo anchor: when both teams have an Elo snapshot, surface
+# the gap explicitly. Spec example: "Brazil's Elo is 121 above Tunisia's;
+# that translates to a +0.74 expected-goal edge on neutral ground."
+elo_home = _latest_elo(fx["home_team"])
+elo_away = _latest_elo(fx["away_team"])
+elo_sentence: str | None = None
+if elo_home is not None and elo_away is not None:
+    elo_diff = elo_home - elo_away
+    if abs(elo_diff) < 5:
+        elo_sentence = (
+            f"Elo is essentially level ({elo_home:.0f} vs {elo_away:.0f}); "
+            f"the model leans on the bivariate Poisson + home-advantage term for the edge."
+        )
+    elif elo_diff > 0:
+        elo_sentence = (
+            f"**{fx['home_team']}'s Elo is +{elo_diff:.0f} above {fx['away_team']}'s** "
+            f"({elo_home:.0f} vs {elo_away:.0f}); that translates to a "
+            f"**{xg_diff:+.2f} expected-goal edge** here."
+        )
+    else:
+        elo_sentence = (
+            f"**{fx['away_team']}'s Elo is +{-elo_diff:.0f} above {fx['home_team']}'s** "
+            f"({elo_away:.0f} vs {elo_home:.0f}); that translates to a "
+            f"**{xg_diff:+.2f} expected-goal edge** here."
+        )
+
 top1 = pred["top_scorelines"][0]
-st.markdown(
-    f"""
-    - Expected goals: **{fx["home_team"]} {xg_h:.2f}** vs **{fx["away_team"]} {xg_a:.2f}**
-    - {edge}, {home_adv_note}.
-    - Top scoreline: **{top1["home_goals"]}–{top1["away_goals"]}** at {top1["probability"]:.1%}.
-    - Remember: a 60% favourite still loses 40% of the time. These are probabilities, not predictions.
-    """
+bullets = [
+    f"- Expected goals: **{fx['home_team']} {xg_h:.2f}** vs **{fx['away_team']} {xg_a:.2f}**",
+    f"- {edge}, {home_adv_note}.",
+]
+if elo_sentence:
+    bullets.append(f"- {elo_sentence}")
+bullets.extend(
+    [
+        f"- Top scoreline: **{top1['home_goals']}–{top1['away_goals']}** at {top1['probability']:.1%}.",
+        "- Remember: a 60% favourite still loses 40% of the time. These are probabilities, not predictions.",
+    ]
 )
+st.markdown("\n".join(bullets))
 
 st.divider()
 

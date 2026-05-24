@@ -388,8 +388,12 @@ def _inject_xgb(client: TestClient):
     return model, explainer
 
 
-def test_predictions_blend_no_op_without_xgb_artefact(client: TestClient) -> None:
+def test_predictions_blend_no_op_without_xgb_artefact(client: TestClient, monkeypatch) -> None:
     """With ``blend=true`` but no XGB loaded, the route returns Poisson-only."""
+    # Same reasoning as test_explain_returns_503_without_xgb — force the
+    # absent-artefact branch regardless of local data/artifacts state.
+    monkeypatch.setattr(client.app.state, "xgb_model", None)
+    monkeypatch.setattr(client.app.state, "xgb_explainer", None)
     r = client.get(
         "/api/v1/predictions/Argentina/France",
         params={"neutral": "true", "blend": "true"},
@@ -449,7 +453,12 @@ def test_predictions_blend_weight_out_of_range_is_422(client: TestClient) -> Non
 # --- /api/v1/explain/{match_id} --------------------------------------------
 
 
-def test_explain_returns_503_without_xgb(client: TestClient) -> None:
+def test_explain_returns_503_without_xgb(client: TestClient, monkeypatch) -> None:
+    # The module-scope client lifespan may have loaded a real artefact from
+    # data/artifacts/xgb/latest.json; force it absent for this assertion so the
+    # test stays meaningful regardless of local file state.
+    monkeypatch.setattr(client.app.state, "xgb_model", None)
+    monkeypatch.setattr(client.app.state, "xgb_explainer", None)
     r = client.get("/api/v1/explain/0")
     assert r.status_code == 503
     assert "XGB" in r.json()["detail"]
