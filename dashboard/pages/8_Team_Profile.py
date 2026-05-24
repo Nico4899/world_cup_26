@@ -178,3 +178,131 @@ else:
             for m in form
         )
     )
+
+st.divider()
+
+# --- FIFA ranking history ---------------------------------------------------
+
+st.subheader("FIFA Men's Ranking history")
+try:
+    rankings = get_team_fifa_rankings(team)
+except (APIUnreachable, httpx.HTTPStatusError):
+    rankings = {"team": team, "history": []}
+
+ranking_history = rankings.get("history") or []
+if not ranking_history:
+    st.caption(
+        "_No FIFA ranking snapshots on file yet. The monthly `fifa_ranking_refresh` "
+        "scheduler job populates `raw_fifa_rankings`._"
+    )
+else:
+    latest = ranking_history[-1]
+    rank_cols = st.columns(3)
+    rank_cols[0].metric("Current rank", f"#{latest['rank']}")
+    rank_cols[1].metric(
+        "Points", f"{latest['points']:.0f}" if latest.get("points") is not None else "—"
+    )
+    delta = None
+    if latest.get("previous_rank") is not None:
+        # Lower numeric rank = better, so previous - current is the "up" delta.
+        delta = int(latest["previous_rank"]) - int(latest["rank"])
+    rank_cols[2].metric(
+        "Δ since prev. snapshot",
+        f"{delta:+d}" if delta is not None else "—",
+        help="Positive = climbed, negative = fell.",
+    )
+    if len(ranking_history) > 1:
+        line = go.Figure(
+            go.Scatter(
+                x=[p["ranking_date"] for p in ranking_history],
+                y=[p["rank"] for p in ranking_history],
+                mode="lines+markers",
+                line={"color": "#9467bd"},
+            )
+        )
+        # Lower rank = better, so invert the y axis for an intuitive "up = better" read.
+        line.update_layout(
+            height=240,
+            xaxis_title="Snapshot date",
+            yaxis_title="FIFA rank (lower = better)",
+            yaxis={"autorange": "reversed"},
+            margin={"l": 60, "r": 30, "t": 10, "b": 40},
+        )
+        st.plotly_chart(line, config={"displayModeBar": False})
+
+st.divider()
+
+# --- xG form ---------------------------------------------------------------
+
+st.subheader("xG form")
+try:
+    xg = get_team_xg_form(team)
+except (APIUnreachable, httpx.HTTPStatusError):
+    xg = {"team": team, "last_5": {"matches": 0}, "last_10": {"matches": 0}}
+
+last5 = xg.get("last_5") or {"matches": 0}
+last10 = xg.get("last_10") or {"matches": 0}
+if last10.get("matches", 0) == 0:
+    st.caption(
+        "_No xG records for this team yet. The weekly `fbref_refresh` + manual "
+        "`statsbomb_refresh` jobs populate `raw_match_xg`._"
+    )
+else:
+    xg_cols = st.columns(2)
+    for col, split, label in (
+        (xg_cols[0], last5, "Last 5"),
+        (xg_cols[1], last10, "Last 10"),
+    ):
+        with col:
+            n = int(split.get("matches", 0) or 0)
+            st.markdown(f"**{label}** — {n} match{'es' if n != 1 else ''}")
+            if n == 0:
+                st.caption("_no rows in window_")
+                continue
+            sub = st.columns(3)
+            xf = split.get("xg_for")
+            xa = split.get("xg_against")
+            xd = split.get("xg_diff")
+            sub[0].metric("xG for / match", f"{xf:.2f}" if xf is not None else "—")
+            sub[1].metric("xG against / match", f"{xa:.2f}" if xa is not None else "—")
+            sub[2].metric(
+                "xG diff",
+                f"{xd:+.2f}" if xd is not None else "—",
+                help="Average per-match xG_for − xG_against.",
+            )
+
+st.divider()
+
+# --- Squad roster ----------------------------------------------------------
+
+st.subheader("Squad")
+try:
+    squad = get_team_squad(team)
+except (APIUnreachable, httpx.HTTPStatusError):
+    squad = {"team": team, "players": []}
+
+players = squad.get("players") or []
+if not players:
+    st.caption(
+        "_No squad snapshot on file. Run the manual `wikipedia_squads_refresh` "
+        "job from the Operator page once squads are announced._"
+    )
+else:
+    snap = squad.get("snapshot_date")
+    src = squad.get("tournament") or "tournament"
+    st.caption(
+        f"{len(players)} players · snapshot {snap or 'unknown date'} ({src})."
+    )
+    rows = [
+        {
+            "#": p.get("shirt_number") if p.get("shirt_number") is not None else "—",
+            "Player": p["player_name"],
+            "Pos": p.get("position") or "—",
+            "Club": p.get("club") or "—",
+            "Born": p.get("birth_date") or "—",
+            "Caps": p.get("caps") if p.get("caps") is not None else "—",
+            "Goals": p.get("goals") if p.get("goals") is not None else "—",
+        }
+        for p in players
+    ]
+    st.dataframe(rows, hide_index=True, width="stretch")
