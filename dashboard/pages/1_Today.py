@@ -166,6 +166,7 @@ else:
                     bar = "█" * bar_filled + "░" * (12 - bar_filled)
                     st.markdown(
                         f"<code style='font-size:0.85em'>{bar}</code> "
-                        f"{team['team']} <small>· {advance_p:.0%} adv</small>",
+                        f"{render_team_chip(team['team'])} "
+                        f"<small>· {advance_p:.0%} adv</small>",
                         unsafe_allow_html=True,
                     )

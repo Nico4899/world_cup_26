@@ -20,6 +20,7 @@ from dashboard.components.api_client import (
     get_json,
     render_unreachable_warning,
 )
+from dashboard.components.team_assets import render_team_chip
 
 st.title("Knockout bracket realisation(s)")
 
@@ -46,7 +47,11 @@ def _fetch_bracket(seed_value: int) -> dict | None:
 
 
 def _render_bracket_detail(data: dict) -> None:
-    st.success(f"🏆 Champion (seed {data['seed']}): **{data['champion']}**")
+    st.markdown(
+        f"🏆 **Champion (seed {data['seed']})**: "
+        f"{render_team_chip(data['champion'], bold=True)}",
+        unsafe_allow_html=True,
+    )
     df = pd.DataFrame(data["matches"])
     df["score"] = df["regulation_score"].apply(lambda s: f"{s[0]}–{s[1]}")
     df["decided"] = df["decided_in"].map(
@@ -122,11 +127,12 @@ else:
     cols = st.columns(min(n, 4))
     for i, s in enumerate(scenarios):
         col = cols[i % len(cols)]
-        col.metric(
-            f"Seed {s['seed']}",
-            s["champion"],
-            help=f"Champion in scenario {i + 1}",
-        )
+        with col:
+            st.caption(f"Seed {s['seed']}")
+            st.markdown(
+                render_team_chip(s["champion"], bold=True),
+                unsafe_allow_html=True,
+            )
 
     # Drill-down: pick one of the scenarios to inspect in full.
     pick = st.selectbox(

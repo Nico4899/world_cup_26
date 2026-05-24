@@ -24,6 +24,7 @@ from dashboard.components.api_client import (
     get_recent_form,
     render_unreachable_warning,
 )
+from dashboard.components.team_assets import render_team_chip, render_versus_header
 
 # Color tokens for W/D/L form bubbles.
 _RESULT_COLOR = {"W": "#1f9d55", "D": "#888888", "L": "#d62728"}
@@ -60,7 +61,10 @@ except APIUnreachable as exc:
 fx = detail["fixture"]
 pred = detail["prediction"]
 
-st.subheader(f"{fx['home_team']} vs {fx['away_team']}")
+st.markdown(
+    render_versus_header(fx["home_team"], fx["away_team"]),
+    unsafe_allow_html=True,
+)
 st.caption(
     f"Group {fx['group']} · {fx['city']}, {fx['country']} · {fx['date']} · "
     + ("neutral venue" if fx["neutral"] else f"{fx['home_team']} at home")
@@ -398,7 +402,7 @@ st.divider()
 
 def _render_form(team: str) -> None:
     """Render a team's last-5 form as coloured W/D/L bubbles + tooltip text."""
-    st.markdown(f"**{team}** — last 5")
+    st.markdown(f"{render_team_chip(team, bold=True)} — last 5", unsafe_allow_html=True)
     try:
         form = get_recent_form(team, n=5)
     except APIUnreachable as exc:

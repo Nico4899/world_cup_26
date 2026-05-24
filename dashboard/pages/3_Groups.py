@@ -9,6 +9,7 @@ from dashboard.components.api_client import (
     get_json,
     render_unreachable_warning,
 )
+from dashboard.components.team_assets import render_team_chip
 
 st.title("Group-stage advancement probabilities")
 
@@ -123,17 +124,13 @@ for row_start in range(0, len(group_list), cols_per_row):
 
 st.divider()
 st.subheader("Headline: top 10 championship probabilities")
-st.dataframe(
-    [
-        {
-            "Team": h["team"],
-            "Champion": f"{h['p_champion']:.1%}",
-            "Final": f"{h['p_final']:.1%}",
-            "Semi": f"{h['p_sf']:.1%}",
-            "Quarter": f"{h['p_qf']:.1%}",
-        }
-        for h in data["headline"]
-    ],
-    hide_index=True,
-    width="stretch",
-)
+header_cols = st.columns([3, 1, 1, 1, 1])
+for hdr, name in zip(header_cols, ("Team", "Champion", "Final", "Semi", "Quarter"), strict=True):
+    hdr.markdown(f"**{name}**")
+for h in data["headline"]:
+    row_cols = st.columns([3, 1, 1, 1, 1])
+    row_cols[0].markdown(render_team_chip(h["team"], bold=True), unsafe_allow_html=True)
+    row_cols[1].markdown(f"{h['p_champion']:.1%}")
+    row_cols[2].markdown(f"{h['p_final']:.1%}")
+    row_cols[3].markdown(f"{h['p_sf']:.1%}")
+    row_cols[4].markdown(f"{h['p_qf']:.1%}")
