@@ -306,6 +306,61 @@ def test_db_backup_calls_s3_upload_after_writing_local_dump(monkeypatch, tmp_pat
     _ = _subprocess
 
 
+def test_statsbomb_refresh_chains_live_win_prob_refit(monkeypatch, tmp_path):
+    """After the xG shot model refit, statsbomb_refresh also calls
+    fit_live_win_prob so both artefacts land in one operator click."""
+    import pandas as pd
+
+    import scripts.fit_live_win_prob as live_wp_module
+    import wc2026.ingest.statsbomb_open as sb
+    import wc2026.models.xg_shot_model as xg
+
+    # 1 fake "tournament path" so `paths` is truthy
+    monkeypatch.setattr(job_mod, "fetch_all_tournament_shots", lambda: [tmp_path / "fake"])
+    monkeypatch.setattr(sb, "load_shots_corpus", lambda: pd.DataFrame({"x": [1, 2, 3]}))
+
+    called = {"xg": 0, "live_wp": 0}
+
+    def fake_xg_fit(_corpus, **_kw):
+        called["xg"] += 1
+
+    def fake_live_wp_fit(**_kw):
+        called["live_wp"] += 1
+        return tmp_path / "live_win_prob.json"
+
+    monkeypatch.setattr(xg, "fit_and_save", fake_xg_fit)
+    monkeypatch.setattr(live_wp_module, "fit_and_save", fake_live_wp_fit)
+    job_mod._job_statsbomb_refresh()
+    assert called == {"xg": 1, "live_wp": 1}
+
+
+def test_statsbomb_refresh_swallows_live_win_prob_empty_corpus(monkeypatch, tmp_path):
+    """If the live-win-prob fit raises ValueError (no rows), the xG refit
+    still succeeds — neither pulls the other down."""
+    import pandas as pd
+
+    import scripts.fit_live_win_prob as live_wp_module
+    import wc2026.ingest.statsbomb_open as sb
+    import wc2026.models.xg_shot_model as xg
+
+    monkeypatch.setattr(job_mod, "fetch_all_tournament_shots", lambda: [tmp_path / "fake"])
+    monkeypatch.setattr(sb, "load_shots_corpus", lambda: pd.DataFrame({"x": [1]}))
+
+    called = {"xg": 0}
+
+    def fake_xg_fit(_corpus, **_kw):
+        called["xg"] += 1
+
+    def fake_live_wp_fit(**_kw):
+        raise ValueError("no rows — populate the StatsBomb corpus first")
+
+    monkeypatch.setattr(xg, "fit_and_save", fake_xg_fit)
+    monkeypatch.setattr(live_wp_module, "fit_and_save", fake_live_wp_fit)
+    # Must not propagate — the warning path is the explicit no-op.
+    job_mod._job_statsbomb_refresh()
+    assert called["xg"] == 1
+
+
 def test_db_backup_swallows_s3_upload_failure(monkeypatch, tmp_path):
     """An S3 upload failure must NOT take down the local backup job."""
     monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@z/db")

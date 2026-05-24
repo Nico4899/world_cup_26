@@ -1,201 +1,195 @@
 # Architecture
 
-One Python repo. Three runtime processes (API, dashboard, scheduler) talk to one
-PostgreSQL database. All data lives on disk or in Postgres; nothing in-process is
-load-bearing for restart safety.
+One Python repo. Three runtime processes (API, dashboard, scheduler) talk to
+one PostgreSQL database. All data lives on disk or in Postgres; nothing
+in-process is load-bearing for restart safety.
 
-## Stage 1 (current, as-built)
+Built over 11 Stage 2 phases on top of the Stage 1 baseline. See
+[`README.md#stage-2-roadmap-complete`](../README.md#stage-2-roadmap-complete)
+for the phase-by-phase log; this doc shows the **current as-built**.
+
+## High-level (the whole platform on one diagram)
 
 ```mermaid
 flowchart LR
-    subgraph SRC[Free data sources]
-        K[Kaggle: Jürisoo intl results]
+    subgraph SRC[Free data sources — 9]
+        K[Kaggle: Jürisoo intl]
         E[eloratings.net]
         F[football-data.org]
-    end
-
-    subgraph ING[Ingest layer]
-        IK[kaggle_intl.py]
-        IE[eloratings_scraper.py]
-        IF[football_data_org.py]
-    end
-
-    subgraph DISK[On-disk artefacts]
-        D1[(data/raw/jurisoo/*.csv)]
-        D2[(data/raw/elo/*.parquet)]
-        D3[(data/artifacts/poisson_dc/latest.npz)]
-        D4[(data/artifacts/shootout/latest.json)]
-    end
-
-    subgraph DB[PostgreSQL 16]
-        T1[(raw_matches)]
-        T2[(raw_elo_snapshots)]
-        T3[(model_predictions)]
-        T4[(tournament_sim_runs)]
-        T5[(scheduler_job_runs)]
-    end
-
-    subgraph ML[Model + simulator]
-        M[PoissonDC + Dixon-Coles]
-        Sh[Shootout submodel]
-        S[Monte Carlo simulator]
-    end
-
-    subgraph SVC[Runtime services]
-        SCH[APScheduler<br/>5 daily jobs + warm-cache]
-        API[FastAPI<br/>9 endpoints]
-        UI[Streamlit<br/>7 pages]
-    end
-
-    K --> IK --> D1
-    E --> IE --> D2
-    F --> IF
-    IK --> T1
-    IE --> T2
-    SCH -.daily.-> IK & IE & IF
-    SCH -.daily fit.-> M --> D3
-    SCH -.daily fit.-> Sh --> D4
-    SCH -.daily backup.-> DB
-    SCH -.logs.-> T5
-
-    D1 --> M
-    D2 --> M
-    D3 --> API
-    D4 --> S
-    M --> S
-    M --> T3
-    S --> T4
-    API --> M
-    API --> S
-    UI --> API
-```
-
-### Process responsibilities
-
-| Service | Module | Purpose | Restart safety |
-|---|---|---|---|
-| FastAPI | `src/wc2026/api/main.py` | Serves prediction + tournament endpoints; loads the latest PoissonDC artefact (or fits in lifespan if missing) | Stateless — reloads on restart |
-| Streamlit | `dashboard/streamlit_app.py` | Thin client over the API; cached via `@st.cache_data` (TTL 5–10 min) | Stateless — no DB writes |
-| Scheduler | `src/wc2026/scheduler/jobs.py` | Five daily jobs (`db_backup`, `kaggle_intl_refresh`, `eloratings_refresh`, `football_data_org_refresh`, `model_fit`) plus an hourly tournament-window warm-cache; logs each run to `scheduler_job_runs` | Re-registers cron triggers on startup; missed runs are skipped (no catch-up) |
-
-### API endpoints (9)
-
-| Path | Returns |
-|---|---|
-| `GET /health` | Model + fixtures + Elo snapshot freshness |
-| `GET /api/v1/matches` | Filtered fixture list (by date / group) |
-| `GET /api/v1/matches/{id}` | One fixture + prediction (full 11×11 score matrix) |
-| `GET /api/v1/predictions/{home}/{away}` | 1X2 + xG + top scorelines + score matrix |
-| `GET /api/v1/teams/{team}/recent` | Last-n matches per team |
-| `GET /api/v1/h2h/{a}/{b}` | Head-to-head history |
-| `GET /api/v1/tournament/standings` | 12-group MC probabilities + top-10 champion table |
-| `GET /api/v1/tournament/bracket` | One sampled 31-match knockout realisation |
-| `GET /api/v1/_ops/scheduler-status` | Latest run per scheduler job (status, error text) |
-
-### Dashboard pages (7)
-
-`Today`, `Match Detail`, `Groups`, `Bracket Realisation`, `Track Record`, `About`, `Operator`.
-
-### Data flow guarantees
-
-- **Ingest is idempotent.** Re-running `download_kaggle_intl.py` overwrites the CSV; `scrape_eloratings.py` writes a fresh dated Parquet. Postgres upserts use `ON CONFLICT DO NOTHING`/`DO UPDATE`. No duplicate rows.
-- **Model fit is deterministic.** Same input matches + same weights + same `ref_date` → same parameters (scipy `L-BFGS-B`, no random seed).
-- **Monte Carlo is seeded.** Same seed + same model → identical tournament. Cached in the API by `(n_sims, seed)`.
-- **No live polling.** Dashboard reads cached predictions; no SSE, no WebSocket, no 60-second loops. Update cadence is whatever the scheduler runs. (Stage 2 Phase 6 changes this.)
-
-## Stage 2 (planned)
-
-The Stage 2 roadmap revives every blueprint item that was deferred in Stage 1. Phases run in dependency order; each ends at a hindcast or smoke-test gate. See [`/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md`](/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md) for the full plan; the table in [`README.md`](../README.md#stage-2-roadmap) summarises the 11 phases.
-
-```mermaid
-flowchart LR
-    subgraph SRC2[Stage 2 sources]
         TS[TheSportsDB]
         OF[openfootball]
-        WP[Wikipedia/Wikidata]
+        WP[Wikipedia / Wikidata]
         SB[StatsBomb open]
         FB[FBref]
         FDC[football-data.co.uk]
     end
 
-    subgraph ING2[Stage 2 ingest]
-        ITS[thesportsdb.py]
-        IOF[openfootball.py]
-        IWP[wikipedia.py]
-        ISB[statsbomb_open.py]
-        IFB[fbref.py]
-        IFDC[football_data_co_uk.py]
-        ILV[live_events.py]
+    subgraph SCH[Scheduler — APScheduler]
+        DAILY[5 daily cron + monthly + 3 weekly]
+        WIN[3 interval jobs<br/>tournament-window only]
+        MAN[2 manual-only]
     end
 
-    subgraph FEAT2[Stage 2 features]
-        XGM[xg_shot_model.py]
-        XGF[xg_form.py]
-        REST[rest_days.py]
-        BMF[build_match_features.py]
+    subgraph DB[PostgreSQL — 11 tables]
+        RAW[(raw_*: matches, elo_snapshots,<br/>team_assets, squads, fifa_rankings,<br/>match_xg, live_events)]
+        FEAT[(features_match_features)]
+        MOD[(model_predictions)]
+        SIM[(tournament_sim_runs<br/>+ team_outcomes)]
+        JOBS[(scheduler_job_runs)]
     end
 
-    subgraph DB2[New tables]
-        TA[(raw_team_assets)]
-        SQ[(raw_squads)]
-        FR[(raw_fifa_rankings)]
-        XGE[(raw_xg_events)]
-        MF[(features_match_features)]
-        LE[(raw_live_events)]
+    subgraph DISK[On-disk artefacts]
+        APD[poisson_dc/latest.npz]
+        ASH[shootout/latest.json]
+        AXG[xg_shot/latest.json]
+        AXM[xgb/latest.json + meta]
+        ALW[live_win_prob/latest.json]
     end
 
-    subgraph ML2[Stage 2 models]
-        XGB[xgb_classifier.py]
-        SHAP[shap_explain.py]
-        BL[blend.py]
-        LWP[live_win_prob.py]
+    subgraph ML[Model + simulator]
+        P[PoissonDC + Dixon-Coles]
+        SHO[Shootout submodel]
+        XGS[xG shot model]
+        XGB[XGBoost H/D/A + SHAP]
+        BL[Geometric blend]
+        LWP[Live win-prob]
+        MC[Monte Carlo<br/>conditional after FT_WHISTLE]
     end
 
-    subgraph API2[New endpoints]
-        EXP[/api/v1/explain/&#123;id&#125;/]
-        SSE[/api/v1/live/&#123;id&#125;/sse]
-        COND[/api/v1/tournament/bracket/conditional]
+    subgraph API[FastAPI — 22 endpoints]
+        BASE[Stage 1: matches / predictions /<br/>tournament / teams / h2h / health]
+        P5[Phase 5: /explain]
+        P6[Phase 6: /live + /sse]
+        P7[Phase 7: /track-record]
+        P9[Phase 9: /teams/.../elo-history,<br/>tournament-probs, assets]
+        OPS[/_ops: scheduler-status,<br/>available-jobs, run-job]
     end
 
-    subgraph UI2[New dashboard]
+    subgraph UI[Streamlit — 9 pages]
+        TODAY[Today]
+        MD[Match Detail<br/>+ SHAP + live chart]
+        GRP[Groups]
+        BR[Bracket Realisation<br/>+ scenario explorer]
+        TR[Track Record]
+        AB[About]
+        OP[Operator]
         TP[Team Profile]
-        MAP[PyDeck map]
-        BSIM[Interactive bracket]
-        SP[SHAP panel on Match Detail]
-        LWPC[Live win-prob chart]
+        MAP[Host-city map]
     end
 
-    subgraph OPS2[Stage 2 ops]
-        FLY[Fly.io deploy]
-        SEN[Sentry SDK]
-        S3[pg_dump → S3/R2]
+    subgraph OPS_LAYER[Phase 10 observability]
+        SE[Sentry SDK]
+        S3R[S3 / R2 backup]
     end
 
-    SRC2 --> ING2
-    ITS --> TA
-    IOF --> DB2
-    IWP --> SQ & FR
-    ISB --> XGE
-    IFB --> XGE
-    XGE --> XGM --> XGF --> MF
-    REST --> MF
-    BMF --> MF
-    MF --> XGB --> SHAP & BL
-    BL --> API2
-    SHAP --> EXP
-    ILV --> LE --> LWP --> SSE
-    XGB --> COND
-    API2 --> UI2
-    OPS2 --> SVC
-    SVC[Stage 1 runtime services]
+    SRC --> SCH --> RAW
+    SCH -.refit.-> P --> APD
+    SCH -.refit.-> SHO --> ASH
+    SCH -.refit.-> XGS --> AXG
+    SCH -.refit.-> XGB --> AXM
+    SCH -.refit.-> LWP --> ALW
+    SCH -.rebuild.-> FEAT
+    SCH -.snapshot.-> MOD
+    SCH -.conditional rerun.-> SIM
+    SCH -.daily backup.-> DB --> S3R
+    SCH -.logs.-> JOBS
+
+    DISK --> ML
+    DB --> ML
+    ML --> MC
+    MC --> SIM
+
+    DB --> API
+    DISK --> API
+    ML --> API
+    API --> UI
+    SE -.errors.-> API
+    SE -.errors.-> SCH
 ```
 
-## What is intentionally not here (Stage 2 honest scope)
+## Process responsibilities
 
-Items that the Stage 2 plan explicitly leaves out:
+| Service | Module | Purpose | Restart safety |
+|---|---|---|---|
+| FastAPI | `src/wc2026/api/main.py` | 22 endpoints across 11 routers; loads PoissonDC + shootout + XGB + SHAP + live-win-prob + Elo snapshot in lifespan | Stateless — every artefact reloaded on restart |
+| Streamlit | `dashboard/streamlit_app.py` | 9 pages; cached via `@st.cache_data` (TTLs 5 min for fixtures / 10 min for tournament / 1 h for team assets) | Stateless — no DB writes |
+| Scheduler | `src/wc2026/scheduler/jobs.py` | 13 cron jobs + 3 interval-triggered tournament-window jobs + 2 manual-only; logs each run to `scheduler_job_runs` for the Operator page | Re-registers triggers on startup; missed runs skipped (no catch-up) |
 
-- **Transfermarkt squad market value** — fragile to scrape, legal grey area, marginal feature gain. Squad age from Wikipedia suffices.
-- **FIFA.com unofficial JSON** — terms prohibit redistribution; openfootball + football-data.org cover the fixture/group needs.
-- **Paid data feeds** (Opta, Sportradar, Enetpulse, Wyscout, paid StatsBomb) — free corpus is sufficient for tournament-level prediction.
-- **Bidirectional WebSockets** — SSE is one-way; live updates are server → client only.
-- **Prometheus + Grafana stack** — Sentry + the `/health` and `/api/v1/_ops/scheduler-status` endpoints cover Stage 2 needs.
+## Scheduled jobs (full list)
+
+### Daily / weekly / monthly cron
+
+| Job | Cadence | What it does |
+|---|---|---|
+| `db_backup` | daily 02:00 UTC | `pg_dump` → local volume → S3/R2 upload + 30-day remote prune |
+| `thesportsdb_refresh` | Sunday 03:00 UTC | crest / kit / stadium metadata for the 48 WC teams |
+| `openfootball_refresh` | Sunday 03:30 UTC | canonical group letters from openfootball/world-cup |
+| `football_data_co_uk_refresh` | Sunday 03:45 UTC | closing-odds calibration corpus |
+| `kaggle_refresh` | daily 04:00 UTC | Jürisoo intl results CSV → Parquet snapshot |
+| `elo_refresh` | daily 04:15 UTC | eloratings.net two-TSV polite scrape |
+| `football_data_org_refresh` | daily 04:30 UTC | WC 2026 fixtures + scores |
+| `poisson_refit` | daily 05:00 UTC | refit PoissonDC + shootout submodel |
+| `features_rebuild` | daily 05:15 UTC | rebuild `features_match_features` + persist daily WC 2026 prediction snapshot to `model_predictions` |
+| `fbref_refresh` | Sunday 05:30 UTC | FBref match-log xG for the 48 teams |
+| `xgb_refit` | Sunday 05:45 UTC | refit Phase 5 XGBoost classifier |
+| `fifa_ranking_refresh` | 1st of month 06:00 UTC | FIFA Men's World Ranking snapshot |
+
+### Interval-triggered (tournament window only: 2026-06-11 → 2026-07-19)
+
+| Job | Cadence | What it does |
+|---|---|---|
+| `standings_cache_warm` | every 60 min | force the API to recompute the in-process standings cache |
+| `monte_carlo_rerun` | every 30 min | re-run 10 k Monte Carlo conditioned on completed-match results → `tournament_sim_runs` |
+| `live_events_poll` | every 60 s | pull today's WC fixtures, call `poll_live_match` for each IN_PLAY / PAUSED / recently FINISHED |
+
+### Manual-only
+
+| Job | Trigger | What it does |
+|---|---|---|
+| `wikipedia_squads_refresh` | `POST /api/v1/_ops/run-job/wikipedia_squads_refresh` | tournament squad rosters |
+| `statsbomb_refresh` | same | StatsBomb shots corpus + xG shot model refit + live win-prob model refit |
+
+## API surface (22 endpoints, 11 routers)
+
+| Router | Endpoints |
+|---|---|
+| `health` | `GET /health` |
+| `matches` | `GET /api/v1/matches`, `GET /api/v1/matches/{id}` |
+| `predictions` | `GET /api/v1/predictions/{home}/{away}` (with `?blend=true`) |
+| `tournament` | `GET /standings` (reads persisted MC by default), `GET /bracket` |
+| `teams` | `GET /{team}/recent`, `/{team}/elo-history`, `/{team}/tournament-probs`, `/{team}/assets` |
+| `h2h` | `GET /api/v1/h2h/{a}/{b}` |
+| `explain` | `GET /api/v1/explain/{match_id}` (Phase 5 SHAP; 503 when no XGB artefact) |
+| `live` | `GET /api/v1/live/{id}`, `/history`, `/sse` (Phase 6) |
+| `track_record` | `GET /api/v1/track-record/wc2026` (Phase 7 rolling calibration) |
+| `ops` | `GET /_ops/scheduler-status`, `/_ops/available-jobs`, `POST /_ops/run-job/{name}` |
+
+## Data flow guarantees
+
+- **Ingest is idempotent.** Re-running any ingester overwrites Parquet snapshots; Postgres upserts use `ON CONFLICT DO NOTHING`/`DO UPDATE`. No duplicate rows.
+- **Model fit is deterministic.** Same input matches + same weights + same `ref_date` → identical PoissonDC parameters (scipy `L-BFGS-B`, no random seed).
+- **Monte Carlo is seeded.** Same seed + same model + same `known_group_results` → identical tournament. Cached in the API by `(n_sims, seed)`; the Phase 8 conditional rerun persists 1 run per ~30 min during the tournament.
+- **Live polling is rate-bounded.** `live_events_poll` runs every 60 s during the tournament; the football-data.org cost is ≤4 calls/min on the busiest matchday vs. the 10/min free-tier ceiling.
+- **Sentry + S3 backup are env-gated.** No `SENTRY_DSN` / `AWS_S3_BUCKET` → silent no-op; the system still works locally with neither.
+
+## What is intentionally not here (honest scope)
+
+- **Transfermarkt squad market value** — fragile, legal grey area. Squad age from Wikipedia suffices.
+- **FIFA.com unofficial JSON** — T&Cs prohibit redistribution; openfootball + football-data.org cover the fixture/group needs.
+- **Paid data feeds** (Opta, Sportradar, Enetpulse, paid StatsBomb) — free corpus is sufficient for tournament-level prediction.
+- **Bidirectional WebSockets** — SSE is one-way (server → client). The dashboard polls + SSE-consumes, never sends.
+- **Prometheus + Grafana stack** — Sentry + `/health` + `/api/v1/_ops/scheduler-status` cover monitoring at this scale.
+- **Click-to-set bracket simulator** — Phase 9 deferred the custom React/SVG component (`streamlit.components.v1`). The multi-seed scenario explorer captures most of the same UX.
+- **Live red-card / sub tracking** — football-data.org's free tier exposes only the score, not detailed events. Phase 6 acknowledges the limitation in `ingest/live_events.py`.
+- **Next.js dashboard rewrite** — Streamlit covers the v1 use case; Next.js was the blueprint's optional v2 lever.
+
+## Where to look for X
+
+| If you want… | Look here |
+|---|---|
+| The end-to-end deploy runbook | [`docs/deploy.md`](deploy.md) |
+| The model methodology + references | [`docs/methodology.md`](methodology.md) |
+| Per-source licence terms | [`docs/LICENSES.md`](LICENSES.md) |
+| Operational status (job runs, freshness, manual triggers) | the **Operator** dashboard page |
+| Live tournament calibration (Brier / log-loss / RPS as matches finish) | the **Track Record** dashboard page |
+| The plan that drove Stage 2 | `/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md` |

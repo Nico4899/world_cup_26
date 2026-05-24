@@ -71,26 +71,43 @@ uv run uvicorn wc2026.api.main:app --port 8000
 WC2026_API_URL=http://localhost:8000 uv run streamlit run dashboard/streamlit_app.py
 ```
 
-Then open http://localhost:8501. Dashboard pages:
+Then open http://localhost:8501. Dashboard pages (9 total):
 
 | Page | Purpose |
 |---|---|
-| **Today** | Prediction cards for any matchday between 2026-06-11 and 2026-06-27 |
-| **Match Detail** | Per-match 1X2 + scoreline heatmap + plain-language "why" |
+| **Today** | Prediction cards for any matchday in [2026-06-11, 2026-07-19] |
+| **Match Detail** | 1X2 + scoreline heatmap + SHAP "why" panel + live win-prob chart (auto-refreshes during a live match via `<meta http-equiv="refresh">`) |
 | **Groups** | 12 group blocks with stacked-bar advancement probabilities (1st / 2nd / 3rd→R32 / out) |
-| **Bracket** | One sampled knockout realisation; resampleable by seed |
-| **Track Record** | WC 2022 + WC 2018 hindcast reliability diagrams + Brier / log-loss / RPS |
+| **Bracket Realisation** | Single-seed view + multi-seed scenario comparison (Phase 9; deferred the custom-JS click-to-set) |
+| **Track Record** | Live WC 2026 rolling calibration (Phase 7) above the WC 2018 + WC 2022 historical hindcasts |
+| **About** | Methodology + references rendered from `docs/methodology.md` |
+| **Operator** | Health, scheduler-job status, and `/_ops/run-job/{name}` manual triggers |
+| **Team Profile** | Per-team Elo history + recent-10 form + WC 2026 path-to-final probabilities |
+| **Host-city map** | 16 host venues plotted on `st.map`; filter the fixture list by venue |
 
 ### API endpoints
 
 | Path | Returns |
 |---|---|
-| `GET /health` | model + fixtures load status |
+| `GET /health` | model + fixtures + Elo snapshot age + group-assignment source |
 | `GET /api/v1/matches?date=YYYY-MM-DD&group=A` | filtered fixture list |
 | `GET /api/v1/matches/{id}` | one fixture + prediction (top-5 scorelines + full 11×11 score matrix) |
-| `GET /api/v1/predictions/{home}/{away}?neutral=true` | 1X2 + xG + top-5 scorelines + full 11×11 score matrix |
-| `GET /api/v1/tournament/standings?n_sims=2000&seed=42` | 12-group MC probabilities + top-10 champion table |
+| `GET /api/v1/predictions/{home}/{away}?neutral=true&blend=true&blend_weight=0.5` | 1X2 + xG + top-5 + score matrix; `blend=true` adds the XGB-blended triplet when the optional artefact is loaded |
+| `GET /api/v1/tournament/standings?n_sims=2000&seed=42&use_persisted=true` | 12-group MC probabilities + top-10 champion table; defaults to the latest persisted Phase-8 MC run |
 | `GET /api/v1/tournament/bracket?seed=42` | one sampled 31-match knockout realisation |
+| `GET /api/v1/teams/{team}/recent?n=5` | last-N matches from the team's perspective (W/D/L) |
+| `GET /api/v1/teams/{team}/elo-history` | daily Elo snapshots |
+| `GET /api/v1/teams/{team}/tournament-probs` | per-team advancement probs from the latest persisted MC run |
+| `GET /api/v1/teams/{team}/assets` | crest / kit / stadium metadata from `raw_team_assets` |
+| `GET /api/v1/h2h/{a}/{b}?n=10` | head-to-head history |
+| `GET /api/v1/explain/{match_id}?class_name=home_win&top_n=5` | SHAP top-features for one fixture (503 when no XGB artefact loaded) |
+| `GET /api/v1/live/{match_id}` | current state + in-running win-prob (Phase 6) |
+| `GET /api/v1/live/{match_id}/history` | full per-event timeline + the latest snapshot |
+| `GET /api/v1/live/{match_id}/sse` | Server-Sent Events stream of win-prob frames |
+| `GET /api/v1/track-record/wc2026` | rolling Brier / log-loss / RPS over completed WC 2026 matches |
+| `GET /api/v1/_ops/scheduler-status` | per-job latest run + status |
+| `GET /api/v1/_ops/available-jobs` | list of manually-triggerable jobs |
+| `POST /api/v1/_ops/run-job/{name}` | enqueue a manual run; gated by `X-Ops-Token` when `WC2026_OPS_TOKEN` is set |
 
 ## Deploying with Docker
 
@@ -113,7 +130,7 @@ docker run --rm -p 8501:8501 \
 
 ### Deploying to Fly.io (~$5–10/month hobby tier)
 
-A starter config is at [`fly.toml.example`](fly.toml.example). One-time setup:
+See [`docs/deploy.md`](docs/deploy.md) for the full runbook — Fly app + Postgres + volume, Cloudflare R2 (off-site backup), Sentry (error monitoring), Streamlit Community Cloud (dashboard), and rollback procedure. Short version:
 
 ```bash
 cp fly.toml.example fly.toml          # then edit `app` name + `primary_region`
@@ -121,63 +138,90 @@ fly launch --no-deploy --copy-config
 fly volumes create wc2026_data --size 2 --region <your-region>
 fly postgres create --name wc2026-pg --region <your-region>
 fly postgres attach wc2026-pg         # injects DATABASE_URL
-fly secrets set FOOTBALL_DATA_ORG_KEY=<your_key>   # optional
+fly secrets set FOOTBALL_DATA_ORG_KEY=<key> SENTRY_DSN=<dsn> \
+                AWS_S3_BUCKET=<bucket> AWS_S3_ENDPOINT_URL=<r2-or-s3> \
+                AWS_ACCESS_KEY_ID=<id> AWS_SECRET_ACCESS_KEY=<secret>
 fly deploy
 fly scale count app=1 scheduler=1     # one of each process group
 ```
 
 The Fly config uses **two process groups** off the same Dockerfile.app:
-`app` (uvicorn on port 8000, HTTPS via Fly's edge, `/health` check every 15s)
+`app` (uvicorn on port 8000, HTTPS via Fly's edge, `/health` check every 15 s, `min_machines_running = 1` so live SSE clients never see a cold-start)
 and `scheduler` (BlockingScheduler, smaller VM). Both share a `wc2026_data`
 volume mounted at `/app/data` for ingest data + the model artefact.
 
-## Known limitations (Stage 1)
+Every secret above is optional and gracefully degrades when absent:
+- No `FOOTBALL_DATA_ORG_KEY` → daily fixture refresh + live event poller no-op silently.
+- No `SENTRY_DSN` → `init_sentry` returns False, no events shipped.
+- No `AWS_S3_BUCKET` → `db_backup` stays local-only (still daily, still pruned).
 
-These are the gaps the Stage 2 roadmap addresses (see "Stage 2 roadmap" below for the build sequence):
+## Known limitations (post-Stage-2)
 
-- **Local-only by default.** The Dockerfiles build, but no deploy target is wired up; you run the stack with `uv run uvicorn …` + `uv run streamlit …` (or via `docker compose`). `fly.toml.example` is provided but `fly deploy` has not been run — Phase 10 of the roadmap.
-- **No live polling / no in-match updates.** The dashboard shows pre-match predictions; updates require a scheduler refresh. Phase 6 adds a Server-Sent Events live win-prob stream.
-- **Three model add-ons are experimental, not used by default**:
+After 11 phases of build, the platform implements every blueprint item with these honest carve-outs:
+
+- **Not yet deployed**. `fly.toml.example` is configured for the two-process-group + Postgres + volume layout (Phase 10), but `fly deploy` has not been run. The Streamlit dashboard isn't on Streamlit Community Cloud yet. Walk through [`docs/deploy.md`](docs/deploy.md) when ready to go live.
+- **Three model add-ons are research-only**:
   - `PoissonDCWithPrior` (Elo prior) monotonically degrades WC 2022 log-loss across `prior_strength ∈ [0, 5]` — the base model already extracts team strength from match history.
   - `IsotonicCalibrator` (LOO recalibration) degrades WC 2022 log-loss by +0.077 — isotonic on N=64 is small-sample fragile; likely useful with N≥250.
   - `XgbMatchModel` + geometric blend (Phase 5) monotonically degrades on both WC 2018 (+0.000 → +0.005) and WC 2022 (+0.000 → +0.023) hindcasts as the XGB mixing weight rises from 0 to 50%. The pure Poisson is already near the bookmaker-quality ceiling; XGB-on-sparse-features adds noise rather than signal. Re-evaluate once xG-form / squad-age inputs are populated for the historical training corpus. Blend is exposed as `?blend=true&blend_weight=W` on `/api/v1/predictions/...`; defaults to off. SHAP `/api/v1/explain/{match_id}` is valuable independently of whether the blend is enabled.
   All three are kept as research artefacts; see `scripts/backtest_with_elo_prior.py`, `scripts/backtest_with_isotonic.py`, and `scripts/refit_xgb.py --hindcast`.
-- **No XGBoost + SHAP blend, no xG features, no Team Profile / interactive bracket / map / crests.** Phases 2–5 and 9 of the roadmap.
+- **Bracket simulator is scenario-comparison, not click-to-set.** Phase 9 shipped a multi-seed explorer rather than the custom React+SVG bracket the blueprint specified. The plan's own Plotly-fallback note — Vite toolchain cost outweighs the UX gain. Reopen if/when the platform wants embeddable React widgets anyway.
+- **Live event poller depends on football-data.org's free tier** (no detailed events on the free plan). Score deltas are tracked accurately; red cards + subs are not. Documented in [`src/wc2026/ingest/live_events.py`](src/wc2026/ingest/live_events.py).
+- **Group letters A-L are derived from fixture dates** when no `data/wc2026_group_assignment.json` override is on disk. After the official FIFA draw, drop the openfootball-derived JSON into that path to switch from derived → authoritative; `/health` surfaces which source is in use.
 
-## Stage 2 roadmap
+## Stage 2 roadmap (complete)
 
-Stage 1 shipped a calibrated, locally-runnable platform. Stage 2 expands it to the full blueprint feature set. The 11-phase build sequence and per-phase verification gates live in [`/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md`](/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md).
+Stage 1 shipped a calibrated, locally-runnable platform. Stage 2 expanded it to the full blueprint feature set across 11 phases. Plan: [`/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md`](/Users/nico/.claude/plans/extensively-review-the-given-resilient-anchor.md).
 
-| Phase | Scope | Risk gate |
+| Phase | Scope | Outcome |
 |---|---|---|
-| 1 | Documentation reconciliation (this commit) | — |
-| 2 | TheSportsDB, openfootball, Wikipedia ingesters → crests, kit colours, canonical group letters, squads, FIFA ranking | New rows persisted; assets resolve in dashboard |
-| 3 | StatsBomb Open Data + FBref + football-data.co.uk → xG corpus + shot model | Hindcast WC 2022 log-loss does not regress > 0.02 vs Poisson-only |
-| 4 | `features.match_features` materialised table (Elo Δ, FIFA-rank Δ, xG-form Δ, rest days, neutral/host flags, squad age, Poisson outputs as features) | Daily `model_fit` job rebuilds the table |
-| 5 | XGBoost H/D/A + SHAP TreeExplainer + geometric-mean blend; `/api/v1/explain/{match_id}` | Blended log-loss ≤ Poisson-only log-loss on WC 2018 & 2022 hindcasts |
-| 6 | In-match live win-prob (Elo Δ, current GD, minutes remaining, red-card Δ); `/api/v1/live/{match_id}/sse`; live event poller | SSE replay test on stored StatsBomb match emits at every event |
-| 7 | Rolling WC 2026 calibration (Brier / log-loss / RPS), surfaced on Track Record above the historical hindcasts | Synthetic match-result fixture → metrics computed correctly |
-| 8 | Auto-rerun 10k Monte Carlo on each FINISHED match; cache `tournament_sim_runs` reads | `/api/v1/tournament/standings` no longer re-simulates per request |
-| 9 | Dashboard polish: Team Profile, PyDeck map, interactive bracket (custom React+SVG via `streamlit.components.v1`), Match-Detail SHAP panel, crests everywhere | Each new page renders end-to-end on live API data |
-| 10 | Deploy to Fly.io (volume + Postgres + 2-process scale) + Sentry SDK + off-site pg_dump to S3/R2 + warmth-keep cron | `curl https://<app>.fly.dev/health` → 200; Sentry test event received; dump in S3 |
-| 11 | Final README + ARCHITECTURE.md refresh with deployed URLs | — |
+| 1 | Documentation reconciliation | ✅ Stage 1.A/1.B/1.C marked done; Stage 2 roadmap drafted |
+| 2 | TheSportsDB / openfootball / Wikipedia ingesters → crests, kit colours, canonical group letters, squads, FIFA ranking | ✅ Three new ingesters; weekly + monthly + manual-only schedules |
+| 3 | StatsBomb open data + FBref + football-data.co.uk → xG corpus + shot model | ✅ Direct-GitHub StatsBomb ingester (no `statsbombpy`), polite FBref scraper, football-data.co.uk closing-odds loader, logistic xG shot model |
+| 4 | `features.match_features` materialised table | ✅ Daily rebuild via `features_rebuild` job; Phase 5's XGBoost reads from this |
+| 5 | XGBoost H/D/A + SHAP TreeExplainer + geometric blend; `/api/v1/explain/{match_id}` | ⚠️ Blend **regresses** log-loss on both WC 2018 + 2022 hindcasts as XGB weight rises — kept as research artefact, off by default. SHAP panel valuable independently. |
+| 6 | In-match live win-prob + `/api/v1/live/{match_id}/sse` + live event poller | ✅ Logistic regression on (Elo Δ, GD, minutes, red Δ); SSE generator + direct-replay tests; production poller wired to scheduler post-audit |
+| 7 | Rolling WC 2026 calibration on Track Record page | ✅ `/api/v1/track-record/wc2026` + dashboard panel; daily prediction snapshots persisted to `model_predictions` |
+| 8 | Conditional 10k Monte Carlo auto-rerun after each FINISHED match; cache `tournament_sim_runs` reads | ✅ `simulate_*` family accepts `known_group_results`; `monte_carlo_rerun` every 30 min in tournament window; `/standings` reads persisted run |
+| 9 | Dashboard polish: Team Profile, host-city map, SHAP panel, scenario-comparison bracket, crests | ✅ 9 dashboard pages (3 more than blueprint); click-to-set bracket deferred (Vite-toolchain cost) — see "Known limitations" |
+| 10 | Fly.io config + Sentry SDK + off-site pg_dump to S3/R2 + warmth-keep | ✅ Code shipped (`observability/`, env-gated for graceful degradation). Actual `fly deploy` is operator-side — see [`docs/deploy.md`](docs/deploy.md). |
+| 11 | Final README + ARCHITECTURE.md refresh | ✅ This commit |
+
+### Key Stage 2 numbers (at completion)
+
+- **539 unit tests**, **9 deselected** as `slow`/`integration` (~18 s for the default suite)
+- **13 cron jobs** + **3 interval-triggered tournament-window jobs** (`standings_cache_warm`, `monte_carlo_rerun`, `live_events_poll`) + **2 manual-only** (`wikipedia_squads_refresh`, `statsbomb_refresh`)
+- **22 API endpoints** across 11 routers
+- **9 dashboard pages**
+- **5 Alembic migrations** (Stage 1 + Phases 2/3/4/6) covering 11 application tables
+- **WC 2022 hindcast log-loss = 1.0379** (unchanged across all 11 phases; identical to the Stage 0.7 decision-gate value)
 
 ## Repo layout
 
 ```
 src/wc2026/
-  ingest/    # data source loaders (Jürisoo CSV, eloratings, football-data.org, ...)
-  features/  # feature engineering (time decay, venue, travel, ...)
-  models/    # bivariate Poisson, shootout, live win-prob
-  eval/      # backtest harness, calibration, reliability diagrams
-  db/        # SQLAlchemy models + Alembic migrations
-  api/       # FastAPI app (Stage 1)
-  scheduler/ # cron job entrypoints
-dashboard/   # Streamlit (Stage 1)
-tests/       # pytest, src layout
-data/        # local-only, gitignored
-scripts/     # one-off scripts
-notebooks/   # exploratory; not under test
+  ingest/         # 9 data-source loaders: Jürisoo Kaggle, eloratings.net,
+                  # football-data.org, TheSportsDB, openfootball, Wikipedia,
+                  # StatsBomb, FBref, football-data.co.uk, live_events poller
+  features/       # time decay + match weights, host-team flags, rest days,
+                  # xG-form rolling, live-state replay, build_match_features
+  models/         # poisson_dc, shootout, elo_prior, xg_shot_model,
+                  # xgb_classifier, shap_explain, blend, live_win_prob
+  eval/           # backtest harness, calibration metrics, isotonic, rolling
+  sim/            # tournament Monte Carlo, groups, bracket, third_place,
+                  # knockout, conditional (Phase 8 known-results)
+  api/            # FastAPI app + 11 routers (matches, predictions, tournament,
+                  # teams, h2h, ops, explain, live, track_record, health)
+  db/             # SQLAlchemy 2.0 models + Alembic
+  scheduler/      # APScheduler cron + interval jobs
+  observability/  # Phase 10: Sentry init + S3/R2 backup upload
+dashboard/        # Streamlit — 9 pages + components
+alembic/          # 5 migrations (Stage 1 + Phases 2/3/4/6)
+docs/             # ARCHITECTURE.md, methodology.md, deploy.md, LICENSES.md
+tests/            # 539 unit tests + 1 replay integration test
+data/             # local-only, gitignored (raw parquet snapshots + artefacts)
+scripts/          # one-off + scheduler-invoked entrypoints
+notebooks/        # exploratory; not under test
 ```
 
 ## Licence

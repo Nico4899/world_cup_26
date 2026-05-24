@@ -185,24 +185,52 @@ def _job_fbref_refresh() -> None:
 
 
 def _job_statsbomb_refresh() -> None:
-    """Pull StatsBomb open-data shots for the 4 men's tournaments + refit xG model.
+    """Pull StatsBomb open-data shots for the 4 men's tournaments + refit two models.
 
     StatsBomb open data is effectively immutable once a tournament is in the
     archive, so this job is manual-only — re-fetching daily would waste
-    bandwidth. After the corpus is on disk it also refits the xG shot model.
+    bandwidth. After the corpus is on disk we re-fit:
+
+    1. The **xG shot model** (logistic on shot location / body part / pattern).
+    2. The **live win-probability model** (Phase 6 — logistic on Elo Δ + goal
+       diff + minutes remaining + red-card diff). The training script
+       re-fetches the full per-match event JSONs (cached via requests-cache,
+       so subsequent runs are cheap), replays them into state snapshots, and
+       persists ``data/artifacts/live_win_prob/latest.json``.
+
+    Both refits are best-effort; either may log + return without aborting the
+    other so a partially-broken corpus still produces one usable artefact.
     """
     paths = fetch_all_tournament_shots()
     if not paths:
-        logger.warning("statsbomb refresh: no shots fetched, skipping xG refit")
+        logger.warning("statsbomb refresh: no shots fetched, skipping xG + live-win-prob refits")
         return
     from wc2026.ingest.statsbomb_open import load_shots_corpus  # noqa: PLC0415
-    from wc2026.models.xg_shot_model import fit_and_save  # noqa: PLC0415
+    from wc2026.models.xg_shot_model import fit_and_save as fit_xg_shot  # noqa: PLC0415
 
     corpus = load_shots_corpus()
     if corpus.empty:
         logger.warning("statsbomb refresh: empty corpus on disk, skipping xG refit")
-        return
-    fit_and_save(corpus)
+    else:
+        try:
+            fit_xg_shot(corpus)
+        except Exception:
+            logger.exception("statsbomb refresh: xG shot model refit failed")
+    # Live win-prob refit — replays full events so it needs the per-match JSONs,
+    # not just the aggregated shots corpus. Cheap (sklearn LogisticRegression
+    # on ~30k state snapshots).
+    try:
+        from scripts.fit_live_win_prob import fit_and_save as fit_live_wp  # noqa: PLC0415
+
+        fit_live_wp()
+    except ValueError:
+        # No rows surfaced (e.g. a fresh `data/raw/statsbomb/` without any
+        # event JSONs cached yet). Logged then ignored.
+        logger.warning(
+            "statsbomb refresh: live-win-prob corpus empty — skipping refit"
+        )
+    except Exception:
+        logger.exception("statsbomb refresh: live-win-prob refit failed")
 
 
 def _prune_backups(backup_dir: Path, retention_days: int = BACKUP_RETENTION_DAYS) -> int:
