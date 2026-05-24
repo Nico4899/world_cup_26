@@ -172,9 +172,7 @@ def team_assets(team: str) -> TeamAssetsResponse:
     try:
         eng = get_engine()
         with Session(eng, future=True) as session:
-            row = session.scalars(
-                select(RawTeamAsset).where(RawTeamAsset.team == team)
-            ).first()
+            row = session.scalars(select(RawTeamAsset).where(RawTeamAsset.team == team)).first()
     except Exception as exc:
         logger.debug("team_assets: DB unreachable for %s", team, exc_info=True)
         raise HTTPException(

@@ -272,7 +272,11 @@ class_label = st.radio(
     "Outcome to explain",
     options=("home_win", "draw", "away_win"),
     horizontal=True,
-    format_func=lambda v: {"home_win": fx["home_team"], "draw": "Draw", "away_win": fx["away_team"]}[v],
+    format_func=lambda v: {
+        "home_win": fx["home_team"],
+        "draw": "Draw",
+        "away_win": fx["away_team"],
+    }[v],
 )
 explanation = None
 try:

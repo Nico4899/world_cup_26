@@ -10,7 +10,6 @@ from __future__ import annotations
 import httpx
 import plotly.graph_objects as go
 import streamlit as st
-
 from dashboard.components.api_client import (
     APIUnreachable,
     get_json,

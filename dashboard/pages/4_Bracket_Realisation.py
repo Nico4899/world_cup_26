@@ -75,9 +75,7 @@ else:
         "how often each team reaches the SF / final / lifts the trophy across "
         "this small sample."
     )
-    n_scenarios = st.slider(
-        "Number of scenarios", min_value=2, max_value=8, value=4, step=1
-    )
+    n_scenarios = st.slider("Number of scenarios", min_value=2, max_value=8, value=4, step=1)
     base_seed = st.number_input(
         "Base seed (first scenario)", min_value=0, max_value=1_000_000, value=42, step=1
     )

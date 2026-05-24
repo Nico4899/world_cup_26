@@ -117,7 +117,9 @@ def get_live_history(match_id: int) -> dict[str, Any]:
 
 
 @st.cache_data(ttl=300, show_spinner="Computing SHAP explanation…")
-def get_explanation(match_id: int, *, class_name: str = "home_win", top_n: int = 5) -> dict[str, Any]:
+def get_explanation(
+    match_id: int, *, class_name: str = "home_win", top_n: int = 5
+) -> dict[str, Any]:
     """SHAP top-features explanation for one WC 2026 fixture (Phase 5 endpoint).
 
     Returns ``MatchExplanation``-shaped JSON. The caller decides how to

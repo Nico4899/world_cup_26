@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
-
 from dashboard.components.api_client import APIUnreachable, get_json, render_unreachable_warning
 
 # Curated host-city coordinates (publicly documented FIFA venues for WC 2026).
@@ -79,9 +78,7 @@ if choice != "(all)":
 else:
     filtered = fixtures
 
-st.subheader(
-    "All 72 fixtures" if choice == "(all)" else f"{len(filtered)} fixture(s) at {choice}"
-)
+st.subheader("All 72 fixtures" if choice == "(all)" else f"{len(filtered)} fixture(s) at {choice}")
 rows = [
     {
         "Match #": m["match_id"],

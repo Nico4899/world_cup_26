@@ -823,10 +823,14 @@ def test_team_assets_returns_null_payload_when_no_db_row(client: TestClient, mon
 
             return _S()
 
-    monkeypatch.setattr(teams_route, "get_engine", lambda: object())
-    monkeypatch.setattr(
-        teams_route, "Session", lambda *_args, **_kw: _FakeSession()
-    )
+    def _stub_engine_null():
+        return object()
+
+    def _stub_session_null(*_args, **_kw):
+        return _FakeSession()
+
+    monkeypatch.setattr(teams_route, "get_engine", _stub_engine_null)
+    monkeypatch.setattr(teams_route, "Session", _stub_session_null)
     r = client.get("/api/v1/teams/Argentina/assets")
     assert r.status_code == 200
     body = r.json()
@@ -864,8 +868,14 @@ def test_team_assets_returns_populated_row_when_present(client: TestClient, monk
 
             return _S()
 
-    monkeypatch.setattr(teams_route, "get_engine", lambda: object())
-    monkeypatch.setattr(teams_route, "Session", lambda *_args, **_kw: _FakeSession())
+    def _stub_engine_pop():
+        return object()
+
+    def _stub_session_pop(*_args, **_kw):
+        return _FakeSession()
+
+    monkeypatch.setattr(teams_route, "get_engine", _stub_engine_pop)
+    monkeypatch.setattr(teams_route, "Session", _stub_session_pop)
     r = client.get("/api/v1/teams/Argentina/assets")
     assert r.status_code == 200
     body = r.json()
