@@ -287,6 +287,7 @@ def test_register_jobs_skips_standings_warm_outside_tournament_window():
     job_mod.register_jobs(scheduler, today=date(2026, 5, 23))
     ids = {j.id for j in scheduler.get_jobs()}
     assert "standings_cache_warm" not in ids
+    assert "monte_carlo_rerun" not in ids
     # All cron jobs still registered.
     assert ids == {s.name for s in job_mod.JOB_SPECS}
 
@@ -301,6 +302,50 @@ def test_register_jobs_adds_standings_warm_inside_tournament_window():
     # Interval should match the documented STANDINGS_WARM_INTERVAL_MINUTES.
     expected = job_mod.STANDINGS_WARM_INTERVAL_MINUTES * 60
     assert int(trig.interval.total_seconds()) == expected
+
+
+def test_register_jobs_adds_monte_carlo_rerun_inside_tournament_window():
+    scheduler = BackgroundScheduler(timezone="UTC")
+    job_mod.register_jobs(scheduler, today=date(2026, 6, 25))
+    by_id = {j.id: j for j in scheduler.get_jobs()}
+    assert "monte_carlo_rerun" in by_id
+    trig = by_id["monte_carlo_rerun"].trigger
+    assert isinstance(trig, IntervalTrigger)
+    expected = job_mod.MONTE_CARLO_RERUN_INTERVAL_MINUTES * 60
+    assert int(trig.interval.total_seconds()) == expected
+
+
+def test_monte_carlo_rerun_job_no_ops_outside_window(monkeypatch):
+    """Even if directly invoked outside the window, the job mustn't call the rerun."""
+    import scripts.rerun_monte_carlo as mcr
+
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_START", date(2099, 1, 1))
+
+    called = {"n": 0}
+
+    def fake_rerun(**_):
+        called["n"] += 1
+
+    monkeypatch.setattr(mcr, "rerun_and_persist", fake_rerun)
+    job_mod._job_monte_carlo_rerun()
+    assert called["n"] == 0
+
+
+def test_monte_carlo_rerun_job_invokes_rerun_inside_window(monkeypatch):
+    import scripts.rerun_monte_carlo as mcr
+
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_START", date(1900, 1, 1))
+    monkeypatch.setattr(job_mod, "WC_TOURNAMENT_END", date(2999, 12, 31))
+
+    called = {"n": 0}
+
+    def fake_rerun(**_):
+        called["n"] += 1
+        return 42
+
+    monkeypatch.setattr(mcr, "rerun_and_persist", fake_rerun)
+    job_mod._job_monte_carlo_rerun()
+    assert called["n"] == 1
 
 
 def test_warm_standings_cache_no_ops_outside_window(monkeypatch):
