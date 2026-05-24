@@ -268,6 +268,9 @@ def team_xg_form(team: str) -> TeamXgFormResponse:
     they were home or away). Splits with no rows return ``matches=0`` and
     null aggregates so the dashboard can render a clean "no data" state.
     """
+    # Pull a generous window (limit 60) so the 12-month aggregate has enough
+    # to chew on for teams that play >10 matches a year (qualifiers, Nations
+    # League, friendlies). The last-5 + last-10 buckets slice this list.
     try:
         eng = get_engine()
         with Session(eng, future=True) as session:
@@ -276,7 +279,7 @@ def team_xg_form(team: str) -> TeamXgFormResponse:
                     select(RawMatchXg)
                     .where(RawMatchXg.team == team)
                     .order_by(RawMatchXg.match_date.desc())
-                    .limit(10)
+                    .limit(60)
                 )
             )
     except Exception as exc:
@@ -297,10 +300,22 @@ def team_xg_form(team: str) -> TeamXgFormResponse:
             xg_diff=xg_for - xg_against,
         )
 
+    # 12-month window keyed off the freshest row in the dataset (not the
+    # server clock) so the metric stays meaningful in test environments that
+    # only have historical xG data.
+    from datetime import timedelta  # noqa: PLC0415 — local to this aggregation
+
+    last_12_months_rows: list[RawMatchXg] = []
+    if rows:
+        anchor = rows[0].match_date
+        cutoff = anchor - timedelta(days=365)
+        last_12_months_rows = [r for r in rows if r.match_date >= cutoff]
+
     return TeamXgFormResponse(
         team=team,
         last_5=_aggregate(rows[:5]),
-        last_10=_aggregate(rows),
+        last_10=_aggregate(rows[:10]),
+        last_12_months=_aggregate(last_12_months_rows),
     )
 
 

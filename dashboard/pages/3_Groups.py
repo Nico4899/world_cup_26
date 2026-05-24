@@ -32,6 +32,14 @@ except APIUnreachable as exc:
     render_unreachable_warning(exc)
     st.stop()
 
+try:
+    live = get_json("/api/v1/tournament/groups-live")
+except APIUnreachable:
+    live = {"groups": []}
+
+# Map group letter → ordered list of {team, played, points, gd, gf, ga}.
+live_blocks: dict[str, list[dict]] = {b["group"]: b["teams"] for b in live.get("groups", [])}
+
 # Phase 8 provenance: surface whether these probabilities come from a persisted
 # Monte Carlo run (post-result conditional rerun) or from a cold in-process
 # simulation. When persisted, also show the run id + model version so an operator
@@ -92,6 +100,31 @@ def _group_fig(block: dict) -> go.Figure:
     return fig
 
 
+def _render_live_table(letter: str) -> None:
+    """Render the current points + GD table above the MC bars.
+
+    Stays silent when no team has a completed match yet (typical pre-tournament).
+    """
+    rows = live_blocks.get(letter, [])
+    if not rows or all(r["played"] == 0 for r in rows):
+        return
+    table_rows = [
+        {
+            "Team": r["team"],
+            "P": r["played"],
+            "Pts": r["points"],
+            "W": r["wins"],
+            "D": r["draws"],
+            "L": r["losses"],
+            "GF": r["goals_for"],
+            "GA": r["goals_against"],
+            "GD": f"{r['goal_difference']:+d}",
+        }
+        for r in rows
+    ]
+    st.dataframe(table_rows, hide_index=True, width="stretch")
+
+
 # 3 columns x 4 rows = 12 groups
 cols_per_row = 3
 group_list = data["groups"]
@@ -100,6 +133,7 @@ for row_start in range(0, len(group_list), cols_per_row):
     cols = st.columns(cols_per_row)
     for col, block in zip(cols, row, strict=False):
         with col:
+            _render_live_table(block["group"])
             st.plotly_chart(_group_fig(block), config=PLOTLY_CONFIG)
 
 st.divider()

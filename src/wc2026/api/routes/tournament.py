@@ -14,10 +14,13 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from wc2026.api.dependencies import get_fixtures, get_model
-from wc2026.db.models import TournamentSimRun, TournamentSimTeamOutcome
+from wc2026.db.models import RawLiveEvent, TournamentSimRun, TournamentSimTeamOutcome
 from wc2026.db.session import get_engine
+from wc2026.ingest.football_data_org import load_wc_match_id_map
+from wc2026.ingest.live_events import EVENT_FT_WHISTLE
 from wc2026.models.poisson_dc import PoissonDC
 from wc2026.sim.fixtures import WC2026Fixtures
+from wc2026.sim.groups import POINTS_DRAW, POINTS_WIN
 from wc2026.sim.knockout import ShootoutStrategy
 from wc2026.sim.tournament import (
     ROUND_COLUMNS,
@@ -236,6 +239,113 @@ def standings(
         "run_id": run_id,
         "model_version": persisted_model_version,
     }
+
+
+def _empty_team_row(team: str) -> dict[str, Any]:
+    return {
+        "team": team,
+        "played": 0,
+        "wins": 0,
+        "draws": 0,
+        "losses": 0,
+        "points": 0,
+        "goals_for": 0,
+        "goals_against": 0,
+        "goal_difference": 0,
+    }
+
+
+def _live_group_tally(fixtures: WC2026Fixtures) -> dict[str, list[dict[str, Any]]]:
+    """Build the per-group "current table" from completed live events.
+
+    Cross-references FDO ``match_id`` → ``(date, home, away)`` via the cached
+    fixtures, picks the FT_WHISTLE row for each completed match (the poller
+    persists one per finished fixture), and tallies points / GF / GA per team
+    inside the team's group. Teams with no completed matches show zeros so
+    the dashboard always sees a complete 4-row block per group.
+    """
+    blocks: dict[str, dict[str, dict[str, Any]]] = {}
+    for letter, teams in fixtures.groups.items():
+        blocks[letter] = {team: _empty_team_row(team) for team in teams}
+
+    id_map = load_wc_match_id_map()
+    if not id_map:
+        return {letter: list(rows.values()) for letter, rows in blocks.items()}
+
+    # Group lookup is by team; build once.
+    team_to_group: dict[str, str] = {
+        team: letter for letter, members in fixtures.groups.items() for team in members
+    }
+
+    try:
+        eng = get_engine()
+        with Session(eng, future=True) as session:
+            ft_rows = list(
+                session.scalars(
+                    select(RawLiveEvent).where(RawLiveEvent.event_type == EVENT_FT_WHISTLE)
+                )
+            )
+    except Exception:
+        logger.debug("groups-live: DB unreachable, returning zero-tally blocks", exc_info=True)
+        return {letter: list(rows.values()) for letter, rows in blocks.items()}
+
+    for r in ft_rows:
+        fixture = id_map.get(int(r.match_id))
+        if fixture is None:
+            continue
+        _, home, away = fixture
+        letter = team_to_group.get(home) or team_to_group.get(away)
+        if letter is None:
+            continue
+        home_row = blocks[letter].get(home)
+        away_row = blocks[letter].get(away)
+        if home_row is None or away_row is None:
+            continue
+        h, a = int(r.home_score_after), int(r.away_score_after)
+        for row, gf, ga in ((home_row, h, a), (away_row, a, h)):
+            row["played"] += 1
+            row["goals_for"] += gf
+            row["goals_against"] += ga
+        if h > a:
+            home_row["wins"] += 1
+            home_row["points"] += POINTS_WIN
+            away_row["losses"] += 1
+        elif h < a:
+            away_row["wins"] += 1
+            away_row["points"] += POINTS_WIN
+            home_row["losses"] += 1
+        else:
+            home_row["draws"] += 1
+            away_row["draws"] += 1
+            home_row["points"] += POINTS_DRAW
+            away_row["points"] += POINTS_DRAW
+
+    for letter_rows in blocks.values():
+        for row in letter_rows.values():
+            row["goal_difference"] = row["goals_for"] - row["goals_against"]
+
+    return {letter: list(rows.values()) for letter, rows in blocks.items()}
+
+
+@router.get("/groups-live")
+def groups_live(fixtures: WC2026Fixtures = Depends(get_fixtures)) -> dict[str, Any]:
+    """Per-group current points + goal difference from completed live matches.
+
+    Each block has every team in the group; ``played=0`` means the side has no
+    FT_WHISTLE row yet (typical before the tournament opens). The Groups page
+    renders this above the Monte Carlo bars so the spec's "current points,
+    current GD" requirement is visible at a glance.
+    """
+    blocks = _live_group_tally(fixtures)
+    out_groups = []
+    for letter in fixtures.groups:
+        rows = sorted(
+            blocks.get(letter, []),
+            key=lambda r: (r["points"], r["goal_difference"], r["goals_for"]),
+            reverse=True,
+        )
+        out_groups.append({"group": letter, "teams": rows})
+    return {"groups": out_groups}
 
 
 @router.get("/bracket")

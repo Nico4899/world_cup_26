@@ -308,8 +308,14 @@ class XgFormSplit(BaseModel):
 
 
 class TeamXgFormResponse(BaseModel):
-    """Last-N xG form, derived from the most recent ``raw_match_xg`` rows."""
+    """Last-N xG form, derived from the most recent ``raw_match_xg`` rows.
+
+    Includes a rolling 12-month window alongside the last-5 / last-10
+    aggregates so the Team Profile page can satisfy the spec's "xG scored
+    / conceded last 12 months" requirement without a second round-trip.
+    """
 
     team: str
     last_5: XgFormSplit
     last_10: XgFormSplit
+    last_12_months: XgFormSplit
