@@ -36,11 +36,7 @@ from __future__ import annotations
 
 import logging
 import os
-import threading
-import time
-from collections import deque
 from collections.abc import Iterable
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -48,6 +44,8 @@ from typing import Any
 import pandas as pd
 import requests
 import requests_cache
+
+from wc2026.ingest._http import RateLimiter
 
 BASE_URL_TEMPLATE = "https://www.thesportsdb.com/api/v1/json/{api_key}"
 DEFAULT_API_KEY = "123"  # public test key per TheSportsDB docs
@@ -84,36 +82,7 @@ class MissingApiKeyError(RuntimeError):
     """Raised when no API key is configured (only relevant on a paid plan)."""
 
 
-@dataclass(frozen=True)
-class _RateLimiter:
-    """Sliding-window limiter — copy of the one in football_data_org for isolation."""
-
-    limit: int
-    window: float
-    _calls: deque[float]
-    _lock: threading.Lock
-
-    @classmethod
-    def make(cls, limit: int, window: float) -> _RateLimiter:
-        return cls(limit=limit, window=window, _calls=deque(), _lock=threading.Lock())
-
-    def acquire(self, *, now: float | None = None, sleep=time.sleep) -> None:
-        with self._lock:
-            t = now if now is not None else time.monotonic()
-            while self._calls and t - self._calls[0] >= self.window:
-                self._calls.popleft()
-            if len(self._calls) >= self.limit:
-                wait = self.window - (t - self._calls[0]) + 0.01
-                sleep(max(wait, 0.0))
-                t2 = time.monotonic()
-                while self._calls and t2 - self._calls[0] >= self.window:
-                    self._calls.popleft()
-                self._calls.append(t2)
-            else:
-                self._calls.append(t)
-
-
-_RATE_LIMITER = _RateLimiter.make(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS)
+_RATE_LIMITER = RateLimiter.make(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS)
 
 
 def _api_key(api_key: str | None = None) -> str:

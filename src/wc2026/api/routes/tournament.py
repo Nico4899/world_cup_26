@@ -183,17 +183,15 @@ def standings(
     fixtures: WC2026Fixtures = Depends(get_fixtures),
 ) -> dict[str, Any]:
     shootout_strategy = getattr(request.app.state, "shootout_strategy", None)
-    summary: TournamentSummary
-    source = "in_process"
-    run_id: int | None = None
-    persisted_model_version: str | None = None
-    if use_persisted:
-        loaded = _load_persisted_summary()
-        if loaded is not None:
-            summary, run_id, persisted_model_version = loaded
-            source = "persisted"
-    if source == "in_process":
+    loaded = _load_persisted_summary() if use_persisted else None
+    if loaded is not None:
+        summary, run_id, persisted_model_version = loaded
+        source = "persisted"
+    else:
         summary = _cached_summary(model, fixtures, n_sims, seed, shootout_strategy)
+        source = "in_process"
+        run_id = None
+        persisted_model_version = None
     groups = [_build_group_block(letter, summary, fixtures) for letter in fixtures.groups]
     # Top-10 championship probabilities for the headline
     top = (

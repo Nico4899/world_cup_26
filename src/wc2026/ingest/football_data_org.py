@@ -25,10 +25,6 @@ from __future__ import annotations
 
 import json
 import os
-import threading
-import time
-from collections import deque
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +37,8 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
+
+from wc2026.ingest._http import RateLimiter
 
 BASE_URL = "https://api.football-data.org/v4"
 WC_COMPETITION_CODE = "WC"
@@ -68,36 +66,11 @@ class RateLimitError(RuntimeError):
     """Raised when the upstream returns HTTP 429; tenacity retries this."""
 
 
-@dataclass(frozen=True)
-class _RateLimiter:
-    """Sliding-window limiter: at most N calls per window seconds, thread-safe."""
+# Re-exported under the old private name so existing tests
+# (``fdo._RateLimiter.make(...)``) keep working without churn.
+_RateLimiter = RateLimiter
 
-    limit: int
-    window: float
-    _calls: deque[float]
-    _lock: threading.Lock
-
-    @classmethod
-    def make(cls, limit: int, window: float) -> _RateLimiter:
-        return cls(limit=limit, window=window, _calls=deque(), _lock=threading.Lock())
-
-    def acquire(self, *, now: float | None = None, sleep=time.sleep) -> None:
-        with self._lock:
-            t = now if now is not None else time.monotonic()
-            while self._calls and t - self._calls[0] >= self.window:
-                self._calls.popleft()
-            if len(self._calls) >= self.limit:
-                wait = self.window - (t - self._calls[0]) + 0.01
-                sleep(max(wait, 0.0))
-                t2 = time.monotonic()
-                while self._calls and t2 - self._calls[0] >= self.window:
-                    self._calls.popleft()
-                self._calls.append(t2)
-            else:
-                self._calls.append(t)
-
-
-_RATE_LIMITER = _RateLimiter.make(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS)
+_RATE_LIMITER = RateLimiter.make(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS)
 
 
 def _build_headers(api_key: str | None) -> dict[str, str]:

@@ -232,3 +232,27 @@ def parse_wc2026_fixtures(
     return WC2026Fixtures(
         groups=groups, matches=tuple(matches), assignment_source=assignment_source
     )
+
+
+DEFAULT_GROUP_ASSIGNMENT_PATH = Path("data/wc2026_group_assignment.json")
+
+
+def load_wc2026_fixtures(
+    group_assignment_path: Path = DEFAULT_GROUP_ASSIGNMENT_PATH,
+) -> WC2026Fixtures:
+    """Load and parse the 72 WC 2026 fixtures, applying an official override if present.
+
+    Wraps the common ``load_scheduled() + load_group_assignment() +
+    parse_wc2026_fixtures()`` boilerplate used by the API lifespan and
+    every offline scoring script. A missing or unparseable override file
+    falls back to date-derived group letters silently.
+    """
+    from wc2026.ingest.kaggle_intl import load_scheduled  # noqa: PLC0415 — avoid import cycle
+
+    override: GroupAssignment | None = None
+    if group_assignment_path.exists():
+        try:
+            override = load_group_assignment(group_assignment_path)
+        except (OSError, ValueError):
+            override = None
+    return parse_wc2026_fixtures(load_scheduled(), override_assignment=override)

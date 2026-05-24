@@ -25,11 +25,7 @@ from __future__ import annotations
 
 import logging
 import re
-import threading
-import time
-from collections import deque
 from collections.abc import Iterable
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
@@ -37,6 +33,8 @@ from pathlib import Path
 import pandas as pd
 import requests
 import requests_cache
+
+from wc2026.ingest._http import RateLimiter
 
 BASE_URL = "https://fbref.com"
 
@@ -58,36 +56,7 @@ _HTML_COMMENT_RE = re.compile(r"<!--|-->")
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class _RateLimiter:
-    """Sliding-window limiter — copy of the one in football_data_org for isolation."""
-
-    limit: int
-    window: float
-    _calls: deque[float]
-    _lock: threading.Lock
-
-    @classmethod
-    def make(cls, limit: int, window: float) -> _RateLimiter:
-        return cls(limit=limit, window=window, _calls=deque(), _lock=threading.Lock())
-
-    def acquire(self, *, now: float | None = None, sleep=time.sleep) -> None:
-        with self._lock:
-            t = now if now is not None else time.monotonic()
-            while self._calls and t - self._calls[0] >= self.window:
-                self._calls.popleft()
-            if len(self._calls) >= self.limit:
-                wait = self.window - (t - self._calls[0]) + 0.01
-                sleep(max(wait, 0.0))
-                t2 = time.monotonic()
-                while self._calls and t2 - self._calls[0] >= self.window:
-                    self._calls.popleft()
-                self._calls.append(t2)
-            else:
-                self._calls.append(t)
-
-
-_RATE_LIMITER = _RateLimiter.make(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS)
+_RATE_LIMITER = RateLimiter.make(RATE_LIMIT_REQUESTS, RATE_LIMIT_WINDOW_SECONDS)
 
 
 def _make_session(

@@ -111,6 +111,22 @@ class PoissonDCParams:
             )
 
 
+def hydrate_from_artefact(path: Path) -> PoissonDC:
+    """Rebuild a fitted ``PoissonDC`` from an on-disk ``.npz`` artefact.
+
+    Bypasses ``PoissonDC.fit`` — caller is responsible for ensuring the
+    artefact was produced by a matching schema (e.g. the ``refit_poisson_dc``
+    script). Used by every offline scoring entrypoint
+    (``rerun_monte_carlo``, ``persist_wc2026_predictions``, etc).
+    """
+    params = PoissonDCParams.load(path)
+    model = PoissonDC()
+    model.params_ = params
+    model._team_idx = {t: i for i, t in enumerate(params.teams)}
+    model.converged_ = True
+    return model
+
+
 # --- internal: parameter packing + log-likelihood with analytic gradient ----
 
 

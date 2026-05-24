@@ -3,8 +3,9 @@
 Reads from two tables already populated by other Phase 6/7 components:
 
 * ``model_predictions``: one row per (match, model_version, created_at). We
-  pick the row with the latest ``created_at <= match_date`` for each fixture —
-  i.e. the *pre-match* prediction-of-record, never a post-hoc snapshot.
+  pick the row with the latest ``created_at`` at or before midnight UTC of
+  the match date — i.e. the *pre-match* prediction-of-record, never a
+  post-hoc snapshot.
 * ``raw_live_events``: filtered to ``FT_WHISTLE`` rows for completed matches'
   final scores.
 
@@ -17,11 +18,11 @@ apples comparison against the WC 2018 + WC 2022 baselines.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Any
 
 import pandas as pd
-from sqlalchemy import desc, select
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -118,33 +119,6 @@ def load_completed_matches(
     return pd.DataFrame(out_rows)
 
 
-def _latest_pre_match_prediction(
-    session: Session, *, match_date: date, home_team: str, away_team: str
-) -> ModelPrediction | None:
-    stmt = (
-        select(ModelPrediction)
-        .where(
-            ModelPrediction.match_date == match_date,
-            ModelPrediction.home_team == home_team,
-            ModelPrediction.away_team == away_team,
-            ModelPrediction.created_at <= _start_of_match_day(match_date),
-        )
-        .order_by(desc(ModelPrediction.created_at))
-        .limit(1)
-    )
-    return session.scalars(stmt).first()
-
-
-def _start_of_match_day(match_date: date):
-    """Cut-off for `pre-match`: midnight UTC at the match date.
-
-    A prediction persisted on the morning of the match qualifies, but one
-    persisted *after* the match starts (e.g. by a refit job that runs the
-    same day) does not.
-    """
-    return datetime(match_date.year, match_date.month, match_date.day, tzinfo=UTC)
-
-
 def compute_rolling_from_dfs(
     predictions: pd.DataFrame,
     completed: pd.DataFrame,
@@ -166,8 +140,8 @@ def compute_rolling_from_dfs(
             rps=None,
             per_match=[],
         )
-    # For each completed match, pick the most-recent prediction with
-    # created_at strictly before the match date (UTC).
+    # For each completed match, pick the most-recent prediction whose
+    # created_at is at or before midnight UTC of the match date.
     preds = predictions.copy()
     preds["created_at"] = pd.to_datetime(preds["created_at"], utc=True)
     preds["match_date"] = pd.to_datetime(preds["match_date"]).dt.date
