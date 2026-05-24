@@ -109,10 +109,15 @@ for i in range(0, len(matches), 2):
                 render_versus_header(m["home_team"], m["away_team"]),
                 unsafe_allow_html=True,
             )
-            st.caption(
-                f"Group {m['group']} · {m['city']}, {m['country']} · "
-                + ("neutral" if m["neutral"] else "home advantage")
-            )
+            kickoff_bits = []
+            utc_kickoff = m.get("utc_kickoff")
+            if utc_kickoff:
+                # Strip seconds + take the "HH:MM" tail so the caption stays compact.
+                kickoff_bits.append(f"⏱ {utc_kickoff[11:16]} UTC")
+            kickoff_bits.append(f"Group {m['group']}")
+            kickoff_bits.append(f"{m['city']}, {m['country']}")
+            kickoff_bits.append("neutral" if m["neutral"] else "home advantage")
+            st.caption(" · ".join(kickoff_bits))
             try:
                 detail = get_match(m["match_id"])
             except APIUnreachable as exc:

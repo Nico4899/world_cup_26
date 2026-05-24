@@ -29,6 +29,7 @@ from wc2026.api.routes import (
 from wc2026.features.build_match_features import FeatureSources
 from wc2026.features.match_weights import combined_weight
 from wc2026.ingest.eloratings_scraper import load_latest_snapshot
+from wc2026.ingest.football_data_org import load_wc_kickoff_map
 from wc2026.ingest.kaggle_intl import load_played
 from wc2026.models.live_win_prob import (
     DEFAULT_ARTIFACT_PATH as LIVE_WIN_PROB_PATH,
@@ -221,6 +222,10 @@ async def lifespan(app: FastAPI):
     app.state.model_source = source
     app.state.model_fit_at = fit_at
     app.state.fixtures = load_wc2026_fixtures()
+    # Best-effort kickoff map keyed by (date, home, away); empty when the
+    # football-data.org cache or API key is missing — the matches route then
+    # surfaces date-only fixtures and the dashboard skips the kickoff line.
+    app.state.kickoff_map = load_wc_kickoff_map()
     app.state.model_version = MODEL_VERSION
     # Optional Elo-based shootout model; None falls back to the 50/50 placeholder.
     (

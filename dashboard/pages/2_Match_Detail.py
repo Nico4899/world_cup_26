@@ -66,8 +66,12 @@ st.markdown(
     render_versus_header(fx["home_team"], fx["away_team"]),
     unsafe_allow_html=True,
 )
+_when = fx["date"]
+if fx.get("utc_kickoff"):
+    # ISO 8601 "YYYY-MM-DDTHH:MM:SS..." — slice the HH:MM and join.
+    _when = f"{fx['date']} {fx['utc_kickoff'][11:16]} UTC"
 st.caption(
-    f"Group {fx['group']} · {fx['city']}, {fx['country']} · {fx['date']} · "
+    f"Group {fx['group']} · {fx['city']}, {fx['country']} · {_when} · "
     + ("neutral venue" if fx["neutral"] else f"{fx['home_team']} at home")
 )
 
