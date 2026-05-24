@@ -15,7 +15,13 @@ import { Button } from "@/components/ui/button";
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  // Intentional set-state-in-effect: this is the canonical hydration-safety
+  // pattern next-themes recommends. The first effect tick flips `mounted`,
+  // unblocking the icon swap without a SSR/CSR text mismatch.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
 
   const isDark = mounted && resolvedTheme === "dark";
 

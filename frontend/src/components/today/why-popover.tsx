@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { HelpCircle } from "lucide-react";
 
 import { ApiError, apiGet } from "@/lib/api";
-import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { signed, pct } from "@/lib/format";
 

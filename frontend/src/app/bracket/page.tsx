@@ -2,7 +2,7 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { useMutation, useQueries } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 
 import { ApiUnreachableBanner } from "@/components/api-unreachable-banner";
@@ -177,24 +177,19 @@ function BracketPageInner() {
 }
 
 function SingleSeed({ seed }: { seed: number }) {
-  const [data, setData] = useState<BracketResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useMemo(() => {
-    setError(null);
-    setData(null);
-    apiGet<BracketResponse>("/api/v1/tournament/bracket", { seed })
-      .then((d) => setData(d))
-      .catch((err) => {
-        if (err instanceof ApiUnreachable) setError("unreachable");
-        else if (err instanceof ApiError) setError(`HTTP ${err.status}`);
-        else setError("unknown error");
-      });
-  }, [seed]);
-
-  if (error === "unreachable") return <ApiUnreachableBanner />;
-  if (error) return <p className="text-sm text-destructive">{error}</p>;
-  if (!data) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  const { data, error, isPending } = useQuery({
+    queryKey: ["bracket", seed],
+    queryFn: () =>
+      apiGet<BracketResponse>("/api/v1/tournament/bracket", { seed }),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+  if (error instanceof ApiUnreachable) return <ApiUnreachableBanner />;
+  if (error instanceof ApiError)
+    return <p className="text-sm text-destructive">HTTP {error.status}</p>;
+  if (error) return <p className="text-sm text-destructive">{String(error)}</p>;
+  if (isPending || !data)
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
   return <BracketDetail data={data} />;
 }
 

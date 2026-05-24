@@ -46,7 +46,12 @@ export function useLockedBracket(): {
   const [locks, setLocks] = useState<Lock[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
+  // Intentional set-state-in-effect: localStorage is unavailable during SSR,
+  // so the first render returns `[]` and the effect synchronously hydrates
+  // from storage after mount. Switching to useSyncExternalStore is possible
+  // but adds a `getServerSnapshot` no-op that doesn't buy anything here.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocks(read());
     setHydrated(true);
   }, []);

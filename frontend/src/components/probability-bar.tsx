@@ -73,15 +73,24 @@ function ProbabilityBarInner({
   );
   const scale = scaleLinear({ domain: [0, total], range: [0, width] });
 
-  let acc = 0;
+  // Precompute cumulative offsets so the render is purely functional —
+  // no mutation of an `acc` accumulator inside the JSX `.map(...)`, which
+  // React 19 / Next 16 flag as a side effect during render.
+  const offsets: number[] = [];
+  {
+    let sum = 0;
+    for (const seg of segments) {
+      offsets.push(sum);
+      sum += Math.max(seg.value, 0);
+    }
+  }
   return (
     <svg width={width} height={height} role="img" aria-label="Probability bar">
       <Group>
         {segments.map((seg, i) => {
           const v = Math.max(seg.value, 0);
-          const x = scale(acc);
-          const w = scale(acc + v) - x;
-          acc += v;
+          const x = scale(offsets[i]);
+          const w = scale(offsets[i] + v) - x;
           const pct = v / total;
           const visible = showLabels && pct >= 0.05;
           return (

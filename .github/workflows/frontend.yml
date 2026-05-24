@@ -1,0 +1,86 @@
+name: frontend
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "frontend/**"
+      - "docs/methodology.md"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "frontend/**"
+      - "docs/methodology.md"
+      - ".github/workflows/frontend.yml"
+
+jobs:
+  lint-build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Sync methodology (also runs in prebuild)
+        run: pnpm sync:methodology
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests (Vitest)
+        run: pnpm test:run
+
+      - name: Build (production)
+        run: pnpm build
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Playwright smoke (chromium, API-less)
+        env:
+          # When unset, the smoke spec asserts only on page chrome so CI
+          # without a live backend still passes. Staging runs set this to
+          # the Fly app URL via repo secrets.
+          NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+        run: pnpm e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
