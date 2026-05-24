@@ -3,13 +3,19 @@
 Runs the WC 2022 / WC 2018 hindcasts inline (cached for the session) and plots
 per-outcome reliability. This is the calibration honesty page: the model's
 trustworthiness lives or dies here.
+
+Phase 7 addition: a live WC 2026 panel at the top, fed by
+``/api/v1/track-record/wc2026``. Stays empty (with a "no completed matches
+yet" caption) until the live event poller starts writing FT_WHISTLE rows.
 """
 
 from __future__ import annotations
 
+import httpx
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from dashboard.components.api_client import APIUnreachable, get_json
 
 st.title("Track record")
 
@@ -17,6 +23,60 @@ st.caption(
     "Calibration check on completed World Cups (out-of-sample). Each point is one "
     "predicted-probability bin; the dashed line is perfect calibration."
 )
+
+# --- WC 2026 live rolling calibration --------------------------------------
+
+st.subheader("WC 2026 — live rolling calibration")
+try:
+    wc2026_payload = get_json("/api/v1/track-record/wc2026")
+except APIUnreachable:
+    wc2026_payload = None
+    st.info(
+        "API unreachable. Start it with `uv run uvicorn wc2026.api.main:app` to see "
+        "live WC 2026 calibration here."
+    )
+except httpx.HTTPStatusError as exc:
+    wc2026_payload = None
+    if exc.response.status_code == 404:
+        st.caption(
+            "The running API doesn't yet expose `/track-record/wc2026` — restart it "
+            "after deploying Phase 7."
+        )
+    else:
+        raise
+
+if wc2026_payload is not None:
+    n_completed = int(wc2026_payload.get("n_completed", 0))
+    if n_completed == 0:
+        st.caption(
+            "_No completed WC 2026 matches with both a pre-match prediction and an "
+            "FT-whistle event on record yet. Once the live event poller starts writing "
+            "events for a finished match this section populates automatically._"
+        )
+    else:
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Completed matches", n_completed)
+        col2.metric("Log-loss", f"{wc2026_payload['log_loss']:.4f}")
+        col3.metric("Brier", f"{wc2026_payload['brier']:.4f}")
+        col4.metric("RPS", f"{wc2026_payload['rps']:.4f}")
+        rows = [
+            {
+                "Date": row["match_date"],
+                "Match": f"{row['home_team']} vs {row['away_team']}",
+                "Score": f"{row['home_score']}-{row['away_score']}",
+                "Observed": row["observed"],
+                "P(H/D/A)": f"{row['p_home']:.0%} / {row['p_draw']:.0%} / {row['p_away']:.0%}",
+                "Log-loss": round(row["log_loss"], 4),
+                "Brier": round(row["brier"], 4),
+                "RPS": round(row["rps"], 4),
+                "Model": row["model_version"],
+            }
+            for row in wc2026_payload.get("per_match", [])
+        ]
+        st.dataframe(rows, hide_index=True, width="stretch")
+
+st.divider()
+st.subheader("Historical hindcasts (WC 2018 + WC 2022)")
 
 
 @st.cache_data(show_spinner="Running WC hindcasts…", ttl=3600)
