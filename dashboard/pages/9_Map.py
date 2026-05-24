@@ -1,16 +1,26 @@
 """Map — 16 WC 2026 host cities, click-to-filter by venue.
 
-Plots every host city on a Streamlit-native map and surfaces a city dropdown
+Plots every host city on a PyDeck ScatterplotLayer (richer than `st.map`:
+per-pin tooltip + per-country fill colour) and surfaces a city dropdown
 that filters the WC 2026 fixtures list to matches at that venue. The
-``data/wc2026_host_cities.json`` file holds the curated lat/lng tuples — it
-ships with the repo so the page works without any external geocoding API.
+``HOST_CITIES`` dict below holds the curated lat/lng tuples — no external
+geocoding API needed.
 """
 
 from __future__ import annotations
 
 import pandas as pd
+import pydeck as pdk
 import streamlit as st
 from dashboard.components.api_client import APIUnreachable, get_json, render_unreachable_warning
+
+_COUNTRY_FILL: dict[str, list[int]] = {
+    # Roughly matches the host countries' flag accent so each cluster is
+    # recognisable at a glance. RGBA channel triples, alpha implied 200.
+    "United States": [31, 119, 180],  # navy
+    "Mexico": [44, 160, 44],          # green
+    "Canada": [214, 39, 40],          # red
+}
 
 # Curated host-city coordinates (publicly documented FIFA venues for WC 2026).
 HOST_CITIES: dict[str, dict] = {
@@ -46,11 +56,37 @@ st.caption(
 
 map_df = pd.DataFrame(
     [
-        {"city": city, "lat": meta["lat"], "lon": meta["lon"], "country": meta["country"]}
+        {
+            "city": city,
+            "lat": meta["lat"],
+            "lon": meta["lon"],
+            "country": meta["country"],
+            "fill": _COUNTRY_FILL.get(meta["country"], [127, 127, 127]),
+        }
         for city, meta in HOST_CITIES.items()
     ]
 )
-st.map(map_df, latitude="lat", longitude="lon", size=20, zoom=3)
+# PyDeck ScatterplotLayer: per-pin tooltip (city + country) + country fill.
+# Radius is in metres at the equator; 30km reads well at zoom 3.
+layer = pdk.Layer(
+    "ScatterplotLayer",
+    data=map_df,
+    get_position="[lon, lat]",
+    get_fill_color="fill",
+    get_radius=30_000,
+    pickable=True,
+    opacity=0.85,
+    stroked=True,
+    get_line_color=[255, 255, 255],
+    line_width_min_pixels=1,
+)
+deck = pdk.Deck(
+    layers=[layer],
+    initial_view_state=pdk.ViewState(latitude=35.0, longitude=-100.0, zoom=2.6, pitch=0),
+    tooltip={"text": "{city} ({country})"},
+    map_style=None,
+)
+st.pydeck_chart(deck, use_container_width=True)
 
 # --- City filter + fixture list -------------------------------------------
 
