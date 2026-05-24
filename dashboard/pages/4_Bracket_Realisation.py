@@ -18,6 +18,7 @@ import streamlit as st
 from dashboard.components.api_client import (
     APIUnreachable,
     get_json,
+    post_bracket_conditional,
     render_unreachable_warning,
 )
 from dashboard.components.forecast_header import render_forecast_header
@@ -40,9 +41,22 @@ st.caption(
 # every bracket realisation has a copy-pasteable URL. The spec calls this out
 # as one of the biggest growth levers for a prediction site.
 
-_MODE_LABELS = ("Single seed", "Scenario comparison")
-_MODE_PARAM = {"single": "Single seed", "scenarios": "Scenario comparison"}
+_MODE_LABELS = ("Single seed", "Scenario comparison", "Conditional locks")
+_MODE_PARAM = {
+    "single": "Single seed",
+    "scenarios": "Scenario comparison",
+    "locks": "Conditional locks",
+}
 _MODE_REVERSE = {v: k for k, v in _MODE_PARAM.items()}
+
+# FIFA WC 2026 knockout match-id ranges, in the order the bracket plays out.
+_ROUND_RANGES: list[tuple[str, range]] = [
+    ("R32", range(73, 89)),
+    ("R16", range(89, 97)),
+    ("QF", range(97, 101)),
+    ("SF", range(101, 103)),
+    ("Final", range(103, 104)),
+]
 
 
 def _read_int_param(key: str, *, default: int, lo: int, hi: int) -> int:
@@ -121,7 +135,7 @@ if mode == "Single seed":
     if data is None:
         st.stop()
     _render_bracket_detail(data)
-else:
+elif mode == "Scenario comparison":
     st.caption(
         "Draws several independent brackets with consecutive seeds, then shows "
         "how often each team reaches the SF / final / lifts the trophy across "
@@ -201,3 +215,96 @@ else:
     chosen_seed = int(pick.split()[1].rstrip("—").strip())
     chosen = next(s for s in scenarios if int(s["seed"]) == chosen_seed)
     _render_bracket_detail(chosen)
+else:
+    # --- Conditional locks (Tier 3 step 14) -------------------------------
+    #
+    # The spec's click-to-set bracket simulator was deferred for the Vite/React
+    # build cost; this Python-only fallback exposes the same semantics through
+    # a per-match lock form. Picked-team-not-in-match locks are silently
+    # ignored by the server-side simulator so users can lock optimistic
+    # scenarios without dropping the whole MC run.
+    st.caption(
+        "Lock one or more knockout match winners, then run a 5,000-sim "
+        "conditional Monte Carlo. Locks that aren't reachable in a given sim "
+        "are skipped — the rest of the bracket plays out normally."
+    )
+
+    teams = sorted(
+        {m["home_team"] for m in get_json("/api/v1/matches")}
+        | {m["away_team"] for m in get_json("/api/v1/matches")}
+    )
+
+    if "bracket_locks" not in st.session_state:
+        st.session_state["bracket_locks"] = []
+
+    with st.form("add_lock_form"):
+        lock_cols = st.columns([1, 1, 1, 1])
+        round_label = lock_cols[0].selectbox(
+            "Round", [name for name, _ in _ROUND_RANGES]
+        )
+        match_range = next(r for name, r in _ROUND_RANGES if name == round_label)
+        match_id_pick = lock_cols[1].selectbox(
+            "Match ID", list(match_range), format_func=lambda mid: f"#{mid}"
+        )
+        winner_pick = lock_cols[2].selectbox("Winner", teams)
+        submitted = lock_cols[3].form_submit_button("Add lock", use_container_width=True)
+        if submitted:
+            st.session_state["bracket_locks"] = [
+                lock for lock in st.session_state["bracket_locks"]
+                if lock["match_id"] != int(match_id_pick)
+            ]
+            st.session_state["bracket_locks"].append(
+                {"match_id": int(match_id_pick), "winner": str(winner_pick)}
+            )
+
+    locks_active = st.session_state["bracket_locks"]
+    if locks_active:
+        st.markdown("**Active locks**")
+        st.dataframe(locks_active, hide_index=True, width="stretch")
+        if st.button("Clear all locks"):
+            st.session_state["bracket_locks"] = []
+            st.rerun()
+    else:
+        st.caption("_No locks yet. Use the form above to pin a knockout winner._")
+
+    n_sims_cond = st.slider(
+        "Monte Carlo simulations", min_value=500, max_value=10_000, value=5_000, step=500
+    )
+    seed_cond_default = _read_int_param("seed", default=42, lo=0, hi=1_000_000)
+    seed_cond = st.number_input(
+        "Seed",
+        min_value=0,
+        max_value=1_000_000,
+        value=seed_cond_default,
+        step=1,
+        key="cond_seed",
+    )
+
+    if st.button("Run conditional MC", type="primary"):
+        try:
+            result = post_bracket_conditional(
+                locks_active, n_sims=int(n_sims_cond), seed=int(seed_cond)
+            )
+        except APIUnreachable as exc:
+            render_unreachable_warning(exc)
+            st.stop()
+        st.success(
+            f"Ran {result['n_sims']:,} sims with {len(result['locks'])} active lock(s) "
+            f"(seed {result['seed']})."
+        )
+        st.subheader("Headline: top 10 championship probabilities")
+        rows = [
+            {
+                "Team": h["team"],
+                "Champion": f"{h['p_champion']:.1%}",
+                "Final": f"{h['p_final']:.1%}",
+                "Semi": f"{h['p_sf']:.1%}",
+                "Quarter": f"{h['p_qf']:.1%}",
+            }
+            for h in result["headline"]
+        ]
+        st.dataframe(rows, hide_index=True, width="stretch")
+    else:
+        st.caption(
+            "_Press_ **Run conditional MC** _to score the bracket under the active locks._"
+        )

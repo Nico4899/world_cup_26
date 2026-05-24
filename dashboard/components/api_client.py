@@ -181,3 +181,13 @@ def get_team_xg_form(team: str) -> dict[str, Any]:
 def get_team_path_to_final(team: str, n_sims: int = 2000) -> dict[str, Any]:
     """Round-by-round advancement + most-likely opponent histogram for a team."""
     return get_json(f"/api/v1/teams/{team}/path-to-final", params={"n_sims": n_sims})
+
+
+def post_bracket_conditional(
+    locks: list[dict[str, Any]], *, n_sims: int = 5000, seed: int = 42
+) -> dict[str, Any]:
+    """5k conditional MC with per-match knockout-winner locks (Tier 3 step 14)."""
+    return post_json(
+        "/api/v1/tournament/bracket/conditional",
+        json={"locks": locks, "n_sims": n_sims, "seed": seed},
+    )
