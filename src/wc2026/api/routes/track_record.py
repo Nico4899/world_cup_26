@@ -1,30 +1,49 @@
-"""WC 2026 rolling calibration endpoint.
+"""WC 2026 rolling calibration + historical hindcast endpoints.
 
-``GET /api/v1/track-record/wc2026`` returns ``RollingCalibration`` over every
-completed WC 2026 match: aggregate log-loss / Brier / RPS, plus a per-match
-diagnostic table. The dashboard Track Record page surfaces this above the
-historical WC 2018 + WC 2022 hindcasts.
+* ``GET /api/v1/track-record/wc2026`` — ``RollingCalibration`` over every
+  completed WC 2026 match: aggregate log-loss / Brier / RPS + per-match
+  diagnostics. Backs the dashboard's live Track Record panel.
+* ``GET /api/v1/track-record/historical/{tournament}`` — headline metrics +
+  reliability bins for WC 2018 / WC 2022. The Streamlit dashboard used to
+  call ``wc2026.eval.backtest.hindcast()`` in-process; the Next.js frontend
+  consumes this endpoint instead so the heavy compute stays on the API host.
 
-Implementation note
--------------------
+Implementation notes
+--------------------
 ``RawLiveEvent.match_id`` holds the football-data.org numeric id; our
 predictions live under the (match_date, home_team, away_team) natural key.
 We bridge them by reading the latest cached football-data.org WC fixtures
 off disk — no live API call, no Postgres dependency beyond the rows the
 live poller already persisted.
+
+The historical hindcast cache is module-level with a 24 h TTL; the actual
+``hindcast()`` call refits ~10 PoissonDC models and would dominate request
+latency without it.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from datetime import date
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+import pandas as pd
+from fastapi import APIRouter, HTTPException, Path, Request
 from pydantic import BaseModel, Field
 
 from wc2026.db.session import get_engine
+from wc2026.eval.backtest import HindcastConfig, hindcast
+from wc2026.eval.calibration import (
+    aggregate,
+    base_rates,
+    baseline_log_loss,
+    reliability_diagram,
+)
 from wc2026.eval.rolling import RollingCalibration, compute_rolling
 from wc2026.ingest.football_data_org import load_wc_match_id_map
+from wc2026.ingest.kaggle_intl import load_played
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +100,154 @@ def wc2026_track_record(request: Request) -> WC2026TrackRecord:
             detail=f"WC2026 track-record DB query failed: {exc.__class__.__name__}",
         ) from exc
     return _serialize(result)
+
+
+# --- Historical hindcasts -------------------------------------------------
+
+_HISTORICAL_SPANS: dict[str, tuple[pd.Timestamp, pd.Timestamp]] = {
+    "WC2022": (pd.Timestamp("2022-11-20"), pd.Timestamp("2022-12-18")),
+    "WC2018": (pd.Timestamp("2018-06-14"), pd.Timestamp("2018-07-15")),
+}
+
+_BOOKMAKER_LITERATURE: dict[str, dict[str, Any]] = {
+    "WC2018": {
+        "log_loss_low": 0.96,
+        "log_loss_high": 1.00,
+        "cite": "Wheatcroft 2019 (RPS=0.181); Constantinou 2019 (log-loss range)",
+    },
+    "WC2022": {
+        "log_loss_low": 0.95,
+        "log_loss_high": 1.00,
+        "cite": "estimate from market consensus (no peer-reviewed aggregate yet)",
+    },
+}
+
+HISTORICAL_CACHE_TTL_SECONDS = 24 * 3600
+_HISTORICAL_CACHE: dict[str, tuple[float, HistoricalTrackRecord]] = {}
+_HISTORICAL_CACHE_LOCK = threading.Lock()
+
+
+class ReliabilityBinResponse(BaseModel):
+    outcome: str = Field(description="H / D / A")
+    bin_low: float
+    bin_high: float
+    n: int
+    mean_predicted: float
+    realized_frequency: float
+
+
+class HistoricalHeadline(BaseModel):
+    n_matches: int
+    log_loss: float
+    brier: float
+    rps: float
+    baseline_log_loss: float
+    base_h: float
+    base_d: float
+    base_a: float
+
+
+class BookmakerReference(BaseModel):
+    log_loss_low: float
+    log_loss_high: float
+    cite: str
+
+
+class HistoricalTrackRecord(BaseModel):
+    tournament: str = Field(description="WC2018 or WC2022")
+    headline: HistoricalHeadline
+    reliability: list[ReliabilityBinResponse]
+    bookmaker_reference: BookmakerReference | None = None
+
+
+def _compute_historical(tournament: str) -> HistoricalTrackRecord:
+    """Day-by-day hindcast + reliability bins for ``tournament``.
+
+    Heavy: refits ~10 PoissonDC models. Caller must cache the result; this
+    function does NOT touch the module-level cache.
+    """
+    if tournament not in _HISTORICAL_SPANS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"unknown tournament {tournament!r}; valid: {sorted(_HISTORICAL_SPANS)}",
+        )
+    start, end = _HISTORICAL_SPANS[tournament]
+    history = load_played()
+    target = history[
+        (history["tournament"] == "FIFA World Cup")
+        & (history["date"] >= start)
+        & (history["date"] <= end)
+    ].copy()
+    preds = hindcast(target, history, cfg=HindcastConfig())
+    clean = preds.dropna(subset=["p_home", "p_draw", "p_away", "observed"])
+    metrics = aggregate(clean)
+    obs = clean["observed"].tolist()
+    rates = base_rates(obs)
+    bins = [
+        ReliabilityBinResponse(
+            outcome=b.outcome,
+            bin_low=b.bin_low,
+            bin_high=b.bin_high,
+            n=b.n,
+            mean_predicted=b.mean_predicted,
+            realized_frequency=b.realized_frequency,
+        )
+        for b in reliability_diagram(clean, n_bins=10)
+        if b.n > 0
+    ]
+    book = _BOOKMAKER_LITERATURE.get(tournament)
+    return HistoricalTrackRecord(
+        tournament=tournament,
+        headline=HistoricalHeadline(
+            n_matches=metrics.n,
+            log_loss=metrics.log_loss,
+            brier=metrics.brier,
+            rps=metrics.rps,
+            baseline_log_loss=baseline_log_loss(obs),
+            base_h=rates["H"],
+            base_d=rates["D"],
+            base_a=rates["A"],
+        ),
+        reliability=bins,
+        bookmaker_reference=BookmakerReference(**book) if book is not None else None,
+    )
+
+
+@router.get(
+    "/historical/{tournament}",
+    response_model=HistoricalTrackRecord,
+    description=(
+        "Headline calibration metrics + per-outcome reliability bins for a "
+        "completed World Cup. Cached for 24 hours per (tournament). The "
+        "Streamlit dashboard used to compute these in-process; the Next.js "
+        "frontend consumes this endpoint instead so the cost stays server-side."
+    ),
+)
+def historical_track_record(
+    tournament: str = Path(
+        ...,
+        pattern=r"^WC(2018|2022)$",
+        description="One of WC2018 / WC2022.",
+    ),
+) -> HistoricalTrackRecord:
+    now = time.monotonic()
+    with _HISTORICAL_CACHE_LOCK:
+        cached = _HISTORICAL_CACHE.get(tournament)
+        if cached is not None and now - cached[0] < HISTORICAL_CACHE_TTL_SECONDS:
+            return cached[1]
+    try:
+        payload = _compute_historical(tournament)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("historical track-record failed for %s", tournament)
+        raise HTTPException(
+            status_code=503,
+            detail=f"historical hindcast failed: {exc.__class__.__name__}",
+        ) from exc
+    with _HISTORICAL_CACHE_LOCK:
+        _HISTORICAL_CACHE[tournament] = (now, payload)
+    return payload
 
 
 __all__ = ["router"]

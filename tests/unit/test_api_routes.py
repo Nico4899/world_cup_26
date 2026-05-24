@@ -1283,3 +1283,120 @@ def test_wc2026_track_record_returns_503_on_db_error(client: TestClient, monkeyp
     r = client.get("/api/v1/track-record/wc2026")
     assert r.status_code == 503
     assert "track-record" in r.json()["detail"]
+
+
+# --- /api/v1/track-record/historical/{tournament} --------------------------
+
+
+def _clear_historical_cache() -> None:
+    from wc2026.api.routes import track_record as tr
+
+    with tr._HISTORICAL_CACHE_LOCK:
+        tr._HISTORICAL_CACHE.clear()
+
+
+def test_historical_track_record_serialises_stub_hindcast(
+    client: TestClient, monkeypatch
+) -> None:
+    """Monkey-patch the heavy `hindcast()` call to a tiny fixed payload so the
+    test exercises the route + response shape without re-fitting models."""
+    import pandas as pd
+
+    from wc2026.api.routes import track_record as tr
+
+    _clear_historical_cache()
+
+    def stub_hindcast(target, history, *, cfg=None):
+        _ = target, history, cfg
+        return pd.DataFrame(
+            [
+                {"date": "2022-11-20", "home_team": "Qatar", "away_team": "Ecuador",
+                 "observed": "A", "actual_home": 0, "actual_away": 2,
+                 "p_home": 0.30, "p_draw": 0.30, "p_away": 0.40, "train_n": 100,
+                 "neutral": True, "skipped_reason": None},
+                {"date": "2022-11-21", "home_team": "England", "away_team": "Iran",
+                 "observed": "H", "actual_home": 6, "actual_away": 2,
+                 "p_home": 0.55, "p_draw": 0.25, "p_away": 0.20, "train_n": 100,
+                 "neutral": True, "skipped_reason": None},
+            ]
+        )
+
+    def stub_load_played():
+        return pd.DataFrame(
+            {
+                "tournament": ["FIFA World Cup", "FIFA World Cup"],
+                "date": [pd.Timestamp("2022-11-20"), pd.Timestamp("2022-11-21")],
+                "home_team": ["Qatar", "England"],
+                "away_team": ["Ecuador", "Iran"],
+                "home_score": [0, 6],
+                "away_score": [2, 2],
+                "neutral": [True, True],
+            }
+        )
+
+    monkeypatch.setattr(tr, "hindcast", stub_hindcast)
+    monkeypatch.setattr(tr, "load_played", stub_load_played)
+
+    r = client.get("/api/v1/track-record/historical/WC2022")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["tournament"] == "WC2022"
+    headline = body["headline"]
+    assert headline["n_matches"] == 2
+    # base rates sum to 1 across H/D/A
+    assert abs(headline["base_h"] + headline["base_d"] + headline["base_a"] - 1.0) < 1e-6
+    assert headline["log_loss"] > 0
+    assert isinstance(body["reliability"], list)
+    # Bookmaker reference is populated for WC2022 with the literature constants.
+    assert body["bookmaker_reference"]["log_loss_low"] == 0.95
+
+
+def test_historical_track_record_rejects_unknown_tournament(client: TestClient) -> None:
+    # Pydantic Path() pattern enforces WC(2018|2022); anything else is a 422.
+    r = client.get("/api/v1/track-record/historical/EURO2024")
+    assert r.status_code == 422
+
+
+def test_historical_track_record_cache_short_circuits(client: TestClient, monkeypatch) -> None:
+    """A second request inside the TTL window must skip the hindcast call."""
+    import pandas as pd
+
+    from wc2026.api.routes import track_record as tr
+
+    _clear_historical_cache()
+
+    calls = {"n": 0}
+
+    def stub_hindcast(target, history, *, cfg=None):
+        _ = target, history, cfg
+        calls["n"] += 1
+        return pd.DataFrame(
+            [
+                {"date": "2018-06-14", "home_team": "Russia", "away_team": "Saudi Arabia",
+                 "observed": "H", "actual_home": 5, "actual_away": 0,
+                 "p_home": 0.45, "p_draw": 0.30, "p_away": 0.25, "train_n": 100,
+                 "neutral": True, "skipped_reason": None},
+            ]
+        )
+
+    def stub_load_played():
+        return pd.DataFrame(
+            {
+                "tournament": ["FIFA World Cup"],
+                "date": [pd.Timestamp("2018-06-14")],
+                "home_team": ["Russia"],
+                "away_team": ["Saudi Arabia"],
+                "home_score": [5],
+                "away_score": [0],
+                "neutral": [True],
+            }
+        )
+
+    monkeypatch.setattr(tr, "hindcast", stub_hindcast)
+    monkeypatch.setattr(tr, "load_played", stub_load_played)
+
+    r1 = client.get("/api/v1/track-record/historical/WC2018")
+    r2 = client.get("/api/v1/track-record/historical/WC2018")
+    assert r1.status_code == r2.status_code == 200
+    assert r1.json() == r2.json()
+    assert calls["n"] == 1  # second request served from the cache

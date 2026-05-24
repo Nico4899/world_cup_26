@@ -6,6 +6,7 @@ Run locally with:
 
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -78,11 +79,17 @@ def _today_utc_ts() -> pd.Timestamp:
 
 
 CORS_ORIGINS = (
-    "http://localhost:8501",
+    # Local dev for the Next.js frontend (pnpm dev defaults to :3000).
     "http://localhost:3000",
-    "http://127.0.0.1:8501",
     "http://127.0.0.1:3000",
 )
+
+# Vercel preview deployments live at `https://<slug>-<hash>-<scope>.vercel.app`;
+# allow any subdomain of vercel.app over HTTPS so every preview PR can hit the
+# API without per-deployment whitelisting. The production custom domain is
+# added via the WC2026_FRONTEND_ORIGIN env var so operators can configure
+# it without touching code.
+CORS_ALLOW_ORIGIN_REGEX = r"https://.*\.vercel\.app"
 
 
 def _fit_model(df: pd.DataFrame) -> PoissonDC:
@@ -257,10 +264,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_extra_origin = os.environ.get("WC2026_FRONTEND_ORIGIN")
+_allow_origins = list(CORS_ORIGINS) + ([_extra_origin] if _extra_origin else [])
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(CORS_ORIGINS),
-    allow_methods=["GET"],
+    allow_origins=_allow_origins,
+    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
+    # Browser preflight ships either GET (most routes) or POST
+    # (/_ops/run-job, /tournament/bracket/conditional).
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
     allow_credentials=False,
 )
