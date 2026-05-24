@@ -27,6 +27,7 @@ export function HelpDot({ term, className }: CommonProps) {
   return (
     <Popover>
       <PopoverTrigger
+        type="button"
         aria-label={`What is ${entry.name}?`}
         className={cn(
           "inline-flex items-center align-baseline ml-0.5 rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -66,6 +67,7 @@ export function TermHelp({
   return (
     <Popover>
       <PopoverTrigger
+        type="button"
         aria-label={`What is ${entry.name}?`}
         className={cn(
           "rounded-sm underline decoration-dotted decoration-from-font underline-offset-2 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",

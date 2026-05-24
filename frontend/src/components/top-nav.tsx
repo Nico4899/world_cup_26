@@ -119,6 +119,8 @@ export function TopNav() {
           onClick={() => setPaletteOpen(true)}
           className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent"
           aria-label="Open command palette"
+          aria-expanded={paletteOpen}
+          aria-controls="command-palette"
         >
           <Command className="h-3.5 w-3.5 md:hidden" aria-hidden />
           <span className="hidden md:inline">Jump to…</span>

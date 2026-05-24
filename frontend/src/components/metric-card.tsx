@@ -67,7 +67,10 @@ export function MetricCard({
 
   return (
     <Popover>
-      <PopoverTrigger className="text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <PopoverTrigger
+        type="button"
+        className="text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         {body}
       </PopoverTrigger>
       <PopoverContent className="w-80 space-y-2">

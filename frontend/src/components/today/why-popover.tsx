@@ -41,6 +41,7 @@ export function WhyPopover({
   return (
     <Popover>
       <PopoverTrigger
+        type="button"
         className="inline-flex items-center justify-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5 text-xs font-medium hover:bg-accent w-full"
       >
         <HelpCircle className="h-3.5 w-3.5" aria-hidden />

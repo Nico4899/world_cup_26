@@ -38,7 +38,10 @@ export function ClickableProbabilityBar({
   const total = segments.reduce((s, x) => s + Math.max(x.value, 0), 0) || 1;
   return (
     <Popover>
-      <PopoverTrigger className="w-full text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <PopoverTrigger
+        type="button"
+        className="w-full text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
         <ProbabilityBar segments={segments} height={height} />
       </PopoverTrigger>
       <PopoverContent className="w-72 space-y-2">

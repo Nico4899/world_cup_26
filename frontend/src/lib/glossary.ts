@@ -29,7 +29,8 @@ export type GlossaryKey =
   | "realisation"
   | "conditional locks"
   | "delta"
-  | "host venue";
+  | "host venue"
+  | "hindcast";
 
 export type GlossaryEntry = {
   /** Full, screen-reader-friendly name. */
@@ -152,5 +153,11 @@ export const GLOSSARY: Record<GlossaryKey, GlossaryEntry> = {
     name: "Host venue",
     short:
       "One of the 16 stadiums hosting matches in 2026 — 11 in the USA, 3 in Mexico, 2 in Canada.",
+  },
+  hindcast: {
+    name: "Hindcast",
+    short:
+      "Re-running the model on a tournament that already happened, using only data available before each match was played, to measure how close it would have come to the real results.",
+    link: "/about#backtest-gates",
   },
 };

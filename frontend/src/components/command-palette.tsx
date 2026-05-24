@@ -165,6 +165,7 @@ export function CommandPalette({ open, onClose }: Props) {
 
   return (
     <div
+      id="command-palette"
       role="dialog"
       aria-modal="true"
       aria-label="Command palette"

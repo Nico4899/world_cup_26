@@ -18,26 +18,13 @@ import {
 } from "@/components/ui/table";
 import { EmptyPanel } from "@/components/empty-panel";
 import { HelpDot } from "@/components/help-dot";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { RecentFormBadges } from "@/components/match/recent-form-badges";
 import { pct, signed } from "@/lib/format";
 import type { FixtureSummary } from "@/lib/types";
 
 type EloHistory = {
   team: string;
   history: { snapshot_date: string; rating: number; global_rank: number | null }[];
-};
-type RecentMatch = {
-  date: string;
-  opponent: string;
-  venue: string;
-  goals_for: number;
-  goals_against: number;
-  result: "W" | "D" | "L";
-  tournament: string;
 };
 type TeamProbs = {
   team: string;
@@ -88,12 +75,6 @@ type PathToFinalResponse = {
   }[];
 };
 
-const RESULT_COLOR: Record<RecentMatch["result"], string> = {
-  W: "var(--result-win)",
-  D: "var(--result-draw)",
-  L: "var(--result-loss)",
-};
-
 export default async function TeamProfilePage({
   params,
 }: {
@@ -106,14 +87,13 @@ export default async function TeamProfilePage({
   let fixtures: FixtureSummary[] = [];
   let probs: TeamProbs | null = null;
   let elo: EloHistory | null = null;
-  let form: RecentMatch[] = [];
   let ranks: FifaRanks | null = null;
   let xg: XgForm | null = null;
   let squad: Squad | null = null;
   let path: PathToFinalResponse | null = null;
 
   try {
-    [fixtures, probs, elo, form, ranks, xg, squad, path] = await Promise.all([
+    [fixtures, probs, elo, ranks, xg, squad, path] = await Promise.all([
       apiGet<FixtureSummary[]>("/api/v1/matches", undefined, { revalidate: 600 }),
       apiGet<TeamProbs>(`/api/v1/teams/${team}/tournament-probs`, undefined, {
         revalidate: 600,
@@ -121,9 +101,6 @@ export default async function TeamProfilePage({
       apiGet<EloHistory>(`/api/v1/teams/${team}/elo-history`, undefined, {
         revalidate: 3600,
       }).catch(() => null),
-      apiGet<RecentMatch[]>(`/api/v1/teams/${team}/recent`, { n: 10 }, {
-        revalidate: 300,
-      }).catch(() => []),
       apiGet<FifaRanks>(`/api/v1/teams/${team}/fifa-rankings`, undefined, {
         revalidate: 3600,
       }).catch(() => null),
@@ -294,43 +271,7 @@ export default async function TeamProfilePage({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {form.length === 0 ? (
-            <p className="text-xs text-muted-foreground italic">
-              No recent matches in the dataset.
-            </p>
-          ) : (
-            <div className="space-y-1">
-              <div className="flex flex-wrap gap-1">
-                {form.map((m, i) => (
-                  <Tooltip key={i}>
-                    <TooltipTrigger
-                      className="inline-flex items-center justify-center rounded px-2 py-0.5 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      style={{ background: RESULT_COLOR[m.result] }}
-                      aria-label={`${m.result} ${m.goals_for}-${m.goals_against} ${m.venue === "away" ? "@" : "vs"} ${m.opponent} on ${m.date}`}
-                    >
-                      {m.result}
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <span className="tabular-nums">
-                        {m.date} · {team} {m.goals_for}-{m.goals_against}{" "}
-                        {m.opponent} ({m.venue}, {m.tournament})
-                      </span>
-                    </TooltipContent>
-                  </Tooltip>
-                ))}
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                {form
-                  .map(
-                    (m) =>
-                      `${m.result} ${m.goals_for}-${m.goals_against} ${
-                        m.venue === "away" ? "@" : "vs"
-                      } ${m.opponent}`,
-                  )
-                  .join(" · ")}
-              </p>
-            </div>
-          )}
+          <RecentFormBadges team={team} n={10} />
         </CardContent>
       </Card>
 

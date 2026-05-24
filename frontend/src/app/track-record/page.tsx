@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { HelpDot } from "@/components/help-dot";
-import { signed } from "@/lib/format";
+import { pct, signed } from "@/lib/format";
 import type { WC2026TrackRecord } from "@/lib/types";
 
 export const metadata = { title: "Track Record — WC 2026 Predictions" };
@@ -47,7 +47,6 @@ type HistoricalResponse = {
 };
 
 const fmtMetric = (n: number | null) => (n == null ? "—" : n.toFixed(4));
-const pct = (n: number, digits = 1) => `${(n * 100).toFixed(digits)}%`;
 
 export default async function TrackRecordPage({
   searchParams,
@@ -207,7 +206,10 @@ export default async function TrackRecordPage({
 
       <section className="space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <h2 className="text-lg font-semibold">Historical hindcasts</h2>
+          <h2 className="text-lg font-semibold inline-flex items-center gap-1">
+            Historical hindcasts
+            <HelpDot term="hindcast" />
+          </h2>
           <TournamentTabs current={tournament} />
         </div>
         {historical ? (

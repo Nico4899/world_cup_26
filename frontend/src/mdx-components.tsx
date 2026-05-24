@@ -1,6 +1,8 @@
 import type { MDXComponents } from "mdx/types";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
+import { slugify } from "@/lib/slugify";
+
 /**
  * Type-safe Tailwind defaults for `next-mdx-remote` / `@next/mdx`'s
  * rendered nodes. Without this Next would emit raw `<h1>` / `<p>` without
@@ -12,17 +14,17 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 export function useMDXComponents(components: MDXComponents): MDXComponents {
   return {
     h1: ({ children, ...props }) => (
-      <h1 id={slugify(children)} className="text-2xl font-semibold mt-4 mb-2 scroll-mt-20" {...props}>
+      <h1 id={slugify(collectText(children))} className="text-2xl font-semibold mt-4 mb-2 scroll-mt-20" {...props}>
         {children}
       </h1>
     ),
     h2: ({ children, ...props }) => (
-      <h2 id={slugify(children)} className="text-xl font-semibold mt-6 mb-2 scroll-mt-20" {...props}>
+      <h2 id={slugify(collectText(children))} className="text-xl font-semibold mt-6 mb-2 scroll-mt-20" {...props}>
         {children}
       </h2>
     ),
     h3: ({ children, ...props }) => (
-      <h3 id={slugify(children)} className="text-lg font-semibold mt-4 mb-2 scroll-mt-20" {...props}>
+      <h3 id={slugify(collectText(children))} className="text-lg font-semibold mt-4 mb-2 scroll-mt-20" {...props}>
         {children}
       </h3>
     ),
@@ -54,16 +56,10 @@ export function useMDXComponents(components: MDXComponents): MDXComponents {
 
 /**
  * Reduce MDX children (which may be strings, arrays, or React nodes) down
- * to a plain-text representation, then slugify for `id=`. Handles the
- * three shapes MDX emits: string, array, and `{ props: { children } }`.
+ * to a plain-text representation so {@link slugify} can produce a stable
+ * anchor `id`. Handles the three shapes MDX emits: string, array, and
+ * `{ props: { children } }`.
  */
-function slugify(node: ReactNode): string {
-  return collectText(node)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
 function collectText(node: ReactNode): string {
   if (node == null || node === false || node === true) return "";
   if (typeof node === "string") return node;
