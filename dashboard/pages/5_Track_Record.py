@@ -16,6 +16,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from dashboard.components.api_client import APIUnreachable, get_json
+from dashboard.components.plot_config import PLOTLY_CONFIG
 
 st.title("Track record")
 
@@ -224,7 +225,7 @@ fig.update_layout(
     yaxis={"range": [0, 1], "tickformat": ".0%"},
     height=500,
 )
-st.plotly_chart(fig, config={"displayModeBar": False})
+st.plotly_chart(fig, config=PLOTLY_CONFIG)
 
 st.divider()
 st.caption("Per-bin counts (size of marker above):")

@@ -21,6 +21,7 @@ from dashboard.components.api_client import (
     get_team_xg_form,
     render_unreachable_warning,
 )
+from dashboard.components.plot_config import PLOTLY_CONFIG
 from dashboard.components.team_assets import (
     crest_img_html,
     get_team_assets,
@@ -105,7 +106,7 @@ else:
         margin={"l": 120, "r": 60, "t": 10, "b": 30},
         yaxis={"autorange": "reversed"},
     )
-    st.plotly_chart(bar, config={"displayModeBar": False})
+    st.plotly_chart(bar, config=PLOTLY_CONFIG)
     st.caption(
         f"From persisted run {probs['run_id']} ({probs.get('n_sims', '?')} sims, "
         f"model {probs.get('model_version', '?')}). Probabilities update on the "
@@ -143,7 +144,7 @@ else:
         yaxis_title="Elo rating",
         margin={"l": 60, "r": 30, "t": 10, "b": 40},
     )
-    st.plotly_chart(line, config={"displayModeBar": False})
+    st.plotly_chart(line, config=PLOTLY_CONFIG)
     st.caption(
         f"{len(history)} daily snapshots. Most recent: {history[-1]['snapshot_date']} → "
         f"{history[-1]['rating']:.1f}"
@@ -228,7 +229,7 @@ else:
             yaxis={"autorange": "reversed"},
             margin={"l": 60, "r": 30, "t": 10, "b": 40},
         )
-        st.plotly_chart(line, config={"displayModeBar": False})
+        st.plotly_chart(line, config=PLOTLY_CONFIG)
 
 st.divider()
 

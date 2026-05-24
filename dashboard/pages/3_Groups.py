@@ -9,6 +9,7 @@ from dashboard.components.api_client import (
     get_json,
     render_unreachable_warning,
 )
+from dashboard.components.plot_config import PLOTLY_CONFIG
 from dashboard.components.team_assets import render_team_chip
 
 st.title("Group-stage advancement probabilities")
@@ -120,7 +121,7 @@ for row_start in range(0, len(group_list), cols_per_row):
     cols = st.columns(cols_per_row)
     for col, block in zip(cols, row, strict=False):
         with col:
-            st.plotly_chart(_group_fig(block), config={"displayModeBar": False})
+            st.plotly_chart(_group_fig(block), config=PLOTLY_CONFIG)
 
 st.divider()
 st.subheader("Headline: top 10 championship probabilities")

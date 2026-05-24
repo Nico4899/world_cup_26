@@ -24,6 +24,7 @@ from dashboard.components.api_client import (
     get_recent_form,
     render_unreachable_warning,
 )
+from dashboard.components.plot_config import PLOTLY_CONFIG
 from dashboard.components.team_assets import render_team_chip, render_versus_header
 
 # Color tokens for W/D/L form bubbles.
@@ -244,7 +245,7 @@ if snapshot is not None and snapshot.get("win_prob_source") in (
             height=300,
             margin={"l": 60, "r": 20, "t": 50, "b": 40},
         )
-        st.plotly_chart(line, config={"displayModeBar": False})
+        st.plotly_chart(line, config=PLOTLY_CONFIG)
 
     st.divider()
 
@@ -269,7 +270,7 @@ bar.update_layout(
     showlegend=False,
     margin={"l": 80, "r": 40, "t": 10, "b": 10},
 )
-st.plotly_chart(bar, config={"displayModeBar": False})
+st.plotly_chart(bar, config=PLOTLY_CONFIG)
 
 # Score heatmap from the full matrix returned by the API.
 full_matrix = pred.get("score_matrix")
@@ -297,7 +298,7 @@ else:
         height=460,
         margin={"l": 40, "r": 10, "t": 50, "b": 40},
     )
-    st.plotly_chart(heatmap, config={"displayModeBar": False})
+    st.plotly_chart(heatmap, config=PLOTLY_CONFIG)
 
 st.divider()
 st.subheader("Why this prediction")
@@ -385,7 +386,7 @@ if explanation is not None:
             yaxis={"autorange": "reversed"},
             margin={"l": 140, "r": 60, "t": 10, "b": 40},
         )
-        st.plotly_chart(shap_fig, config={"displayModeBar": False})
+        st.plotly_chart(shap_fig, config=PLOTLY_CONFIG)
         # Per-row "feature value" annotations as a compact caption.
         rows = [
             {

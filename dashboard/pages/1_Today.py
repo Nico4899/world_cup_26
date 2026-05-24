@@ -13,6 +13,7 @@ from dashboard.components.api_client import (
     list_matches,
     render_unreachable_warning,
 )
+from dashboard.components.plot_config import PLOTLY_CONFIG
 from dashboard.components.team_assets import render_team_chip, render_versus_header
 
 
@@ -124,7 +125,7 @@ for i in range(0, len(matches), 2):
                     pred["outcome"]["draw"],
                     pred["outcome"]["away_win"],
                 ),
-                config={"displayModeBar": False},
+                config=PLOTLY_CONFIG,
             )
             xg_h = pred["expected_home_goals"]
             xg_a = pred["expected_away_goals"]
