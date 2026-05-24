@@ -409,6 +409,111 @@ def test_run_job_accepts_matching_token(client: TestClient, monkeypatch) -> None
     assert r.status_code == 202
 
 
+# --- /api/v1/_ops/elo-override ---------------------------------------------
+
+
+def _stub_elo_session(monkeypatch, *, store: list) -> None:
+    """Replace ops.session_scope with an in-memory store backed by a list.
+
+    The real ``RawEloOverride`` SQLAlchemy class is kept — `select(...)` just
+    constructs an SQL expression (no DB hit) and our stubbed session ignores
+    the statement entirely. Stored rows are real ORM instances so the route's
+    ``r.team_code`` attribute reads work without further patching.
+    """
+    from wc2026.api.routes import ops as ops_mod
+
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def scalars(self, _stmt):
+            class _S:
+                def __iter__(_self):
+                    return iter(store)
+
+                def first(_self):
+                    return store[0] if store else None
+
+            return _S()
+
+        def get(self, _model, team_code):
+            for row in store:
+                if row.team_code == team_code:
+                    return row
+            return None
+
+        def add(self, row):
+            store.append(row)
+
+        def delete(self, row):
+            store.remove(row)
+
+        def flush(self):
+            return None
+
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_scope():
+        yield _Session()
+
+    monkeypatch.setattr(ops_mod, "session_scope", fake_scope)
+
+
+def test_elo_overrides_empty_list_returns_200(client: TestClient, monkeypatch) -> None:
+    _stub_elo_session(monkeypatch, store=[])
+    r = client.get("/api/v1/_ops/elo-overrides")
+    assert r.status_code == 200
+    assert r.json() == {"overrides": []}
+
+
+def test_elo_override_upsert_creates_then_replaces(client: TestClient, monkeypatch) -> None:
+    monkeypatch.delenv("WC2026_OPS_TOKEN", raising=False)
+    store: list = []
+    _stub_elo_session(monkeypatch, store=store)
+
+    create = client.post(
+        "/api/v1/_ops/elo-override",
+        json={"team_code": "ENG", "team_name": "England", "rating": 1850.5,
+              "reason": "scraper broken 2026-06-12"},
+    )
+    assert create.status_code == 200
+    body = create.json()
+    assert body["team_code"] == "ENG"
+    assert body["rating"] == 1850.5
+    assert len(store) == 1
+
+    # Re-POSTing for the same team_code should replace the row, not add.
+    update = client.post(
+        "/api/v1/_ops/elo-override",
+        json={"team_code": "ENG", "team_name": "England", "rating": 1875.0},
+    )
+    assert update.status_code == 200
+    assert update.json()["rating"] == 1875.0
+    assert len(store) == 1
+
+
+def test_elo_override_delete_404_when_missing(client: TestClient, monkeypatch) -> None:
+    monkeypatch.delenv("WC2026_OPS_TOKEN", raising=False)
+    _stub_elo_session(monkeypatch, store=[])
+    r = client.delete("/api/v1/_ops/elo-override/ZZZ")
+    assert r.status_code == 404
+
+
+def test_elo_override_post_rejects_bad_token(client: TestClient, monkeypatch) -> None:
+    monkeypatch.setenv("WC2026_OPS_TOKEN", "secret")
+    _stub_elo_session(monkeypatch, store=[])
+    r = client.post(
+        "/api/v1/_ops/elo-override",
+        json={"team_code": "ENG", "rating": 1900},
+        headers={"X-Ops-Token": "wrong"},
+    )
+    assert r.status_code == 403
+
+
 # --- Phase 5 blend + /api/v1/explain ---------------------------------------
 
 

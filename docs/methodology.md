@@ -113,6 +113,24 @@ strictly before each prediction date (Gneiting & Raftery 2007;
 Wheatcroft 2019). The hindcast harness is the platform's primary
 "is-it-honest" gate.
 
+### 5.1 Bookmaker comparison
+
+The Track Record page cites bookmaker reference log-losses from the literature
+(Wheatcroft 2019; Constantinou 2019) — those values are computed on the actual
+WC 2018 / WC 2022 Bet365/Pinnacle closing odds, which are not in any free
+public corpus. We do not redistribute paid closing-odds data, so we cannot
+recompute the WC reference directly.
+
+To check that our model *architecture* is bookmaker-competitive at all, we
+hindcast `PoissonDC` against Bet365 / Pinnacle closing odds on the
+football-data.co.uk club-football corpus (English / Spanish / German / Italian
+top flights). That comparison lives in
+[`scripts/backtest_against_bookmaker.py`](../scripts/backtest_against_bookmaker.py)
+and writes its summary to `data/artifacts/bookmaker_benchmark/latest.json`.
+Caveats: half-life is 1 year (club squads turn over faster than international
+ones); there is no match-importance gradation; the corpus is domestic-league,
+so the result is a structural sanity check, not a WC-specific calibration claim.
+
 ## 6. Headline numbers
 
 WC 2018 (64 matches) and WC 2022 (64 matches), with the production half-life

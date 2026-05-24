@@ -29,6 +29,7 @@ from wc2026.api.schemas import (
     XgFormSplit,
 )
 from wc2026.db.models import (
+    RawEloOverride,
     RawEloSnapshot,
     RawFifaRanking,
     RawMatchXg,
@@ -99,6 +100,11 @@ def team_elo_history(team: str) -> TeamEloHistory:
     Empty ``history`` when there's no row for that team name in
     ``raw_elo_snapshots`` (the schema's team key is the eloratings.net team
     code; we join by ``team_name``). 503 only when the DB itself is unreachable.
+
+    When an operator has set a manual ``RawEloOverride`` for the team
+    (matched on ``team_name``), the override replaces the last snapshot
+    row's rating — keeps the chart honest while leaving the historical
+    series unchanged.
     """
     try:
         eng = get_engine()
@@ -110,22 +116,31 @@ def team_elo_history(team: str) -> TeamEloHistory:
                     .order_by(RawEloSnapshot.snapshot_date)
                 )
             )
+            override = session.scalars(
+                select(RawEloOverride).where(RawEloOverride.team_name == team)
+            ).first()
     except Exception as exc:
         logger.debug("team_elo_history: DB error for %s", team, exc_info=True)
         raise HTTPException(
             status_code=503, detail=f"team_elo_history DB query failed: {exc.__class__.__name__}"
         ) from exc
-    return TeamEloHistory(
-        team=team,
-        history=[
-            EloHistoryPoint(
-                snapshot_date=r.snapshot_date,
-                rating=float(r.rating),
-                global_rank=r.global_rank,
-            )
-            for r in rows
-        ],
-    )
+    points = [
+        EloHistoryPoint(
+            snapshot_date=r.snapshot_date,
+            rating=float(r.rating),
+            global_rank=r.global_rank,
+        )
+        for r in rows
+    ]
+    if override is not None and points:
+        # Replace the most-recent snapshot's rating with the override.
+        last = points[-1]
+        points[-1] = EloHistoryPoint(
+            snapshot_date=last.snapshot_date,
+            rating=float(override.rating),
+            global_rank=last.global_rank,
+        )
+    return TeamEloHistory(team=team, history=points)
 
 
 @router.get("/{team}/tournament-probs", response_model=TeamTournamentProbabilities)

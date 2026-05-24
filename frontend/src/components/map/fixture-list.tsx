@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { ApiUnreachable, apiGet } from "@/lib/api";
@@ -23,10 +23,16 @@ import {
 } from "@/components/ui/table";
 import type { FixtureSummary } from "@/lib/types";
 
-const ALL = "(all)";
+export const ALL_CITIES = "(all)";
 
-export function FixtureList() {
-  const [choice, setChoice] = useState<string>(ALL);
+type Props = {
+  /** Selected city; `ALL_CITIES` (or anything falsy) renders the full list. */
+  selected: string;
+  /** Called when the dropdown changes. */
+  onSelect: (city: string) => void;
+};
+
+export function FixtureList({ selected, onSelect }: Props) {
   const { data, error } = useQuery({
     queryKey: ["matches-list"],
     queryFn: () => apiGet<FixtureSummary[]>("/api/v1/matches"),
@@ -36,14 +42,15 @@ export function FixtureList() {
   const cities = useMemo(() => {
     const set = new Set<string>(HOST_CITIES.map((c) => c.city));
     (data ?? []).forEach((m) => set.add(m.city));
-    return [ALL, ...Array.from(set).sort()];
+    return [ALL_CITIES, ...Array.from(set).sort()];
   }, [data]);
 
   if (error instanceof ApiUnreachable) return <ApiUnreachableBanner />;
   if (!data) {
     return <p className="text-sm text-muted-foreground">Loading fixtures…</p>;
   }
-  const filtered = choice === ALL ? data : data.filter((m) => m.city === choice);
+  const filtered =
+    selected === ALL_CITIES ? data : data.filter((m) => m.city === selected);
 
   return (
     <div className="space-y-3">
@@ -51,7 +58,7 @@ export function FixtureList() {
         <span className="text-xs uppercase tracking-wide text-muted-foreground">
           Filter fixtures by host city
         </span>
-        <Select value={choice} onValueChange={(v) => setChoice(v ?? ALL)}>
+        <Select value={selected} onValueChange={(v) => onSelect(v ?? ALL_CITIES)}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -65,13 +72,13 @@ export function FixtureList() {
         </Select>
       </label>
       <h2 className="text-lg font-semibold">
-        {choice === ALL
+        {selected === ALL_CITIES
           ? "All 72 fixtures"
-          : `${filtered.length} fixture${filtered.length === 1 ? "" : "s"} at ${choice}`}
+          : `${filtered.length} fixture${filtered.length === 1 ? "" : "s"} at ${selected}`}
       </h2>
       {filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No fixtures recorded at {choice}. The dataset&apos;s city label may
+          No fixtures recorded at {selected}. The dataset&apos;s city label may
           differ — try the dropdown alternatives.
         </p>
       ) : (

@@ -67,6 +67,27 @@ class RawEloSnapshot(Base):
     global_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
+class RawEloOverride(Base):
+    """Operator-set Elo override for a single team.
+
+    Loaded on top of the disk-side ``elo_current_*.parquet`` snapshot when
+    the eloratings.net scraper is broken or returns obviously-wrong values.
+    The override is keyed by ``team_code`` and survives until cleared via
+    ``DELETE /api/v1/_ops/elo-override/{team_code}``. There is intentionally
+    no expiry — the operator that sets it is the one who clears it.
+    """
+
+    __tablename__ = "raw_elo_overrides"
+
+    team_code: Mapped[str] = mapped_column(String(8), primary_key=True)
+    team_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    rating: Mapped[float] = mapped_column(Float, nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    set_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
 class ModelPrediction(Base):
     __tablename__ = "model_predictions"
 
@@ -299,6 +320,7 @@ __all__ = [
     "Base",
     "MatchFeatures",
     "ModelPrediction",
+    "RawEloOverride",
     "RawEloSnapshot",
     "RawFifaRanking",
     "RawLiveEvent",

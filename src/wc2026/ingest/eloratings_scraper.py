@@ -207,3 +207,42 @@ def load_latest_snapshot(target_dir: Path = DEFAULT_TARGET) -> pd.DataFrame:
     if not paths:
         raise FileNotFoundError(f"No elo_current_*.parquet snapshots in {target_dir}")
     return pd.read_parquet(paths[-1])
+
+
+def apply_overrides(snapshot: pd.DataFrame, overrides: list[dict]) -> pd.DataFrame:
+    """Merge ``RawEloOverride`` rows on top of a loaded parquet snapshot.
+
+    Overrides win on ``team_code``: their ``rating`` (and ``team_name``,
+    when provided) replace the snapshot row. Teams in the override list
+    but not in the snapshot are appended. The snapshot is treated as
+    immutable; the merged DataFrame is a fresh copy.
+
+    ``overrides`` is a list of dicts with at least
+    ``{"team_code", "team_name", "rating"}`` — easy to feed from a
+    SQLAlchemy ``session.scalars(select(RawEloOverride))`` result via
+    ``{c.team_code: {...}}``.
+    """
+    if not overrides:
+        return snapshot
+    out = snapshot.copy()
+    by_code = {row["team_code"]: row for row in overrides}
+    if "team_code" in out.columns:
+        mask = out["team_code"].isin(by_code.keys())
+        for code, ovr in by_code.items():
+            sel = out["team_code"] == code
+            if sel.any():
+                out.loc[sel, "rating"] = float(ovr["rating"])
+                if ovr.get("team_name") is not None and "team_name" in out.columns:
+                    out.loc[sel, "team_name"] = ovr["team_name"]
+        _ = mask  # silence unused-var if the loop above did nothing
+    # Append override rows for teams missing from the snapshot entirely.
+    present = set(out["team_code"]) if "team_code" in out.columns else set()
+    extras = [ovr for code, ovr in by_code.items() if code not in present]
+    if extras:
+        extra_df = pd.DataFrame(extras)
+        # Pad with whatever columns the snapshot has so the schemas match.
+        for col in out.columns:
+            if col not in extra_df.columns:
+                extra_df[col] = None
+        out = pd.concat([out, extra_df[out.columns]], ignore_index=True)
+    return out

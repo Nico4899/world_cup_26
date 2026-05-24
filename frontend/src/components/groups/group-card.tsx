@@ -1,7 +1,5 @@
-import {
-  ProbabilityBar,
-  type ProbabilitySegment,
-} from "@/components/probability-bar";
+import { ClickableProbabilityBar } from "@/components/clickable-probability-bar";
+import type { ProbabilitySegment } from "@/components/probability-bar";
 import {
   Table,
   TableBody,
@@ -46,10 +44,13 @@ export function GroupCard({
   letter,
   teams,
   live,
+  caption,
 }: {
   letter: string;
   teams: GroupStanding[];
   live: LiveGroupTeam[] | null;
+  /** Provenance line shown inside each per-team popover. */
+  caption?: string;
 }) {
   const hasLive = live && live.some((r) => r.played > 0);
   // Order teams by MC win prob descending for display.
@@ -125,7 +126,12 @@ export function GroupCard({
             return (
               <div key={t.team} className="space-y-0.5">
                 <p className="text-xs font-medium leading-tight">{t.team}</p>
-                <ProbabilityBar segments={segments} height={20} />
+                <ClickableProbabilityBar
+                  title={`${t.team} — Group ${letter}`}
+                  segments={segments}
+                  caption={caption}
+                  height={20}
+                />
               </div>
             );
           })}

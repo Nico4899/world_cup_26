@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.exc import SQLAlchemyError
 
-from wc2026.db.models import SchedulerJobRun
+from wc2026.db.models import RawEloOverride, SchedulerJobRun
 from wc2026.db.session import session_scope
 from wc2026.scheduler.jobs import JOB_REGISTRY, _record_job_run
 
@@ -142,3 +142,120 @@ def run_job(
         enqueued_at=datetime.now(UTC),
         status="enqueued",
     )
+
+
+# --- Elo overrides --------------------------------------------------------
+
+
+class EloOverrideRow(BaseModel):
+    team_code: str = Field(min_length=1, max_length=8)
+    team_name: str | None = None
+    rating: float
+    reason: str | None = Field(default=None, max_length=256)
+    set_at: datetime
+
+
+class EloOverrideRequest(BaseModel):
+    team_code: str = Field(min_length=1, max_length=8)
+    team_name: str | None = None
+    rating: float
+    reason: str | None = Field(default=None, max_length=256)
+
+
+class EloOverridesResponse(BaseModel):
+    overrides: list[EloOverrideRow]
+
+
+@router.get("/elo-overrides", response_model=EloOverridesResponse)
+def list_elo_overrides() -> EloOverridesResponse:
+    """List every active manual Elo override."""
+    try:
+        with session_scope() as s:
+            rows = list(s.scalars(select(RawEloOverride)))
+            payload = [
+                EloOverrideRow(
+                    team_code=r.team_code,
+                    team_name=r.team_name,
+                    rating=float(r.rating),
+                    reason=r.reason,
+                    set_at=r.set_at,
+                )
+                for r in rows
+            ]
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"elo-overrides DB query failed: {exc.__class__.__name__}",
+        ) from exc
+    return EloOverridesResponse(overrides=sorted(payload, key=lambda r: r.team_code))
+
+
+@router.post("/elo-override", response_model=EloOverrideRow, status_code=200)
+def upsert_elo_override(
+    payload: EloOverrideRequest,
+    x_ops_token: str | None = Header(default=None),
+) -> EloOverrideRow:
+    """Create or replace a manual Elo override for one team.
+
+    Overrides are loaded on top of the disk-side eloratings snapshot at
+    read time, so the change shows up on `/teams/{team}/elo-history` and
+    in the Match Detail Elo narrative on the next request — no scheduler
+    rerun required. The override survives until cleared via
+    ``DELETE /api/v1/_ops/elo-override/{team_code}``.
+    """
+    _check_ops_token(x_ops_token)
+    now = datetime.now(UTC)
+    try:
+        with session_scope() as s:
+            existing = s.get(RawEloOverride, payload.team_code)
+            if existing is None:
+                row = RawEloOverride(
+                    team_code=payload.team_code,
+                    team_name=payload.team_name,
+                    rating=payload.rating,
+                    reason=payload.reason,
+                    set_at=now,
+                )
+                s.add(row)
+            else:
+                existing.team_name = payload.team_name
+                existing.rating = payload.rating
+                existing.reason = payload.reason
+                existing.set_at = now
+                row = existing
+            s.flush()
+            return EloOverrideRow(
+                team_code=row.team_code,
+                team_name=row.team_name,
+                rating=float(row.rating),
+                reason=row.reason,
+                set_at=row.set_at,
+            )
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"elo-override upsert failed: {exc.__class__.__name__}",
+        ) from exc
+
+
+@router.delete("/elo-override/{team_code}", status_code=204)
+def delete_elo_override(
+    team_code: str = Path(..., min_length=1, max_length=8),
+    x_ops_token: str | None = Header(default=None),
+) -> None:
+    """Remove a manual Elo override. 404 when no row exists."""
+    _check_ops_token(x_ops_token)
+    try:
+        with session_scope() as s:
+            existing = s.get(RawEloOverride, team_code)
+            if existing is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"no Elo override for team_code={team_code!r}",
+                )
+            s.delete(existing)
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"elo-override delete failed: {exc.__class__.__name__}",
+        ) from exc

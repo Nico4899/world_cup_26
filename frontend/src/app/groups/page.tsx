@@ -105,6 +105,7 @@ export default async function GroupsPage({
             letter={block.group}
             teams={block.teams}
             live={liveByGroup.get(block.group) ?? null}
+            caption={provenance}
           />
         ))}
       </section>
