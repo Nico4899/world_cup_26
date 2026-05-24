@@ -1,8 +1,8 @@
 # Deploy runbook
 
 End-to-end checklist for deploying `wc2026-predictor` to Fly.io with off-site
-backups (Cloudflare R2) and error monitoring (Sentry). Streamlit dashboard
-lands on Streamlit Community Cloud and points at the Fly API.
+backups (Cloudflare R2) and error monitoring (Sentry). The Next.js frontend
+lands on Vercel and points at the Fly API.
 
 ## Pre-requisites
 
@@ -10,7 +10,7 @@ lands on Streamlit Community Cloud and points at the Fly API.
 - A Cloudflare account (R2 is recommended; 10 GB free tier, no egress fees)
   *or* an AWS account if you prefer S3
 - A Sentry account with a free-tier project (~5 GB events/month)
-- A GitHub account for Streamlit Community Cloud (it auths via GitHub OAuth)
+- A Vercel account (Hobby plan suffices; auths via GitHub OAuth)
 
 ## Phase 10A — Fly API + scheduler + Postgres
 

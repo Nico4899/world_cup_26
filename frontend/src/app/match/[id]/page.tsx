@@ -4,8 +4,10 @@ import { apiGet, ApiError, ApiUnreachable } from "@/lib/api";
 import { ApiUnreachableBanner } from "@/components/api-unreachable-banner";
 import { ForecastHeader } from "@/components/forecast-header";
 import { VersusHeader } from "@/components/team-chip";
+import { BlendOverlay } from "@/components/match/blend-overlay";
 import { EloNarrative } from "@/components/match/elo-narrative";
 import { H2HTable } from "@/components/match/h2h-table";
+import { MatchIdInput } from "@/components/match/match-id-input";
 import { OutcomeTiles } from "@/components/match/outcome-tiles";
 import { ProbHeatmap } from "@/components/match/prob-heatmap";
 import { RecentFormBadges } from "@/components/match/recent-form-badges";
@@ -60,7 +62,17 @@ export default async function MatchDetailPage({
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold tracking-tight">Match detail</h1>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h1 className="text-2xl font-semibold tracking-tight">Match detail</h1>
+          <div className="flex items-center gap-3">
+            <MatchIdInput current={matchId} />
+            <BlendOverlay
+              homeTeam={fixture.home_team}
+              awayTeam={fixture.away_team}
+              neutral={fixture.neutral}
+            />
+          </div>
+        </div>
         <ForecastHeader />
       </header>
 

@@ -22,8 +22,9 @@ Personal / educational project. Honesty about uncertainty is the headline featur
 - [x] Stage 0.7 — decision-gate analysis (see below)
 - [x] Stage 1.A — DB layer (Postgres + Alembic), football-data.org ingester, APScheduler, Dockerfile.app, CI
 - [x] Stage 1.B — Elo prior + isotonic recalibration (research artefacts; degraded WC 2022 log-loss, kept for documentation), real Elo-weighted shootout submodel (integrated)
-- [x] Stage 1.C — FastAPI app + Streamlit dashboard
+- [x] Stage 1.C — FastAPI app + Streamlit dashboard (Streamlit later replaced by the Next.js frontend in Phases A-H)
 - [x] Stage 2 — every deferred blueprint item shipped over 11 phases (XGBoost+SHAP blend as research artefact, live win-prob + SSE, Team Profile, scenario-comparison bracket, host-city map, TheSportsDB / StatsBomb / FBref / openfootball / Wikipedia ingesters, Sentry, S3/R2 backups, Fly.io config + runbook). Per-phase breakdown below.
+- [x] Next.js migration (Phases A-H) — Streamlit dashboard rewritten as a Next.js 16 + React 19 + Tailwind v4 + Visx app deployed to Vercel; backend grew `/api/v1/track-record/historical/{tournament}` to keep heavy hindcast compute server-side.
 
 ## Decision-gate results (Stage 0.7)
 
@@ -164,7 +165,7 @@ Every secret above is optional and gracefully degrades when absent:
 
 After 11 phases of build, the platform implements every blueprint item with these honest carve-outs:
 
-- **Not yet deployed**. `fly.toml.example` is configured for the two-process-group + Postgres + volume layout (Phase 10), but `fly deploy` has not been run. The Streamlit dashboard isn't on Streamlit Community Cloud yet. Walk through [`docs/deploy.md`](docs/deploy.md) when ready to go live.
+- **Not yet deployed**. `fly.toml.example` is configured for the two-process-group + Postgres + volume layout (Phase 10), but `fly deploy` has not been run. The Next.js frontend isn't on Vercel yet either. Walk through [`docs/deploy.md`](docs/deploy.md) when ready to go live.
 - **Three model add-ons are research-only**:
   - `PoissonDCWithPrior` (Elo prior) monotonically degrades WC 2022 log-loss across `prior_strength ∈ [0, 5]` — the base model already extracts team strength from match history.
   - `IsotonicCalibrator` (LOO recalibration) degrades WC 2022 log-loss by +0.077 — isotonic on N=64 is small-sample fragile; likely useful with N≥250.
