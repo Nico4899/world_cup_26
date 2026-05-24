@@ -49,13 +49,14 @@ _MODE_PARAM = {
 }
 _MODE_REVERSE = {v: k for k, v in _MODE_PARAM.items()}
 
-# FIFA WC 2026 knockout match-id ranges, in the order the bracket plays out.
+# Knockout match-id ranges per the WC 2026 bracket schedule (see
+# ``src/wc2026/sim/bracket.py``: R16_PAIRS / QF_PAIRS / SF_PAIRS / FINAL_PAIR).
 _ROUND_RANGES: list[tuple[str, range]] = [
     ("R32", range(73, 89)),
     ("R16", range(89, 97)),
     ("QF", range(97, 101)),
     ("SF", range(101, 103)),
-    ("Final", range(103, 104)),
+    ("Final", range(104, 105)),
 ]
 
 

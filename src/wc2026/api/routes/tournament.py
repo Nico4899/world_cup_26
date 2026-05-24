@@ -353,7 +353,12 @@ class BracketLock(BaseModel):
     """One per-match knockout lock for the conditional bracket endpoint."""
 
     match_id: int = Field(
-        ge=73, le=103, description="FIFA knockout match id (R32 73-88, R16 89-96, QF 97-100, SF 101-102, Final 103)."
+        ge=73,
+        le=104,
+        description=(
+            "Knockout match id per the WC 2026 bracket schedule: "
+            "R32 73-88, R16 89-96, QF 97-100, SF 101-102, Final 104."
+        ),
     )
     winner: str = Field(min_length=1)
 

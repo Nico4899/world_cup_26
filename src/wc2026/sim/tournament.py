@@ -127,6 +127,8 @@ def simulate_tournament(
                 away_team=away,
                 winner=forced,
                 regulation_score=(1, 0) if forced == home else (0, 1),
+                extra_time_score=None,
+                shootout_winner=None,
                 decided_in="regulation",
             )
         return simulate_knockout_match(

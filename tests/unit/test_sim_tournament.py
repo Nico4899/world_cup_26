@@ -130,12 +130,74 @@ def test_monte_carlo_total_advancements_sum_correctly(
     assert sums["group_winner"] == pytest.approx(12)
     assert sums["runner_up"] == pytest.approx(12)
     assert sums["third_advance"] == pytest.approx(8)
+    # Phase 12: third_out + fourth split the remaining group-stage finishers
+    # (4 teams x 12 groups - 1st - 2nd - advancing thirds = 16 finishers).
+    assert (sums["third_out"] + sums["fourth"]) == pytest.approx(16)
     assert sums["r32_reached"] == pytest.approx(32)
     assert sums["r16_reached"] == pytest.approx(16)
     assert sums["qf_reached"] == pytest.approx(8)
     assert sums["sf_reached"] == pytest.approx(4)
     assert sums["final_reached"] == pytest.approx(2)
     assert sums["champion"] == pytest.approx(1)
+
+
+def test_known_knockout_winner_forces_match_outcome(
+    real_fixtures: WC2026Fixtures,
+) -> None:
+    """Across many sims, P(champion=X | reached final) must be 1 when X locks the final.
+
+    The simulator skips the lock when the named team isn't in the match, so
+    the property we assert is conditional: ``champion_p == final_p`` for the
+    locked team. With designated-winner semantics every group has a clear
+    favourite, so the locked team reaches the final often enough that the
+    ratio is non-degenerate at moderate N.
+    """
+    designated_per_group = {letter: real_fixtures.groups[letter][0] for letter in GROUP_LETTERS}
+    designated = set(designated_per_group.values())
+    model = _DesignatedWinnerModel(designated)
+    lock_team = designated_per_group["A"]
+    summary = simulate_tournament_monte_carlo(
+        real_fixtures,
+        model,  # type: ignore[arg-type]
+        n_sims=60,
+        seed=0,
+        known_knockout_winners={104: lock_team},  # 104 = the final
+    )
+    champion_p = float(summary.probabilities.loc[lock_team, "champion"])
+    final_p = float(summary.probabilities.loc[lock_team, "final_reached"])
+    # The lock fires every time the team reaches the final → conditional win
+    # rate is 1.0. If final_p happens to be 0 (unlikely but possible with a
+    # tiny N), the assertion holds vacuously and the property still isn't
+    # violated.
+    assert champion_p == pytest.approx(final_p), (
+        f"locked team {lock_team} should win the final whenever they reach it; "
+        f"got champion_p={champion_p} vs final_p={final_p}"
+    )
+
+
+def test_known_knockout_winner_silently_skips_when_team_not_in_match(
+    real_fixtures: WC2026Fixtures,
+) -> None:
+    """A lock for a team that never plays the locked match must not corrupt the run.
+
+    We lock R32 match 73 to a team in group L (which never feeds match 73 by
+    the WC 2026 bracket structure). The simulator should run normally.
+    """
+    designated = {real_fixtures.groups[letter][0] for letter in GROUP_LETTERS}
+    model = _DesignatedWinnerModel(designated)
+    # Group-L's designated winner can't be in R32 match 73 (that slot is filled
+    # by Group A's winner per the 2026 bracket).
+    unreachable_lock_team = real_fixtures.groups["L"][0]
+    summary = simulate_tournament_monte_carlo(
+        real_fixtures,
+        model,  # type: ignore[arg-type]
+        n_sims=10,
+        seed=0,
+        known_knockout_winners={73: unreachable_lock_team},
+    )
+    # The locked team is the designated Group-L winner, so they still always
+    # reach R32 — but never via match 73.
+    assert summary.probabilities.loc[unreachable_lock_team, "r32_reached"] == 1.0
 
 
 def test_monte_carlo_rejects_non_positive_n_sims(real_fixtures: WC2026Fixtures) -> None:

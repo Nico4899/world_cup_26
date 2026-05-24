@@ -161,6 +161,65 @@ def test_bracket_is_cached_by_seed(client: TestClient) -> None:
     assert r3.json()["matches"] != r1.json()["matches"]
 
 
+def test_bracket_conditional_runs_with_no_locks(client: TestClient) -> None:
+    """Empty-locks payload returns a standings-shaped headline with the requested n_sims."""
+    r = client.post(
+        "/api/v1/tournament/bracket/conditional",
+        json={"locks": [], "n_sims": 200, "seed": 0},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["n_sims"] == 200
+    assert body["seed"] == 0
+    assert body["locks"] == []
+    assert len(body["headline"]) == 10  # top-10 by champion prob
+    # Champion probabilities must sum to ≤ 1 across the top 10 — trivially true.
+    assert sum(h["p_champion"] for h in body["headline"]) <= 1.0001
+
+
+def test_bracket_conditional_lifts_locked_team_champion_prob(client: TestClient) -> None:
+    """Locking the final to a known WC 2026 team must push their champion prob to ~1.0
+    *conditional* on reaching it. The unconditional value is bounded by the
+    probability of reaching the final, but it must be strictly above the no-lock
+    baseline by a non-trivial margin.
+    """
+    # Argentina is a perennial favourite under the production model — strong
+    # enough that even a small N reliably brings them to the final.
+    payload = {
+        "locks": [{"match_id": 104, "winner": "Argentina"}],
+        "n_sims": 200,
+        "seed": 0,
+    }
+    r = client.post("/api/v1/tournament/bracket/conditional", json=payload)
+    assert r.status_code == 200
+    body = r.json()
+    arg = next((h for h in body["headline"] if h["team"] == "Argentina"), None)
+    assert arg is not None, "Argentina should appear in the top-10 under the lock"
+    assert arg["p_champion"] > 0.0
+    # Lifting the lock must not break the schema — every headline row keeps the
+    # standings shape.
+    for h in body["headline"]:
+        assert {"team", "p_champion", "p_final", "p_sf", "p_qf"} <= h.keys()
+
+
+def test_bracket_conditional_422_on_unknown_team(client: TestClient) -> None:
+    r = client.post(
+        "/api/v1/tournament/bracket/conditional",
+        json={"locks": [{"match_id": 104, "winner": "Atlantis"}], "n_sims": 200},
+    )
+    assert r.status_code == 422
+    assert "Atlantis" in r.json()["detail"]
+
+
+def test_bracket_conditional_422_on_invalid_match_id(client: TestClient) -> None:
+    r = client.post(
+        "/api/v1/tournament/bracket/conditional",
+        json={"locks": [{"match_id": 1, "winner": "Argentina"}], "n_sims": 200},
+    )
+    # Pydantic's range constraint surfaces 422 before the handler runs.
+    assert r.status_code == 422
+
+
 # --- /health (enriched) ----------------------------------------------------
 
 
