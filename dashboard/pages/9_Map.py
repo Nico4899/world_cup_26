@@ -86,7 +86,7 @@ deck = pdk.Deck(
     tooltip={"text": "{city} ({country})"},
     map_style=None,
 )
-st.pydeck_chart(deck, use_container_width=True)
+st.pydeck_chart(deck, width="stretch")
 
 # --- City filter + fixture list -------------------------------------------
 

@@ -87,7 +87,7 @@ else:
 
     def _render_round_tile(column, label: str, value: float | None, round_key: str) -> None:
         pct = f"{(value or 0):.1%}"
-        with column, st.popover(f"{label}\n\n**{pct}**", use_container_width=True):
+        with column, st.popover(f"{label}\n\n**{pct}**", width="stretch"):
             st.markdown(
                 f"From persisted run **#{probs['run_id']}** "
                 f"({probs.get('n_sims', '?')} sims, model "

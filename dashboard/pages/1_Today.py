@@ -143,7 +143,7 @@ for i in range(0, len(matches), 2):
             for sc in pred["top_scorelines"][:3]:
                 st.write(f"- **{sc['home_goals']}–{sc['away_goals']}** ({sc['probability']:.1%})")
             why_col, detail_col = st.columns([1, 1])
-            with why_col, st.popover("Why?", use_container_width=True):
+            with why_col, st.popover("Why?", width="stretch"):
                 xg_diff = xg_h - xg_a
                 favourite = (
                     m["home_team"] if xg_diff >= 0 else m["away_team"]
@@ -180,7 +180,7 @@ for i in range(0, len(matches), 2):
                     key=f"view-{m['match_id']}",
                     on_click=_navigate_to_detail,
                     args=(m["match_id"],),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
 st.divider()

@@ -248,7 +248,7 @@ else:
             "Match ID", list(match_range), format_func=lambda mid: f"#{mid}"
         )
         winner_pick = lock_cols[2].selectbox("Winner", teams)
-        submitted = lock_cols[3].form_submit_button("Add lock", use_container_width=True)
+        submitted = lock_cols[3].form_submit_button("Add lock", width="stretch")
         if submitted:
             st.session_state["bracket_locks"] = [
                 lock for lock in st.session_state["bracket_locks"]

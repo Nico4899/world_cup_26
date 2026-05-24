@@ -17,5 +17,6 @@ notebooks/
 dashboard/
 tests/
 *.md
+!README.md
 .env
 .env.local

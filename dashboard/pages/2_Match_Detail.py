@@ -105,7 +105,7 @@ def _render_outcome_popover(
     as headline feature" principle.
     """
     with column, st.popover(
-        f"{label}\n\n**{probability:.1%}**", use_container_width=True
+        f"{label}\n\n**{probability:.1%}**", width="stretch"
     ):
         st.markdown(f"**Why {label} = {probability:.1%}?**")
         try:

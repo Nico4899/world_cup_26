@@ -5,7 +5,7 @@ Why this source
 The Jürisoo-derived fixture list (see ``sim.fixtures``) is a list of 72 matches
 without FIFA's group letters. openfootball publishes a plain-text canonical
 schedule per tournament under ``github.com/openfootball/world-cup``; for WC
-2026 the file is at ``2026/cup.txt``. Parsing it gives us the
+2026 the file is at ``2026--usa/cup.txt``. Parsing it gives us the
 {group letter → tuple of 4 team names} mapping the simulator expects.
 
 Format
@@ -49,7 +49,7 @@ import requests_cache
 
 from wc2026.sim.fixtures import EXPECTED_GROUPS, EXPECTED_TEAMS_PER_GROUP, GroupAssignment
 
-DEFAULT_URL = "https://raw.githubusercontent.com/openfootball/world-cup/master/2026/cup.txt"
+DEFAULT_URL = "https://raw.githubusercontent.com/openfootball/world-cup/master/2026--usa/cup.txt"
 DEFAULT_TARGET = Path("data/raw/openfootball")
 DEFAULT_CACHE = Path("data/raw/openfootball/.http_cache")
 DEFAULT_CACHE_EXPIRY_SECONDS = 7 * 24 * 3600
