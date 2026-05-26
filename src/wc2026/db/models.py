@@ -11,7 +11,6 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     JSON,
-    BigInteger,
     Boolean,
     Date,
     DateTime,
@@ -21,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -317,6 +317,94 @@ class RawMatchXg(Base):
     )
 
 
+# --- W1.4 / Wave 5 personalisation (magic-link auth + follow-teams) ---------
+
+
+class User(Base):
+    """End-user account, keyed by email (magic-link auth via NextAuth).
+
+    NextAuth's Postgres adapter manages `accounts`, `sessions`, and
+    `verification_tokens` directly via SQL DDL — those tables live in
+    the same schema but are not modelled here because the application
+    layer never queries them. ``users`` IS modelled because backend
+    code joins it to ``user_followed_teams`` for the pre-kickoff
+    email job.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    email: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
+    email_verified: Mapped[datetime | None] = mapped_column(
+        "emailVerified", DateTime(timezone=True), nullable=True
+    )
+    image: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # NextAuth's PG adapter does raw SQL INSERTs into `users`, so
+    # application-only columns need a SQL-side default (or NULL). Both
+    # are populated by the adapter via UPDATE when the user signs in.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=_utcnow,
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    followed_teams: Mapped[list[UserFollowedTeam]] = relationship(
+        "UserFollowedTeam",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserFollowedTeam(Base):
+    """One row per (user, team) the user has opted to follow.
+
+    Drives the personalised landing view + the pre-kickoff email
+    previews job. The composite PK enforces uniqueness; cascading
+    delete via the relationship strips followed teams when an account
+    is removed.
+    """
+
+    __tablename__ = "user_followed_teams"
+
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    team: Mapped[str] = mapped_column(String(128), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="followed_teams")
+
+
+class SentKickoffPreview(Base):
+    """One row per (user, match) email preview already delivered.
+
+    The pre-kickoff email job is idempotent: it short-circuits when a
+    row exists for the (user, match) pair, so transient scheduler
+    re-runs don't double-mail. Cleared lazily — there's no expiry.
+    """
+
+    __tablename__ = "sent_kickoff_previews"
+
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    match_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+
 __all__ = [
     "Base",
     "MatchFeatures",
@@ -330,6 +418,9 @@ __all__ = [
     "RawSquad",
     "RawTeamAsset",
     "SchedulerJobRun",
+    "SentKickoffPreview",
     "TournamentSimRun",
     "TournamentSimTeamOutcome",
+    "User",
+    "UserFollowedTeam",
 ]
