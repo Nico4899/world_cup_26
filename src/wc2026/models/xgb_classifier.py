@@ -32,6 +32,15 @@ from xgboost import XGBClassifier
 
 # Feature columns the model consumes, in the canonical order they were trained
 # in. Stored on the artefact so prediction-time reordering is automatic.
+#
+# Wave 2 grew this list from 13 to 14: ``venue_altitude_m`` lands here so
+# the next ``xgb_refit`` picks it up. ``predict_proba`` keys off the loaded
+# artifact's own feature_names — older artifacts still work, they simply
+# ignore the new column. ``venue_wet_bulb_c`` is intentionally NOT in the
+# default training list yet (its predictive value on past tournaments is
+# uncertain pending the held-out backtest gate); it's persisted to the
+# table so future retrains can opt in by passing ``feature_names=`` with
+# the extended tuple.
 DEFAULT_FEATURE_COLUMNS: tuple[str, ...] = (
     "elo_diff",
     "fifa_rank_diff",
@@ -46,6 +55,7 @@ DEFAULT_FEATURE_COLUMNS: tuple[str, ...] = (
     "poisson_p_home",
     "poisson_p_draw",
     "poisson_p_away",
+    "venue_altitude_m",
 )
 
 # Class encoding — order matches the (home_win, draw, away_win) tuple every

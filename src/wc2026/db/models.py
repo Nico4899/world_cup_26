@@ -254,6 +254,12 @@ class MatchFeatures(Base):
     poisson_p_draw: Mapped[float | None] = mapped_column(Float, nullable=True)
     poisson_p_away: Mapped[float | None] = mapped_column(Float, nullable=True)
 
+    # W2.1 / W2.2 / W2.3 — Wave 2 enrichments. All nullable so the existing
+    # XGB v1 artifact keeps loading rows that don't yet carry them.
+    venue_altitude_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    venue_wet_bulb_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    travel_km_diff: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     source_snapshots: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     built_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow

@@ -131,7 +131,11 @@ def test_assemble_sources_returns_empty_bundle_when_nothing_on_disk(
     assert sources.squad_age_by_team is None
     assert sources.poisson_model is None
     assert sources.matches is None
-    assert sources.snapshot_meta == {}
+    # The static ``data/static/host_cities_climate.json`` ships with the
+    # repo, so ``venue_climate`` (and its meta key) is always populated.
+    # That's by design — venue metadata isn't an upstream parquet snapshot.
+    assert sources.snapshot_meta == {"venue_climate_n": 16}
+    assert sources.venue_climate is not None and len(sources.venue_climate) == 16
 
 
 def test_build_and_persist_features_writes_72_rows_when_fixtures_resolve(

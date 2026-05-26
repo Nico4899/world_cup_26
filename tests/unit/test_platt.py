@@ -12,6 +12,19 @@ import pytest
 from wc2026.eval.platt import EPS_PROB, PlattCalibrator
 
 
+@pytest.fixture(autouse=True)
+def _isolate_platt_cache():
+    """Reset the Platt module-level cache before AND after every test in
+    this file. Without it, the env-flag tests below would leak a loaded
+    calibrator into unrelated routes that read the same global state
+    (e.g. the predictions blend test in test_api_routes.py)."""
+    from wc2026.api.routes import predictions as pred_mod
+
+    pred_mod.reset_platt_cache()
+    yield
+    pred_mod.reset_platt_cache()
+
+
 def _synthetic_predictions(n: int = 200, seed: int = 0) -> pd.DataFrame:
     """A toy dataset where the raw model is mildly overconfident on home wins.
 

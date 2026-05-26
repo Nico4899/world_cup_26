@@ -25,6 +25,7 @@ from sqlalchemy.engine import Engine
 
 from wc2026.db.models import MatchFeatures
 from wc2026.db.session import get_engine, session_scope
+from wc2026.features.venue import all_venues
 from wc2026.features.build_match_features import (
     FeatureSources,
     MatchSpec,
@@ -188,6 +189,13 @@ def assemble_sources(
     except FileNotFoundError:
         matches = None
 
+    try:
+        venue_climate = all_venues()
+        if venue_climate:
+            snapshot_meta["venue_climate_n"] = len(venue_climate)
+    except (FileNotFoundError, OSError, ValueError):
+        venue_climate = None
+
     return FeatureSources(
         elo_by_team=elo,
         fifa_rank_by_team=fifa,
@@ -196,11 +204,16 @@ def assemble_sources(
         matches=matches,
         poisson_model=poisson,
         snapshot_meta=snapshot_meta,
+        venue_climate=venue_climate,
     )
 
 
 def _wc2026_match_specs() -> list[MatchSpec]:
-    """Convert the 72 group-stage fixtures into MatchSpec objects."""
+    """Convert the 72 group-stage fixtures into MatchSpec objects.
+
+    Carries ``venue_city`` whenever the fixture row knows it — the feature
+    builder uses that to emit ``venue_altitude_m`` + ``venue_wet_bulb_c``.
+    """
     scheduled = load_scheduled()
     fixtures = parse_wc2026_fixtures(scheduled)
     return [
@@ -209,6 +222,7 @@ def _wc2026_match_specs() -> list[MatchSpec]:
             home_team=m.home_team,
             away_team=m.away_team,
             neutral=m.neutral,
+            venue_city=getattr(m, "city", None),
         )
         for m in fixtures.matches
     ]

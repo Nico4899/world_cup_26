@@ -29,6 +29,7 @@ from wc2026.api.routes import (
 )
 from wc2026.features.build_match_features import FeatureSources
 from wc2026.features.match_weights import combined_weight
+from wc2026.features.venue import all_venues
 from wc2026.ingest.eloratings_scraper import load_latest_snapshot
 from wc2026.ingest.football_data_org import load_wc_kickoff_map
 from wc2026.ingest.kaggle_intl import load_played
@@ -157,6 +158,12 @@ def _build_xgb_feature_sources(
     rest-days feature. xG history and squad ages are left ``None`` until the
     relevant ingesters have populated their parquet snapshots — XGBoost
     handles the resulting NaNs natively.
+
+    Wave 2.1 hooks in the host-venue climate lookup so the feature builder
+    can emit ``venue_altitude_m`` + ``venue_wet_bulb_c`` whenever the spec
+    carries a ``venue_city``. Static lookup only — the live Open-Meteo
+    overrides go through the ``venue_wet_bulb_override`` slot that the
+    scheduler's ``climate_refresh`` job populates.
     """
     elo_by_team: dict[str, float] | None = None
     if elo_snapshot is not None and "team_name" in elo_snapshot.columns:
@@ -165,10 +172,17 @@ def _build_xgb_feature_sources(
             for name, rating in zip(elo_snapshot["team_name"], elo_snapshot["rating"], strict=True)
             if pd.notna(name) and pd.notna(rating)
         }
+    try:
+        venue_climate = all_venues()
+    except (FileNotFoundError, OSError, ValueError):
+        # The static JSON ships with the repo, but a degraded deploy
+        # (e.g. ``data/`` mount missing) shouldn't crash the API.
+        venue_climate = None
     return FeatureSources(
         elo_by_team=elo_by_team,
         matches=played_df,
         poisson_model=model,
+        venue_climate=venue_climate,
     )
 
 

@@ -104,6 +104,7 @@ def test_build_features_returns_full_schema() -> None:
         "source_snapshots",
         "venue_altitude_m",
         "venue_wet_bulb_c",
+        "travel_km_diff",
     }
     assert set(row.keys()) == expected_keys
 

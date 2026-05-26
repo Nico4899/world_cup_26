@@ -22,6 +22,7 @@ import pandas as pd
 
 from wc2026.features.host_team import is_host
 from wc2026.features.rest_days import rest_days_diff
+from wc2026.features.travel import travel_km_diff as compute_travel_km_diff
 from wc2026.features.venue import VenueClimate
 from wc2026.features.xg_form import compute_form_features, xg_form_diff
 from wc2026.models.poisson_dc import PoissonDC
@@ -81,6 +82,14 @@ class FeatureSources:
     # (e.g. live Open-Meteo forecast) is keyed by (city, match_date).
     venue_climate: dict[str, VenueClimate] | None = None
     venue_wet_bulb_override: dict[tuple[str, date], float] | None = None
+
+    # Optional match-history DataFrame carrying venue coordinates per
+    # row (columns: ``date, home_team, away_team, home_lat, home_lon``).
+    # When provided + the spec carries ``venue_city``, the orchestrator
+    # emits ``travel_km_diff``. Independent of ``matches`` because the
+    # rest-days feature only needs (date, teams) but travel needs
+    # (lat, lon) for each historical match too.
+    travel_history: pd.DataFrame | None = None
 
 
 def _diff(a: float | int | None, b: float | int | None) -> float | None:
@@ -146,6 +155,35 @@ def _squad_age_diff(spec: MatchSpec, sources: FeatureSources) -> float | None:
     h = sources.squad_age_by_team.get(spec.home_team)
     a = sources.squad_age_by_team.get(spec.away_team)
     return _diff(h, a)
+
+
+def _travel_km_diff(spec: MatchSpec, sources: FeatureSources) -> float | None:
+    """home minus away great-circle km from each team's previous venue.
+
+    Requires both:
+      - ``sources.venue_climate[spec.venue_city]`` for the current (lat, lon)
+      - ``sources.travel_history`` with venue coords on prior matches
+    Returns ``None`` when either input is missing.
+    """
+    if (
+        spec.venue_city is None
+        or sources.venue_climate is None
+        or sources.travel_history is None
+        or sources.travel_history.empty
+    ):
+        return None
+    current = sources.venue_climate.get(spec.venue_city)
+    if current is None:
+        return None
+    diff = compute_travel_km_diff(
+        sources.travel_history,
+        home=spec.home_team,
+        away=spec.away_team,
+        as_of=spec.match_date,
+        current_lat=current.lat,
+        current_lon=current.lon,
+    )
+    return None if diff is None else float(diff)
 
 
 def _venue_features(spec: MatchSpec, sources: FeatureSources) -> dict[str, float | None]:
@@ -229,6 +267,7 @@ def build_features_for_match(spec: MatchSpec, sources: FeatureSources) -> dict[s
     }
     row.update(_poisson_features(spec, sources))
     row.update(_venue_features(spec, sources))
+    row["travel_km_diff"] = _travel_km_diff(spec, sources)
     return row
 
 
