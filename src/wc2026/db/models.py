@@ -11,6 +11,7 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     Date,
     DateTime,

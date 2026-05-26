@@ -17,6 +17,30 @@ services:
       timeout: 5s
       retries: 10
 
+  # Local LLM sidecar for SHAP-to-prose match previews. Mistral 7B
+  # Instruct (q4_K_M) ~ 4 GB; CPU inference ~ 5 s per 150-token preview.
+  # The API + scheduler degrade gracefully when this container is down:
+  # `OLLAMA_BASE_URL` unset (or the container unreachable) => LLM
+  # endpoints return 503 and the dashboard hides the LLM section.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: wc2026-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: "30m"
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      # Internal-only by default; uncomment to expose on the host for
+      # interactive testing.
+      # - "11434:11434"
+      []
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   scheduler:
     build:
       context: .
@@ -46,6 +70,10 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://wc2026:wc2026_local@postgres:5432/wc2026
       LOG_LEVEL: INFO
+      # When set, the LLM preview endpoint dials this host. Leave unset
+      # to run the API with no LLM features (everything else works).
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: mistral:7b-instruct-q4_K_M
     ports:
       - "8000:8000"
     volumes:
@@ -55,6 +83,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # NB: `depends_on: condition: service_healthy` would block API
+      # startup until Ollama is healthy. We intentionally use plain
+      # `service_started` so the API comes up even when Ollama is still
+      # pulling its 4 GB model — LLM endpoints will 503 until ready.
+      ollama:
+        condition: service_started
     command:
       [
         "python", "-m", "uvicorn",
@@ -65,3 +99,4 @@ services:
 
 volumes:
   postgres_data:
+  ollama_models:
