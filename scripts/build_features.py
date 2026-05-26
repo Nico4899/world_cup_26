@@ -214,13 +214,21 @@ def _wc2026_match_specs() -> list[MatchSpec]:
     ]
 
 
+_FEATURE_COLUMNS: frozenset[str] = frozenset(c.name for c in MatchFeatures.__table__.columns)
+
+
 def _coerce_features_row(row: dict[str, Any]) -> dict[str, Any]:
     """Adapt the orchestrator's dict to the MatchFeatures column shape.
 
-    Numeric ``None``/``NaN`` are normalised to ``None``; integer flags stay int.
+    Numeric ``None``/``NaN`` are normalised to ``None``; integer flags stay
+    int. Keys that aren't yet columns on ``MatchFeatures`` (e.g. new
+    venue/altitude features waiting on an Alembic migration) are silently
+    dropped so the persistence layer doesn't break on schema lag.
     """
     coerced: dict[str, Any] = {}
     for k, v in row.items():
+        if k not in _FEATURE_COLUMNS:
+            continue
         if v is None:
             coerced[k] = None
             continue

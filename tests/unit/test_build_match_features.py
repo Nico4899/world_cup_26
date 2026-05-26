@@ -13,6 +13,7 @@ from wc2026.features.build_match_features import (
     build_features_for_match,
     build_features_for_matches,
 )
+from wc2026.features.venue import VenueClimate
 from wc2026.models.poisson_dc import PoissonDC
 
 
@@ -101,6 +102,8 @@ def test_build_features_returns_full_schema() -> None:
         "poisson_p_draw",
         "poisson_p_away",
         "source_snapshots",
+        "venue_altitude_m",
+        "venue_wet_bulb_c",
     }
     assert set(row.keys()) == expected_keys
 
@@ -114,6 +117,62 @@ def test_build_features_emits_none_for_missing_sources() -> None:
     assert row["rest_days_diff"] is None
     assert row["squad_age_diff"] is None
     assert row["poisson_p_home"] is None
+
+
+def test_venue_features_emit_none_when_no_climate_source() -> None:
+    """venue_altitude_m + venue_wet_bulb_c default to None when sources lack
+    a climate lookup OR the spec has no venue_city — the row schema stays
+    stable for the XGB consumer."""
+    spec = MatchSpec(date(2026, 6, 11), "Argentina", "France", venue_city=None)
+    row = build_features_for_match(spec, FeatureSources())
+    assert row["venue_altitude_m"] is None
+    assert row["venue_wet_bulb_c"] is None
+
+
+def test_venue_features_emitted_when_climate_source_present() -> None:
+    azteca = VenueClimate(
+        city="Mexico City",
+        country="Mexico",
+        lat=19.3,
+        lon=-99.15,
+        altitude_m=2240,
+        climate_zone="subtropical_highland",
+        typical_kickoff_temp_c=22.0,
+        typical_kickoff_wet_bulb_c=14.0,
+    )
+    sources = FeatureSources(venue_climate={"Mexico City": azteca})
+    spec = MatchSpec(
+        date(2026, 6, 11),
+        "Mexico",
+        "Saudi Arabia",
+        venue_city="Mexico City",
+    )
+    row = build_features_for_match(spec, sources)
+    assert row["venue_altitude_m"] == 2240.0
+    assert row["venue_wet_bulb_c"] == 14.0
+
+
+def test_venue_wet_bulb_override_takes_precedence() -> None:
+    """A per-match (city, date) override (e.g. live Open-Meteo forecast)
+    replaces the static climate-median fallback."""
+    miami = VenueClimate(
+        city="Miami",
+        country="United States",
+        lat=25.96,
+        lon=-80.24,
+        altitude_m=2,
+        climate_zone="tropical_monsoon",
+        typical_kickoff_temp_c=30.0,
+        typical_kickoff_wet_bulb_c=27.0,
+    )
+    match_date = date(2026, 6, 15)
+    sources = FeatureSources(
+        venue_climate={"Miami": miami},
+        venue_wet_bulb_override={("Miami", match_date): 29.3},
+    )
+    spec = MatchSpec(match_date, "Argentina", "Mexico", venue_city="Miami")
+    row = build_features_for_match(spec, sources)
+    assert row["venue_wet_bulb_c"] == 29.3
 
 
 def test_neutral_and_host_flags_set_correctly() -> None:

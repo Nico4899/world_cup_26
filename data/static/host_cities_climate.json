@@ -1,0 +1,170 @@
+{
+  "_meta": {
+    "description": "Static metadata for the 16 FIFA WC 2026 host venues. Altitudes are venue-stadium values (not city centroids); climate normals are mean daily June–July highs.",
+    "altitude_source": "stadium coordinate + USGS / NRCAN / INEGI digital elevation lookups; rounded to nearest 5 m",
+    "climate_source": "NOAA / Environment Canada / SMN June–July averages",
+    "wet_bulb_note": "wet_bulb_c is a typical kickoff wet-bulb estimate; the venue.py helper fetches a live forecast from Open-Meteo for kickoff_date and falls back to this median when the API is unreachable."
+  },
+  "cities": [
+    {
+      "city": "Atlanta",
+      "country": "United States",
+      "lat": 33.7553,
+      "lon": -84.4006,
+      "altitude_m": 320,
+      "climate_zone": "humid_subtropical",
+      "typical_kickoff_temp_c": 28.0,
+      "typical_kickoff_wet_bulb_c": 23.0
+    },
+    {
+      "city": "Boston",
+      "country": "United States",
+      "lat": 42.0909,
+      "lon": -71.2643,
+      "altitude_m": 30,
+      "climate_zone": "humid_continental",
+      "typical_kickoff_temp_c": 24.0,
+      "typical_kickoff_wet_bulb_c": 19.0
+    },
+    {
+      "city": "Dallas",
+      "country": "United States",
+      "lat": 32.7473,
+      "lon": -97.0945,
+      "altitude_m": 200,
+      "climate_zone": "humid_subtropical",
+      "typical_kickoff_temp_c": 32.0,
+      "typical_kickoff_wet_bulb_c": 25.0
+    },
+    {
+      "city": "Houston",
+      "country": "United States",
+      "lat": 29.6847,
+      "lon": -95.4107,
+      "altitude_m": 15,
+      "climate_zone": "humid_subtropical",
+      "typical_kickoff_temp_c": 30.0,
+      "typical_kickoff_wet_bulb_c": 26.0
+    },
+    {
+      "city": "Kansas City",
+      "country": "United States",
+      "lat": 39.0489,
+      "lon": -94.4839,
+      "altitude_m": 290,
+      "climate_zone": "humid_continental",
+      "typical_kickoff_temp_c": 28.0,
+      "typical_kickoff_wet_bulb_c": 22.0
+    },
+    {
+      "city": "Los Angeles",
+      "country": "United States",
+      "lat": 33.9535,
+      "lon": -118.3392,
+      "altitude_m": 70,
+      "climate_zone": "mediterranean",
+      "typical_kickoff_temp_c": 24.0,
+      "typical_kickoff_wet_bulb_c": 18.0
+    },
+    {
+      "city": "Miami",
+      "country": "United States",
+      "lat": 25.958,
+      "lon": -80.2389,
+      "altitude_m": 2,
+      "climate_zone": "tropical_monsoon",
+      "typical_kickoff_temp_c": 30.0,
+      "typical_kickoff_wet_bulb_c": 27.0
+    },
+    {
+      "city": "New York/New Jersey",
+      "country": "United States",
+      "lat": 40.8135,
+      "lon": -74.0745,
+      "altitude_m": 2,
+      "climate_zone": "humid_subtropical",
+      "typical_kickoff_temp_c": 26.0,
+      "typical_kickoff_wet_bulb_c": 22.0
+    },
+    {
+      "city": "Philadelphia",
+      "country": "United States",
+      "lat": 39.9008,
+      "lon": -75.1675,
+      "altitude_m": 12,
+      "climate_zone": "humid_subtropical",
+      "typical_kickoff_temp_c": 26.0,
+      "typical_kickoff_wet_bulb_c": 22.0
+    },
+    {
+      "city": "San Francisco Bay Area",
+      "country": "United States",
+      "lat": 37.403,
+      "lon": -121.97,
+      "altitude_m": 8,
+      "climate_zone": "mediterranean",
+      "typical_kickoff_temp_c": 20.0,
+      "typical_kickoff_wet_bulb_c": 15.0
+    },
+    {
+      "city": "Seattle",
+      "country": "United States",
+      "lat": 47.5952,
+      "lon": -122.3316,
+      "altitude_m": 5,
+      "climate_zone": "oceanic",
+      "typical_kickoff_temp_c": 21.0,
+      "typical_kickoff_wet_bulb_c": 15.0
+    },
+    {
+      "city": "Mexico City",
+      "country": "Mexico",
+      "lat": 19.3029,
+      "lon": -99.1505,
+      "altitude_m": 2240,
+      "climate_zone": "subtropical_highland",
+      "typical_kickoff_temp_c": 22.0,
+      "typical_kickoff_wet_bulb_c": 14.0
+    },
+    {
+      "city": "Guadalajara",
+      "country": "Mexico",
+      "lat": 20.6818,
+      "lon": -103.4626,
+      "altitude_m": 1566,
+      "climate_zone": "subtropical_highland",
+      "typical_kickoff_temp_c": 25.0,
+      "typical_kickoff_wet_bulb_c": 17.0
+    },
+    {
+      "city": "Monterrey",
+      "country": "Mexico",
+      "lat": 25.6691,
+      "lon": -100.2453,
+      "altitude_m": 540,
+      "climate_zone": "humid_subtropical",
+      "typical_kickoff_temp_c": 32.0,
+      "typical_kickoff_wet_bulb_c": 23.0
+    },
+    {
+      "city": "Toronto",
+      "country": "Canada",
+      "lat": 43.6332,
+      "lon": -79.4196,
+      "altitude_m": 76,
+      "climate_zone": "humid_continental",
+      "typical_kickoff_temp_c": 23.0,
+      "typical_kickoff_wet_bulb_c": 18.0
+    },
+    {
+      "city": "Vancouver",
+      "country": "Canada",
+      "lat": 49.2767,
+      "lon": -123.1119,
+      "altitude_m": 5,
+      "climate_zone": "oceanic",
+      "typical_kickoff_temp_c": 20.0,
+      "typical_kickoff_wet_bulb_c": 14.0
+    }
+  ]
+}

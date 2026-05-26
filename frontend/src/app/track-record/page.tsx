@@ -46,6 +46,19 @@ type HistoricalResponse = {
   } | null;
 };
 
+type BookmakerBenchmarkResponse = {
+  as_of: string;
+  cutoff: string;
+  n_train: number;
+  n_test: number;
+  n_scored: number;
+  poisson_log_loss: number | null;
+  bookmaker_log_loss: number | null;
+  delta: number | null;
+  leagues: [string, string][];
+  half_life_days: number;
+};
+
 const fmtMetric = (n: number | null) => (n == null ? "—" : n.toFixed(4));
 
 export default async function TrackRecordPage({
@@ -58,14 +71,20 @@ export default async function TrackRecordPage({
 
   let tr: WC2026TrackRecord | null = null;
   let historical: HistoricalResponse | null = null;
+  let bookmaker: BookmakerBenchmarkResponse | null = null;
   let unreachable = false;
   try {
-    [tr, historical] = await Promise.all([
+    [tr, historical, bookmaker] = await Promise.all([
       apiGet<WC2026TrackRecord>("/api/v1/track-record/wc2026", undefined, {
         revalidate: 120,
       }),
       apiGet<HistoricalResponse>(
         `/api/v1/track-record/historical/${tournament}`,
+        undefined,
+        { revalidate: 86_400 },
+      ).catch(() => null),
+      apiGet<BookmakerBenchmarkResponse>(
+        "/api/v1/track-record/bookmaker-benchmark",
         undefined,
         { revalidate: 86_400 },
       ).catch(() => null),
@@ -201,6 +220,57 @@ export default async function TrackRecordPage({
               writes here once a fixture has a FT_WHISTLE row.
             </p>
           )}
+        </section>
+      ) : null}
+
+      {bookmaker ? (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">
+            Bookmaker benchmark — club football proxy
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            We don&apos;t hold a WC-specific closing-odds corpus, so this is a
+            structural check: PoissonDC vs Bet365 / Pinnacle closing odds on
+            football-data.co.uk league CSVs (held-out cutoff{" "}
+            {bookmaker.cutoff}, {bookmaker.n_scored.toLocaleString()} scored
+            matches across {bookmaker.leagues.length} league-seasons). Lower
+            is better; bookmakers consume injury news + market signals the
+            model can&apos;t see, so a small positive delta is the realistic
+            ceiling.
+          </p>
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <MetricCard
+              label={<>PoissonDC <HelpDot term="log-loss" /></>}
+              value={
+                bookmaker.poisson_log_loss == null
+                  ? "—"
+                  : bookmaker.poisson_log_loss.toFixed(4)
+              }
+              help={`Half-life ${bookmaker.half_life_days.toFixed(0)} days · club corpus`}
+            />
+            <MetricCard
+              label="Bet365 / Pinnacle"
+              value={
+                bookmaker.bookmaker_log_loss == null
+                  ? "—"
+                  : bookmaker.bookmaker_log_loss.toFixed(4)
+              }
+              help="Closing-odds-implied probabilities (vig-stripped)"
+            />
+            <MetricCard
+              label="Δ (model − book)"
+              value={
+                bookmaker.delta == null
+                  ? "—"
+                  : (bookmaker.delta > 0 ? "+" : "") + bookmaker.delta.toFixed(4)
+              }
+              help={
+                bookmaker.delta != null && bookmaker.delta < 0
+                  ? "Negative = model beats the market"
+                  : "Positive = market beats the model"
+              }
+            />
+          </div>
         </section>
       ) : null}
 

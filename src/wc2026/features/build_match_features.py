@@ -22,6 +22,7 @@ import pandas as pd
 
 from wc2026.features.host_team import is_host
 from wc2026.features.rest_days import rest_days_diff
+from wc2026.features.venue import VenueClimate
 from wc2026.features.xg_form import compute_form_features, xg_form_diff
 from wc2026.models.poisson_dc import PoissonDC
 
@@ -33,12 +34,17 @@ class MatchSpec:
     ``neutral`` mirrors the convention in PoissonDC.expected_goals — True
     when neither team is the host of record (e.g. World Cup matches at a
     non-host venue).
+
+    ``venue_city`` is optional; when set + the matching venue is in
+    :class:`FeatureSources.venue_climate`, the orchestrator emits
+    ``venue_altitude_m`` and ``venue_wet_bulb_c`` columns.
     """
 
     match_date: date
     home_team: str
     away_team: str
     neutral: bool = False
+    venue_city: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +74,13 @@ class FeatureSources:
     poisson_model: PoissonDC | None = None
     snapshot_meta: dict[str, Any] = field(default_factory=dict)
     xg_form_window: int = 5
+    # Optional host-venue climate lookup. When provided + the spec carries
+    # ``venue_city``, the orchestrator emits ``venue_altitude_m`` +
+    # ``venue_wet_bulb_c`` columns. Wet-bulb values are typically the
+    # ``typical_kickoff_wet_bulb_c`` static normal; a per-match override
+    # (e.g. live Open-Meteo forecast) is keyed by (city, match_date).
+    venue_climate: dict[str, VenueClimate] | None = None
+    venue_wet_bulb_override: dict[tuple[str, date], float] | None = None
 
 
 def _diff(a: float | int | None, b: float | int | None) -> float | None:
@@ -135,6 +148,30 @@ def _squad_age_diff(spec: MatchSpec, sources: FeatureSources) -> float | None:
     return _diff(h, a)
 
 
+def _venue_features(spec: MatchSpec, sources: FeatureSources) -> dict[str, float | None]:
+    """Altitude + wet-bulb for ``spec.venue_city``.
+
+    Returns ``{None, None}`` when either the spec lacks a venue or the
+    sources lack a climate lookup — keeping every row schema-stable.
+    """
+    if spec.venue_city is None or sources.venue_climate is None:
+        return {"venue_altitude_m": None, "venue_wet_bulb_c": None}
+    entry = sources.venue_climate.get(spec.venue_city)
+    if entry is None:
+        return {"venue_altitude_m": None, "venue_wet_bulb_c": None}
+    if sources.venue_wet_bulb_override is not None:
+        override = sources.venue_wet_bulb_override.get((spec.venue_city, spec.match_date))
+        wet_bulb: float | None = (
+            float(override) if override is not None else entry.typical_kickoff_wet_bulb_c
+        )
+    else:
+        wet_bulb = entry.typical_kickoff_wet_bulb_c
+    return {
+        "venue_altitude_m": float(entry.altitude_m),
+        "venue_wet_bulb_c": wet_bulb,
+    }
+
+
 def _poisson_features(spec: MatchSpec, sources: FeatureSources) -> dict[str, float | None]:
     if sources.poisson_model is None:
         return {
@@ -191,6 +228,7 @@ def build_features_for_match(spec: MatchSpec, sources: FeatureSources) -> dict[s
         "source_snapshots": dict(sources.snapshot_meta) or None,
     }
     row.update(_poisson_features(spec, sources))
+    row.update(_venue_features(spec, sources))
     return row
 
 
