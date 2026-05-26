@@ -57,9 +57,13 @@ def test_monthly_fifa_ranking_job_pins_day_one():
     assert by_name["fifa_ranking_refresh"].day_of_week is None
 
 
-def test_manual_only_specs_include_squads_and_statsbomb():
+def test_manual_only_specs_include_squads_statsbomb_and_transfermarkt():
     names = {s.name for s in job_mod.MANUAL_ONLY_JOB_SPECS}
-    assert names == {"wikipedia_squads_refresh", "statsbomb_refresh"}
+    assert names == {
+        "wikipedia_squads_refresh",
+        "statsbomb_refresh",
+        "transfermarkt_refresh",
+    }
 
 
 def test_job_registry_covers_cron_and_manual_jobs():

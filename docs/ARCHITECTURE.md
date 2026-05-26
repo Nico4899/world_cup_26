@@ -176,7 +176,7 @@ flowchart LR
 
 ## What is intentionally not here (honest scope)
 
-- **Transfermarkt squad market value** — fragile, legal grey area. Squad age from Wikipedia suffices.
+- **Transfermarkt squad market value** — opt-in research feature, manual-only. The polite scraper in [`src/wc2026/ingest/transfermarkt.py`](../src/wc2026/ingest/transfermarkt.py) consults `robots.txt` before every request, caches to SQLite for 7 days, and writes one dated parquet snapshot. **Off by default** in the production model: gated by a ≥0.005 held-out Brier improvement on the WC 2018 + WC 2022 hindcasts before the feature is added to the XGB blend. T&Cs prohibit commercial redistribution — the raw Euro values stay on operator disk, only derived features (log market-value diff) ever reach the dashboard.
 - **FIFA.com unofficial JSON** — T&Cs prohibit redistribution; openfootball + football-data.org cover the fixture/group needs.
 - **Paid data feeds** (Opta, Sportradar, Enetpulse, paid StatsBomb) — free corpus is sufficient for tournament-level prediction.
 - **Bidirectional WebSockets** — SSE is one-way (server → client). The dashboard polls + SSE-consumes, never sends.

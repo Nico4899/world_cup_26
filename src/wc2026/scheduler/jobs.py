@@ -575,6 +575,34 @@ JOB_SPECS: tuple[JobSpec, ...] = (
 )
 
 
+def _job_transfermarkt_refresh() -> None:
+    """One-shot Transfermarkt squad-market-value scrape — operator-triggered.
+
+    The team→URL map lives in ``data/wc2026_transfermarkt_pages.json``
+    (same operator-editable pattern as the Wikipedia squad pages). The
+    scraper consults ``robots.txt`` before every request and writes one
+    dated parquet snapshot under ``data/raw/transfermarkt/``.
+
+    Manual-only by design: Transfermarkt's T&Cs prohibit commercial
+    redistribution, and the scraper is back from "deferred" only as an
+    opt-in research feature, gated by the held-out Brier improvement
+    test in :mod:`scripts.backtest_against_bookmaker`.
+    """
+    import json  # noqa: PLC0415
+    from wc2026.ingest.transfermarkt import (  # noqa: PLC0415
+        fetch_squad_market_values,
+    )
+
+    cfg = Path("data/wc2026_transfermarkt_pages.json")
+    if not cfg.exists():
+        logger.warning(
+            "data/wc2026_transfermarkt_pages.json missing — skipping transfermarkt scrape"
+        )
+        return
+    team_urls = json.loads(cfg.read_text(encoding="utf-8"))
+    fetch_squad_market_values(team_urls)
+
+
 MANUAL_ONLY_JOB_SPECS: tuple[JobSpec, ...] = (
     # Squads update on no regular cadence; coaches finalise rosters at irregular
     # intervals before the tournament. Triggered manually from the Operator page.
@@ -590,6 +618,15 @@ MANUAL_ONLY_JOB_SPECS: tuple[JobSpec, ...] = (
         hour=-1,
         minute=-1,
         func=_job_statsbomb_refresh,
+    ),
+    # Transfermarkt squad market value — manual-only (T&Cs + bias caveats).
+    # Gated by ≥0.005 Brier improvement on the holdout before any feature
+    # flip in production.
+    JobSpec(
+        name="transfermarkt_refresh",
+        hour=-1,
+        minute=-1,
+        func=_job_transfermarkt_refresh,
     ),
 )
 
