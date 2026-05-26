@@ -91,6 +91,12 @@ class FeatureSources:
     # (lat, lon) for each historical match too.
     travel_history: pd.DataFrame | None = None
 
+    # Optional ``{team_name: squad_market_value_eur}`` lookup, sourced
+    # from the manual ``transfermarkt_refresh`` job's parquet snapshot.
+    # When provided, the orchestrator emits ``log_market_value_diff``.
+    # ``None`` for either side ⇒ feature is ``None``.
+    market_value_by_team: dict[str, float] | None = None
+
 
 def _diff(a: float | int | None, b: float | int | None) -> float | None:
     """``a - b``, or ``None`` if either side is ``None``/``NaN``."""
@@ -155,6 +161,30 @@ def _squad_age_diff(spec: MatchSpec, sources: FeatureSources) -> float | None:
     h = sources.squad_age_by_team.get(spec.home_team)
     a = sources.squad_age_by_team.get(spec.away_team)
     return _diff(h, a)
+
+
+def _log_market_value_diff(spec: MatchSpec, sources: FeatureSources) -> float | None:
+    """``log(home_market_value_eur) - log(away_market_value_eur)``.
+
+    Returns ``None`` when the lookup is missing OR either side has no
+    entry OR either value is ``<= 0`` (defensive against bad data).
+    """
+    if not sources.market_value_by_team:
+        return None
+    h = sources.market_value_by_team.get(spec.home_team)
+    a = sources.market_value_by_team.get(spec.away_team)
+    if h is None or a is None:
+        return None
+    try:
+        h_f = float(h)
+        a_f = float(a)
+    except (TypeError, ValueError):
+        return None
+    if h_f <= 0.0 or a_f <= 0.0:
+        return None
+    import math  # noqa: PLC0415
+
+    return math.log(h_f) - math.log(a_f)
 
 
 def _travel_km_diff(spec: MatchSpec, sources: FeatureSources) -> float | None:
@@ -268,6 +298,7 @@ def build_features_for_match(spec: MatchSpec, sources: FeatureSources) -> dict[s
     row.update(_poisson_features(spec, sources))
     row.update(_venue_features(spec, sources))
     row["travel_km_diff"] = _travel_km_diff(spec, sources)
+    row["log_market_value_diff"] = _log_market_value_diff(spec, sources)
     return row
 
 

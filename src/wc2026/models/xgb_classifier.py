@@ -56,6 +56,7 @@ DEFAULT_FEATURE_COLUMNS: tuple[str, ...] = (
     "poisson_p_draw",
     "poisson_p_away",
     "venue_altitude_m",
+    "travel_km_diff",
 )
 
 # Class encoding — order matches the (home_win, draw, away_win) tuple every

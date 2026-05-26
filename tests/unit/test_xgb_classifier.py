@@ -46,9 +46,11 @@ def _synthetic_corpus(n: int = 600, seed: int = 0) -> tuple[pd.DataFrame, np.nda
         np.where(logits_a + rng_label > 1.0, CLASS_AWAY, CLASS_DRAW),
     ).astype(int)
 
-    # Venue altitude — included as a low-signal column so XGB tests stay
-    # forward-compatible with the W2.1 DEFAULT_FEATURE_COLUMNS expansion.
+    # Venue altitude + travel-km diff — included as low-signal columns so
+    # XGB tests stay forward-compatible with the W2.1 + W2.2
+    # DEFAULT_FEATURE_COLUMNS expansion.
     venue_altitude_m = rng.uniform(0.0, 2500.0, size=n)
+    travel_km_diff = rng.normal(0.0, 1500.0, size=n)
     X = pd.DataFrame(
         {
             "elo_diff": elo_diff,
@@ -65,6 +67,7 @@ def _synthetic_corpus(n: int = 600, seed: int = 0) -> tuple[pd.DataFrame, np.nda
             "poisson_p_draw": poisson_p_draw,
             "poisson_p_away": poisson_p_away,
             "venue_altitude_m": venue_altitude_m,
+            "travel_km_diff": travel_km_diff,
         }
     )
     return X, y

@@ -94,6 +94,32 @@ def _load_fifa_rank_by_team(
     return by_team, snapshot_date
 
 
+def _load_market_value_by_team() -> tuple[dict[str, float] | None, str | None]:
+    """Load the latest Transfermarkt squad market-value parquet, if one exists.
+
+    Returns ``(None, None)`` when no snapshot has been written yet — the
+    manual ``transfermarkt_refresh`` job is the only producer, so a fresh
+    install will see this branch until the operator runs it.
+    """
+    from wc2026.ingest.transfermarkt import DEFAULT_TARGET, load_latest_snapshot  # noqa: PLC0415
+
+    try:
+        df = load_latest_snapshot(DEFAULT_TARGET)
+    except FileNotFoundError:
+        return None, None
+    if "team_name" not in df.columns or "squad_market_value_eur" not in df.columns:
+        return None, None
+    by_team = {
+        str(t): float(v)
+        for t, v in zip(df["team_name"], df["squad_market_value_eur"], strict=True)
+        if pd.notna(t) and pd.notna(v) and float(v) > 0.0
+    }
+    if not by_team:
+        return None, None
+    snapshot_date = pd.Timestamp(df["snapshot_date"].iloc[0]).date().isoformat()
+    return by_team, snapshot_date
+
+
 def _load_xg_history() -> pd.DataFrame | None:
     """Aggregate per-match per-team xG from the StatsBomb shots corpus on disk."""
     shots = load_shots_corpus()
@@ -196,6 +222,10 @@ def assemble_sources(
     except (FileNotFoundError, OSError, ValueError):
         venue_climate = None
 
+    market_value_by_team, market_value_snapshot = _load_market_value_by_team()
+    if market_value_snapshot:
+        snapshot_meta["transfermarkt_snapshot"] = market_value_snapshot
+
     return FeatureSources(
         elo_by_team=elo,
         fifa_rank_by_team=fifa,
@@ -205,6 +235,7 @@ def assemble_sources(
         poisson_model=poisson,
         snapshot_meta=snapshot_meta,
         venue_climate=venue_climate,
+        market_value_by_team=market_value_by_team,
     )
 
 

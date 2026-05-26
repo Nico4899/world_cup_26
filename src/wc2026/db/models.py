@@ -259,6 +259,7 @@ class MatchFeatures(Base):
     venue_altitude_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     venue_wet_bulb_c: Mapped[float | None] = mapped_column(Float, nullable=True)
     travel_km_diff: Mapped[float | None] = mapped_column(Float, nullable=True)
+    log_market_value_diff: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     source_snapshots: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     built_at: Mapped[datetime] = mapped_column(

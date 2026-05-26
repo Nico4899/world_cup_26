@@ -6,6 +6,7 @@ import math
 from datetime import date
 
 import pandas as pd
+import pytest
 
 from wc2026.features.build_match_features import (
     FeatureSources,
@@ -105,6 +106,7 @@ def test_build_features_returns_full_schema() -> None:
         "venue_altitude_m",
         "venue_wet_bulb_c",
         "travel_km_diff",
+        "log_market_value_diff",
     }
     assert set(row.keys()) == expected_keys
 
@@ -151,6 +153,44 @@ def test_venue_features_emitted_when_climate_source_present() -> None:
     row = build_features_for_match(spec, sources)
     assert row["venue_altitude_m"] == 2240.0
     assert row["venue_wet_bulb_c"] == 14.0
+
+
+def test_log_market_value_diff_none_when_lookup_missing() -> None:
+    spec = MatchSpec(date(2026, 6, 11), "Argentina", "Saudi Arabia")
+    row = build_features_for_match(spec, FeatureSources())
+    assert row["log_market_value_diff"] is None
+
+
+def test_log_market_value_diff_computed_when_both_sides_present() -> None:
+    import math
+
+    sources = FeatureSources(
+        market_value_by_team={
+            "Argentina": 8.0e8,  # 800M EUR
+            "Saudi Arabia": 4.0e7,  # 40M EUR
+        }
+    )
+    spec = MatchSpec(date(2026, 6, 11), "Argentina", "Saudi Arabia")
+    row = build_features_for_match(spec, sources)
+    expected = math.log(8.0e8) - math.log(4.0e7)
+    assert row["log_market_value_diff"] == pytest.approx(expected)
+
+
+def test_log_market_value_diff_none_when_one_side_missing() -> None:
+    sources = FeatureSources(market_value_by_team={"Argentina": 8.0e8})
+    spec = MatchSpec(date(2026, 6, 11), "Argentina", "Saudi Arabia")
+    row = build_features_for_match(spec, sources)
+    assert row["log_market_value_diff"] is None
+
+
+def test_log_market_value_diff_none_on_non_positive_value() -> None:
+    """Bad data (zero or negative market value) yields None, not -inf."""
+    sources = FeatureSources(
+        market_value_by_team={"Argentina": 0.0, "Saudi Arabia": 4.0e7}
+    )
+    spec = MatchSpec(date(2026, 6, 11), "Argentina", "Saudi Arabia")
+    row = build_features_for_match(spec, sources)
+    assert row["log_market_value_diff"] is None
 
 
 def test_venue_wet_bulb_override_takes_precedence() -> None:

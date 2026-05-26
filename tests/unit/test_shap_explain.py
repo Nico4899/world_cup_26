@@ -47,11 +47,12 @@ def _synthetic_corpus(n: int = 400, seed: int = 0) -> tuple[pd.DataFrame, np.nda
             "poisson_p_home": poisson_p_home,
             "poisson_p_draw": poisson_p_draw,
             "poisson_p_away": poisson_p_away,
-            # W2.1 — included so the synthetic dataset matches the
+            # W2.1 / W2.2 — included so the synthetic dataset matches the
             # canonical DEFAULT_FEATURE_COLUMNS list. Zero variance is
-            # intentional; we don't want SHAP attributing signal to it
+            # intentional; we don't want SHAP attributing signal to them
             # in tests.
             "venue_altitude_m": np.zeros(n),
+            "travel_km_diff": np.zeros(n),
         }
     )
     return X, y
