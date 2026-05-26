@@ -76,9 +76,12 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Read-only mount: the API consumes Jürisoo CSV, Elo Parquet, and the
-      # latest model artefact written by the scheduler.
-      - ./data:/app/data:ro
+      # Read-write: the API consumes Jürisoo CSV, Elo Parquet, and the latest
+      # model artefact written by the scheduler — and *also* writes to data/
+      # when the operator UI's "Run job" endpoint executes a job in-process
+      # via BackgroundTasks. Keeping this in sync with the scheduler mount
+      # avoids EROFS on manual triggers.
+      - ./data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
