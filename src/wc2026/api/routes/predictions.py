@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from datetime import date as date_cls
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from wc2026.api.dependencies import get_feature_sources, get_model, get_xgb_model
@@ -15,6 +19,7 @@ from wc2026.api.schemas import (
     PredictionResponse,
     Scoreline,
 )
+from wc2026.eval.platt import PlattCalibrator
 from wc2026.features.build_match_features import (
     FeatureSources,
     MatchSpec,
@@ -30,11 +35,94 @@ from wc2026.models.xgb_classifier import (
     XgbMatchModel,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/v1/predictions")
 
 DEFAULT_TOP_SCORELINES = 5
 STATUS_UNPROCESSABLE = 422  # Starlette deprecated the named constant
 DEFAULT_BLEND_WEIGHT = 0.5
+
+PLATT_ARTIFACT_PATH = Path("data/artifacts/platt/latest.npz")
+PLATT_ENV_FLAG = "WC2026_USE_PLATT"
+
+# Module-level cache: ``None`` means "not yet attempted", ``False`` means
+# "tried + failed (env off / artifact missing / load error)", and a
+# fitted calibrator means "live". Restart the process to pick up a freshly
+# refit artifact.
+_PLATT_CACHE: PlattCalibrator | bool | None = None
+
+
+def _flag_on() -> bool:
+    """``True`` when ``WC2026_USE_PLATT`` is set to a truthy value."""
+    return os.environ.get(PLATT_ENV_FLAG, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def _get_platt() -> PlattCalibrator | None:
+    """Load + cache the Platt calibrator. Returns ``None`` when disabled."""
+    global _PLATT_CACHE
+    if _PLATT_CACHE is False:
+        return None
+    if isinstance(_PLATT_CACHE, PlattCalibrator):
+        return _PLATT_CACHE
+    # First call: decide.
+    if not _flag_on():
+        _PLATT_CACHE = False
+        return None
+    if not PLATT_ARTIFACT_PATH.exists():
+        logger.warning(
+            "%s=1 but artifact missing at %s; Platt calibration disabled",
+            PLATT_ENV_FLAG,
+            PLATT_ARTIFACT_PATH,
+        )
+        _PLATT_CACHE = False
+        return None
+    try:
+        cal = PlattCalibrator.load(PLATT_ARTIFACT_PATH)
+    except (OSError, ValueError, KeyError) as exc:
+        logger.warning("failed to load Platt calibrator: %s; falling back to raw probs", exc)
+        _PLATT_CACHE = False
+        return None
+    _PLATT_CACHE = cal
+    logger.info("Platt calibrator loaded (n_train=%d)", cal.n_train_)
+    return cal
+
+
+def reset_platt_cache() -> None:
+    """Clear the lazy-loaded cache (tests + hot-swap after a refit)."""
+    global _PLATT_CACHE
+    _PLATT_CACHE = None
+
+
+def _maybe_apply_platt(outcome: OutcomeProbabilities) -> OutcomeProbabilities:
+    """Pass ``outcome`` through the Platt calibrator if it's loaded.
+
+    Pass-through (returns input unchanged) when the env flag is off, the
+    artifact is missing, or loading fails.
+    """
+    cal = _get_platt()
+    if cal is None:
+        return outcome
+    df = pd.DataFrame(
+        [
+            {
+                "p_home": outcome.home_win,
+                "p_draw": outcome.draw,
+                "p_away": outcome.away_win,
+            }
+        ]
+    )
+    calibrated = cal.transform(df).iloc[0]
+    return OutcomeProbabilities(
+        home_win=float(calibrated["p_home"]),
+        draw=float(calibrated["p_draw"]),
+        away_win=float(calibrated["p_away"]),
+    )
 
 
 def _xgb_outcome(
@@ -144,6 +232,8 @@ def build_prediction(
                 weight=blend_weight,
             )
             response_outcome = OutcomeProbabilities(**blended_dict)
+    # Optional Platt post-processing — off by default, gated by WC2026_USE_PLATT.
+    response_outcome = _maybe_apply_platt(response_outcome)
     return PredictionResponse(
         home_team=home,
         away_team=away,
