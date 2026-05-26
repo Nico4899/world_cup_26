@@ -23,10 +23,12 @@ latency without it.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
 from datetime import date
+from pathlib import Path as FilePath
 from typing import Any
 
 import pandas as pd
@@ -248,6 +250,65 @@ def historical_track_record(
     with _HISTORICAL_CACHE_LOCK:
         _HISTORICAL_CACHE[tournament] = (now, payload)
     return payload
+
+
+# --- Club-football bookmaker benchmark ------------------------------------
+
+BOOKMAKER_BENCHMARK_PATH = FilePath("data/artifacts/bookmaker_benchmark/latest.json")
+
+
+class BookmakerBenchmark(BaseModel):
+    """Club-football PoissonDC vs Bet365/Pinnacle closing odds.
+
+    The corpus is ``football-data.co.uk`` league CSVs (no WC odds in any
+    free aggregate), so this is a *structural* check on the model
+    architecture, not a WC-specific calibration claim. The
+    ``cite`` on the WC reference (literature constants) covers that gap.
+    """
+
+    as_of: str = Field(description="ISO-8601 timestamp the artifact was written.")
+    cutoff: str = Field(description="Holdout cutoff date (matches on/after are test set).")
+    n_train: int
+    n_test: int
+    n_scored: int
+    poisson_log_loss: float | None
+    bookmaker_log_loss: float | None
+    delta: float | None = Field(
+        description="Our PoissonDC log-loss minus the bookmaker log-loss. Negative = we beat the market.",
+    )
+    leagues: list[tuple[str, str]] = Field(
+        description="(season_code, league_code) pairs included in the corpus.",
+    )
+    half_life_days: float
+
+
+@router.get(
+    "/bookmaker-benchmark",
+    response_model=BookmakerBenchmark,
+    description=(
+        "Reads the artifact written by ``scripts/backtest_against_bookmaker.py`` "
+        "and exposes it to the dashboard. Returns 404 when the artifact is "
+        "missing (the script hasn't been run yet)."
+    ),
+)
+def bookmaker_benchmark() -> BookmakerBenchmark:
+    if not BOOKMAKER_BENCHMARK_PATH.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "bookmaker benchmark artifact not on disk; run "
+                "`uv run python scripts/backtest_against_bookmaker.py` to generate it."
+            ),
+        )
+    try:
+        payload = json.loads(BOOKMAKER_BENCHMARK_PATH.read_text())
+    except json.JSONDecodeError as exc:
+        logger.exception("bookmaker benchmark artifact is not valid JSON")
+        raise HTTPException(
+            status_code=503,
+            detail=f"bookmaker benchmark artifact malformed: {exc.msg}",
+        ) from exc
+    return BookmakerBenchmark(**payload)
 
 
 __all__ = ["router"]

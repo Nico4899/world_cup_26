@@ -1505,3 +1505,55 @@ def test_historical_track_record_cache_short_circuits(client: TestClient, monkey
     assert r1.status_code == r2.status_code == 200
     assert r1.json() == r2.json()
     assert calls["n"] == 1  # second request served from the cache
+
+
+# --- /api/v1/track-record/bookmaker-benchmark ---------------------------------
+
+
+def test_bookmaker_benchmark_404_when_artifact_missing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: object
+) -> None:
+    from pathlib import Path
+
+    from wc2026.api.routes import track_record as tr
+
+    monkeypatch.setattr(tr, "BOOKMAKER_BENCHMARK_PATH", Path(tmp_path) / "absent.json")  # type: ignore[arg-type]
+    r = client.get("/api/v1/track-record/bookmaker-benchmark")
+    assert r.status_code == 404
+    assert "missing" in r.json()["detail"] or "not on disk" in r.json()["detail"]
+
+
+def test_bookmaker_benchmark_200_returns_artifact_shape(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: object
+) -> None:
+    import json
+    from pathlib import Path
+
+    from wc2026.api.routes import track_record as tr
+
+    payload = {
+        "as_of": "2026-05-26T00:00:00+00:00",
+        "cutoff": "2024-08-01",
+        "n_train": 3000,
+        "n_test": 1200,
+        "n_scored": 1150,
+        "poisson_log_loss": 1.013,
+        "bookmaker_log_loss": 0.974,
+        "delta": 0.039,
+        "base_h": 0.46,
+        "base_d": 0.24,
+        "base_a": 0.30,
+        "leagues": [["2024_25", "E0"], ["2024_25", "E1"]],
+        "half_life_days": 365.0,
+    }
+    artifact = Path(tmp_path) / "latest.json"  # type: ignore[arg-type]
+    artifact.write_text(json.dumps(payload))
+    monkeypatch.setattr(tr, "BOOKMAKER_BENCHMARK_PATH", artifact)
+    r = client.get("/api/v1/track-record/bookmaker-benchmark")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["poisson_log_loss"] == pytest.approx(1.013)
+    assert body["bookmaker_log_loss"] == pytest.approx(0.974)
+    assert body["delta"] == pytest.approx(0.039)
+    assert body["n_scored"] == 1150
+    assert body["leagues"] == [["2024_25", "E0"], ["2024_25", "E1"]]
