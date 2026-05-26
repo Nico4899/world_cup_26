@@ -2,8 +2,10 @@
 
 Database URL resolution order:
 1. Explicit `url` argument to ``get_engine`` / ``get_sessionmaker``.
-2. ``WC2026_DATABASE_URL`` environment variable.
-3. Default local docker-compose Postgres at port 55432.
+2. ``DATABASE_URL`` environment variable (matches docker-compose, Fly, scripts,
+   and scheduler jobs — see ``src/wc2026/scheduler/jobs.py``).
+3. ``WC2026_DATABASE_URL`` environment variable (legacy / explicit override).
+4. Default local docker-compose Postgres at port 55432.
 
 All callers should go through ``session_scope()`` for transactional work; the
 context manager commits on clean exit and rolls back on exception.
@@ -26,7 +28,11 @@ ENV_VAR = "WC2026_DATABASE_URL"
 def resolve_url(url: str | None = None) -> str:
     if url is not None:
         return url
-    return os.environ.get(ENV_VAR, DEFAULT_LOCAL_URL)
+    return (
+        os.environ.get("DATABASE_URL")
+        or os.environ.get(ENV_VAR)
+        or DEFAULT_LOCAL_URL
+    )
 
 
 @lru_cache(maxsize=8)
