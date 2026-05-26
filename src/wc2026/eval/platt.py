@@ -182,4 +182,4 @@ def _sigmoid(slope: float | None, intercept: float | None, x: np.ndarray) -> np.
     return 1.0 / (1.0 + np.exp(-z))
 
 
-__all__ = ["PlattCalibrator", "EPS_PROB"]
+__all__ = ["EPS_PROB", "PlattCalibrator"]

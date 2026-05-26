@@ -207,8 +207,11 @@ def _job_climate_refresh() -> None:
     ]
     pairs: set[tuple[str, date]] = set()
     for _, row in upcoming.iterrows():
+        # ``row.get`` returns the cell value or ``None`` when the column is
+        # absent; pandas NaN reads as a float, not ``None``, so a stricter
+        # type check is needed to also drop NaN-filled rows.
         city = row.get("city")
-        if city is None or city not in venues:
+        if not isinstance(city, str) or city not in venues:
             continue
         pairs.add((city, pd.Timestamp(row["date"]).date()))
 
@@ -589,6 +592,7 @@ def _job_transfermarkt_refresh() -> None:
     test in :mod:`scripts.backtest_against_bookmaker`.
     """
     import json  # noqa: PLC0415
+
     from wc2026.ingest.transfermarkt import (  # noqa: PLC0415
         fetch_squad_market_values,
     )

@@ -12,7 +12,6 @@ import requests
 
 from wc2026.ingest import transfermarkt as tm
 
-
 # --- parse_market_value ------------------------------------------------------
 
 

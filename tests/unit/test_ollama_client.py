@@ -7,7 +7,6 @@ import pytest
 
 from wc2026.llm import ollama_client as oc
 
-
 # --- OllamaConfig.from_env ---------------------------------------------------
 
 

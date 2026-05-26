@@ -1557,3 +1557,48 @@ def test_bookmaker_benchmark_200_returns_artifact_shape(
     assert body["delta"] == pytest.approx(0.039)
     assert body["n_scored"] == 1150
     assert body["leagues"] == [["2024_25", "E0"], ["2024_25", "E1"]]
+
+
+def test_bookmaker_benchmark_503_on_malformed_json(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: object
+) -> None:
+    from pathlib import Path
+
+    from wc2026.api.routes import track_record as tr
+
+    artifact = Path(tmp_path) / "latest.json"  # type: ignore[arg-type]
+    artifact.write_text("{not valid json")
+    monkeypatch.setattr(tr, "BOOKMAKER_BENCHMARK_PATH", artifact)
+    r = client.get("/api/v1/track-record/bookmaker-benchmark")
+    assert r.status_code == 503
+    assert "malformed" in r.json()["detail"]
+
+
+def test_bookmaker_benchmark_503_on_invalid_shape(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: object
+) -> None:
+    """JSON parses but Pydantic validation fails (e.g. wrong types)."""
+    import json
+    from pathlib import Path
+
+    from wc2026.api.routes import track_record as tr
+
+    # n_train should be an int; passing a string trips Pydantic's coercion.
+    payload = {
+        "as_of": "2026-05-26T00:00:00+00:00",
+        "cutoff": "2024-08-01",
+        "n_train": "not-an-int",
+        "n_test": 1200,
+        "n_scored": 1150,
+        "poisson_log_loss": 1.013,
+        "bookmaker_log_loss": 0.974,
+        "delta": 0.039,
+        "leagues": [["2024_25", "E0"]],
+        "half_life_days": 365.0,
+    }
+    artifact = Path(tmp_path) / "latest.json"  # type: ignore[arg-type]
+    artifact.write_text(json.dumps(payload))
+    monkeypatch.setattr(tr, "BOOKMAKER_BENCHMARK_PATH", artifact)
+    r = client.get("/api/v1/track-record/bookmaker-benchmark")
+    assert r.status_code == 503
+    assert "unexpected shape" in r.json()["detail"]

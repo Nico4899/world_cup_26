@@ -46,11 +46,13 @@ DEFAULT_BLEND_WEIGHT = 0.5
 PLATT_ARTIFACT_PATH = Path("data/artifacts/platt/latest.npz")
 PLATT_ENV_FLAG = "WC2026_USE_PLATT"
 
-# Module-level cache: ``None`` means "not yet attempted", ``False`` means
-# "tried + failed (env off / artifact missing / load error)", and a
-# fitted calibrator means "live". Restart the process to pick up a freshly
-# refit artifact.
-_PLATT_CACHE: PlattCalibrator | bool | None = None
+# Module-level cache wrapped in a single-key dict so reads/writes don't
+# trip ``ruff`` PLW0603 (``global`` is discouraged) and the test helper
+# can reset state without a ``global`` either. Slot values:
+#   ``None``  — first call hasn't decided yet
+#   ``False`` — decided "disabled" (env off / artifact missing / load failure)
+#   ``PlattCalibrator`` — fitted calibrator, ready to transform
+_PLATT_STATE: dict[str, PlattCalibrator | bool | None] = {"value": None}
 
 
 def _flag_on() -> bool:
@@ -65,14 +67,14 @@ def _flag_on() -> bool:
 
 def _get_platt() -> PlattCalibrator | None:
     """Load + cache the Platt calibrator. Returns ``None`` when disabled."""
-    global _PLATT_CACHE
-    if _PLATT_CACHE is False:
+    cached = _PLATT_STATE["value"]
+    if cached is False:
         return None
-    if isinstance(_PLATT_CACHE, PlattCalibrator):
-        return _PLATT_CACHE
+    if isinstance(cached, PlattCalibrator):
+        return cached
     # First call: decide.
     if not _flag_on():
-        _PLATT_CACHE = False
+        _PLATT_STATE["value"] = False
         return None
     if not PLATT_ARTIFACT_PATH.exists():
         logger.warning(
@@ -80,23 +82,22 @@ def _get_platt() -> PlattCalibrator | None:
             PLATT_ENV_FLAG,
             PLATT_ARTIFACT_PATH,
         )
-        _PLATT_CACHE = False
+        _PLATT_STATE["value"] = False
         return None
     try:
         cal = PlattCalibrator.load(PLATT_ARTIFACT_PATH)
     except (OSError, ValueError, KeyError) as exc:
         logger.warning("failed to load Platt calibrator: %s; falling back to raw probs", exc)
-        _PLATT_CACHE = False
+        _PLATT_STATE["value"] = False
         return None
-    _PLATT_CACHE = cal
+    _PLATT_STATE["value"] = cal
     logger.info("Platt calibrator loaded (n_train=%d)", cal.n_train_)
     return cal
 
 
 def reset_platt_cache() -> None:
     """Clear the lazy-loaded cache (tests + hot-swap after a refit)."""
-    global _PLATT_CACHE
-    _PLATT_CACHE = None
+    _PLATT_STATE["value"] = None
 
 
 def _maybe_apply_platt(outcome: OutcomeProbabilities) -> OutcomeProbabilities:

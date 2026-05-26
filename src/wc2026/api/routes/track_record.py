@@ -33,7 +33,7 @@ from typing import Any
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Path, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from wc2026.db.session import get_engine
 from wc2026.eval.backtest import HindcastConfig, hindcast
@@ -308,7 +308,19 @@ def bookmaker_benchmark() -> BookmakerBenchmark:
             status_code=503,
             detail=f"bookmaker benchmark artifact malformed: {exc.msg}",
         ) from exc
-    return BookmakerBenchmark(**payload)
+    try:
+        return BookmakerBenchmark(**payload)
+    except ValidationError as exc:
+        logger.exception(
+            "bookmaker benchmark artifact failed pydantic validation"
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "bookmaker benchmark artifact has an unexpected shape; "
+                "regenerate via scripts/backtest_against_bookmaker.py"
+            ),
+        ) from exc
 
 
 __all__ = ["router"]

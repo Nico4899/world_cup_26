@@ -68,8 +68,8 @@ def test_alembic_migration_module_loads() -> None:
     surface here. Load by path because ``alembic/versions`` isn't a
     Python package (no ``__init__.py``).
     """
-    import importlib.util  # noqa: PLC0415
-    from pathlib import Path  # noqa: PLC0415
+    import importlib.util
+    from pathlib import Path
 
     repo_root = Path(__file__).resolve().parents[2]
     mig_path = (

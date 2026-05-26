@@ -25,8 +25,8 @@ Validation
 ----------
 Müller, Simons & Weinmann (2017), "Beyond Crowd Judgements: Data-driven
 estimation of market value in association football" (European Journal
-of Operational Research 263.2: 611–624) showed Transfermarkt's
-crowd-sourced market values predict transfer fees within ±15%, making
+of Operational Research 263.2: 611-624) showed Transfermarkt's
+crowd-sourced market values predict transfer fees within +/- 15%, making
 them a reliable team-strength proxy when other signals (Elo, FIFA
 ranking) lag squad changes.
 
@@ -311,8 +311,8 @@ __all__ = [
     "BASE_URL",
     "DEFAULT_CACHE",
     "DEFAULT_TARGET",
-    "TeamMarketValue",
     "USER_AGENT",
+    "TeamMarketValue",
     "fetch_squad_market_values",
     "fetch_team_market_value",
     "load_latest_snapshot",
