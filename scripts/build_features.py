@@ -25,12 +25,12 @@ from sqlalchemy.engine import Engine
 
 from wc2026.db.models import MatchFeatures
 from wc2026.db.session import get_engine, session_scope
-from wc2026.features.venue import all_venues
 from wc2026.features.build_match_features import (
     FeatureSources,
     MatchSpec,
     build_features_for_matches,
 )
+from wc2026.features.venue import all_venues
 from wc2026.ingest.eloratings_scraper import load_latest_snapshot as load_latest_elo
 from wc2026.ingest.kaggle_intl import load_played, load_scheduled
 from wc2026.ingest.statsbomb_open import (

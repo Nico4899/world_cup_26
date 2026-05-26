@@ -55,7 +55,13 @@ Each match contributes weight `time_decay · importance`:
 - **Exponential time decay** with a half-life selected by the Stage 0.6 sweep on
   the WC 2022 backtest. Ley, Van de Wiele & Van Eetvelde (2019) report a 390-day
   half-life for the EPL; international teams play ~10× fewer matches per year,
-  so the optimum sits in the ~10-year range — our default is 3650 days.
+  so the optimum sits in the ~10-year range — our default is 3650 days. **The
+  Wave 2 feature additions (climate / travel / market value) live on the XGB
+  side and do not change the DC weighting**, so the 3 650-day constant carries
+  forward unchanged. A re-sweep with the new features in the XGB feature
+  matrix is deferred until those features have been trained on a real
+  Transfermarkt snapshot + live tournament rows; until then the existing
+  optimum is the honest baseline (see `scripts/calibration_sweep.py`).
 - **Match importance** uses the eloratings.net K-factor schedule (K=60 for World
   Cup finals, 50 for continental finals, 40 for qualifiers/Nations Leagues, 30
   for other tournaments, 20 for friendlies). Source: eloratings.net "About"
@@ -95,6 +101,49 @@ do not have to modify `sim/knockout.py`.
 the three calibrated probabilities to sum to 1 (Niculescu-Mizil & Caruana 2005).
 `leave_one_out_recalibrate` reports honest LOO numbers (fit on N−1, apply to
 held-out, repeat) so the calibrator never sees the row it is scoring.
+
+### 3.4 Wave 2 feature additions (XGB blend layer)
+
+The Dixon-Coles core stays unchanged — its analytic-gradient parametrisation
+makes adding exogenous inputs without a rewrite impractical. The XGBoost blend
+component is the integration point for everything new:
+
+- **Host-venue altitude (`venue_altitude_m`)** — Mexico City sits at 2 240 m,
+  Guadalajara at 1 566 m, and every other 2026 venue is below 540 m. Lookup
+  table at [`data/static/host_cities_climate.json`](../data/static/host_cities_climate.json);
+  helper at [`src/wc2026/features/venue.py`](../src/wc2026/features/venue.py).
+- **Kickoff wet-bulb temperature (`venue_wet_bulb_c`)** — sourced live from
+  Open-Meteo's free `/v1/forecast?hourly=wet_bulb_temperature_2m` for the
+  match's date, with the static climate-normal as fallback when the API is
+  unreachable. Persisted to `data/raw/climate/` by the daily
+  `climate_refresh` scheduler job. The wet-bulb column is materialised on
+  every row but intentionally NOT in `DEFAULT_FEATURE_COLUMNS` until the
+  held-out backtest gate gives it the green light — Dallas / Miami /
+  Monterrey routinely hit ≥ 26 °C wet-bulb but the predictive value over
+  the v1 baseline isn't yet proven.
+- **Travel km (`travel_km_diff`)** — great-circle distance from each
+  team's PREVIOUS WC venue to the current one, signed `home - away`.
+  Math primitive in [`src/wc2026/features/travel.py`](../src/wc2026/features/travel.py);
+  feature emits `None` for any match where venue coordinates aren't on
+  file (pre-tournament friendlies + qualifiers). Within-tournament
+  travel for the 2026 three-country format can reach ~3 100 km
+  (Toronto → Monterrey), a real fatigue signal Elo can't capture.
+- **Squad market value (`log_market_value_diff`)** — `log(home_squad_eur)
+  − log(away_squad_eur)` sourced from the operator-triggered Transfermarkt
+  scraper at [`src/wc2026/ingest/transfermarkt.py`](../src/wc2026/ingest/transfermarkt.py).
+  Müller, Simons & Weinmann (2017) validate Transfermarkt's crowd-sourced
+  values as a team-strength proxy; Paul Johnson (2025) documents a bias
+  toward recent results so the values aren't fully independent of form
+  features. Off by default until the held-out backtest gate
+  (≥ 0.005 Brier improvement vs the v1 model) is met. The scraper
+  respects `robots.txt`, identifies itself in `User-Agent`, and only
+  the derived `log_market_value_diff` reaches the dashboard — raw Euro
+  totals stay on operator disk per Transfermarkt's T&Cs.
+
+All four features are *additive* — XGBoost's `hist` tree-method treats
+the column as missing (NaN) when the upstream source is empty, so the v1
+artefact keeps producing identical predictions until the next
+`xgb_refit` opts into the new columns.
 
 ## 4. Tournament simulator + tiebreakers
 
