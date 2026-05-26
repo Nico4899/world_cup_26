@@ -72,6 +72,7 @@ WC_TOURNAMENT_END = date(2026, 7, 19)
 STANDINGS_WARM_INTERVAL_MINUTES = 60
 MONTE_CARLO_RERUN_INTERVAL_MINUTES = 30
 LIVE_EVENTS_POLL_INTERVAL_SECONDS = 60
+CLIMATE_RAW_DIR = Path("data/raw/climate")
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,78 @@ def _job_wikipedia_squads_refresh() -> None:
 def _job_football_data_co_uk_refresh() -> None:
     """Pull the default club-league closing-odds calibration corpus."""
     fetch_calibration_corpus()
+
+
+def _job_climate_refresh() -> None:
+    """Cache Open-Meteo wet-bulb forecasts for every upcoming WC fixture.
+
+    Iterates the next 14 days of fixtures from
+    ``wc2026.ingest.kaggle_intl.load_scheduled`` and writes a single
+    ``data/raw/climate/{city}_{date}.json`` per (city, date) pair. The
+    daily refresh keeps forecasts fresh; same-day kickoffs still hit
+    Open-Meteo live via ``venue.venue_wet_bulb_c``.
+
+    Robust to API outage: a failed forecast for any (city, date) is
+    logged and skipped — the caller falls back to the static climate
+    normals shipped in ``data/static/host_cities_climate.json``.
+    """
+    import json  # noqa: PLC0415
+
+    from wc2026.features.venue import (  # noqa: PLC0415
+        _wet_bulb_from_open_meteo,
+        all_venues,
+    )
+    from wc2026.ingest.kaggle_intl import load_scheduled  # noqa: PLC0415
+
+    target_dir = CLIMATE_RAW_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        scheduled = load_scheduled()
+    except FileNotFoundError:
+        logger.warning("climate_refresh: scheduled fixtures CSV not on disk")
+        return
+
+    today = datetime.now(UTC).date()
+    horizon = today + timedelta(days=14)
+    venues = all_venues()
+
+    upcoming = scheduled[
+        (pd.to_datetime(scheduled["date"]).dt.date >= today)
+        & (pd.to_datetime(scheduled["date"]).dt.date <= horizon)
+    ]
+    pairs: set[tuple[str, date]] = set()
+    for _, row in upcoming.iterrows():
+        city = row.get("city")
+        if city is None or city not in venues:
+            continue
+        pairs.add((city, pd.Timestamp(row["date"]).date()))
+
+    n_ok = 0
+    n_skip = 0
+    for city, match_date in sorted(pairs):
+        entry = venues[city]
+        wet_bulb = _wet_bulb_from_open_meteo(entry.lat, entry.lon, match_date)
+        if wet_bulb is None:
+            n_skip += 1
+            continue
+        out = target_dir / f"{city.replace('/', '_').replace(' ', '_')}_{match_date.isoformat()}.json"
+        out.write_text(
+            json.dumps(
+                {
+                    "city": city,
+                    "match_date": match_date.isoformat(),
+                    "wet_bulb_c": wet_bulb,
+                    "fetched_at": datetime.now(UTC).isoformat(),
+                }
+            )
+        )
+        n_ok += 1
+    logger.info(
+        "climate_refresh: cached %d wet-bulb forecasts; %d skipped (api / lookup misses)",
+        n_ok,
+        n_skip,
+    )
 
 
 def _job_fbref_refresh() -> None:
@@ -488,6 +561,16 @@ JOB_SPECS: tuple[JobSpec, ...] = (
         minute=45,
         func=_job_xgb_refit,
         day_of_week="sun",
+    ),
+    # Daily 04:45 — Open-Meteo wet-bulb forecast cache for upcoming fixtures.
+    # Same-day kickoffs still hit Open-Meteo live (venue.venue_wet_bulb_c);
+    # this job keeps a 14-day window warm so the feature builder can stay
+    # offline once a fixture is within that horizon.
+    JobSpec(
+        name="climate_refresh",
+        hour=4,
+        minute=45,
+        func=_job_climate_refresh,
     ),
 )
 

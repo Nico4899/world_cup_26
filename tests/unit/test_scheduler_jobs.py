@@ -11,10 +11,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 from wc2026.scheduler import jobs as job_mod
 
 
-def test_job_specs_have_twelve_entries_at_distinct_slots():
+def test_job_specs_have_thirteen_entries_at_distinct_slots():
     slots = {(s.hour, s.minute, s.day_of_week, s.day) for s in job_mod.JOB_SPECS}
-    assert len(job_mod.JOB_SPECS) == 12
-    assert len(slots) == 12, "expected twelve distinct (hour, minute, day_of_week, day) slots"
+    assert len(job_mod.JOB_SPECS) == 13
+    assert len(slots) == 13, "expected thirteen distinct (hour, minute, day_of_week, day) slots"
 
 
 def test_job_specs_use_expected_names_and_window():
@@ -32,6 +32,7 @@ def test_job_specs_use_expected_names_and_window():
         "football_data_co_uk_refresh",
         "fbref_refresh",
         "xgb_refit",
+        "climate_refresh",
     }
     for spec in job_mod.JOB_SPECS:
         # 02:xx backup, 03:xx weekly metadata + odds, 04:xx ingest, 05:00 refit,
@@ -633,3 +634,74 @@ def test_warm_standings_cache_swallows_http_errors(monkeypatch, caplog):
     monkeypatch.setattr(_httpx, "get", fake_get)
     # Must not raise.
     job_mod._job_warm_standings_cache(api_url="http://fake")
+
+
+def test_climate_refresh_writes_one_json_per_upcoming_fixture(monkeypatch, tmp_path):
+    """Happy path: stubbed Open-Meteo + scheduled fixtures → 1 JSON per pair."""
+    import json
+    from datetime import UTC, datetime, timedelta
+
+    import pandas as pd
+
+    from wc2026.features import venue as venue_mod
+    from wc2026.ingest import kaggle_intl
+
+    today = datetime.now(UTC).date()
+    scheduled = pd.DataFrame(
+        {
+            "date": [pd.Timestamp(today + timedelta(days=1)), pd.Timestamp(today + timedelta(days=2))],
+            "home_team": ["Mexico", "Argentina"],
+            "away_team": ["Saudi Arabia", "Poland"],
+            "city": ["Mexico City", "Miami"],
+        }
+    )
+    monkeypatch.setattr(kaggle_intl, "load_scheduled", lambda: scheduled)
+    monkeypatch.setattr(venue_mod, "_wet_bulb_from_open_meteo", lambda *_a, **_kw: 14.0)
+    monkeypatch.setattr(job_mod, "CLIMATE_RAW_DIR", tmp_path)
+
+    job_mod._job_climate_refresh()
+
+    files = sorted(tmp_path.glob("*.json"))
+    assert len(files) == 2
+    payload = json.loads(files[0].read_text())
+    assert payload["wet_bulb_c"] == 14.0
+    assert "city" in payload and "match_date" in payload and "fetched_at" in payload
+
+
+def test_climate_refresh_skips_when_open_meteo_returns_none(monkeypatch, tmp_path):
+    """API failure path: no files written, no exception raised."""
+    from datetime import UTC, datetime, timedelta
+
+    import pandas as pd
+
+    from wc2026.features import venue as venue_mod
+    from wc2026.ingest import kaggle_intl
+
+    today = datetime.now(UTC).date()
+    scheduled = pd.DataFrame(
+        {
+            "date": [pd.Timestamp(today + timedelta(days=1))],
+            "home_team": ["Mexico"],
+            "away_team": ["Saudi Arabia"],
+            "city": ["Mexico City"],
+        }
+    )
+    monkeypatch.setattr(kaggle_intl, "load_scheduled", lambda: scheduled)
+    monkeypatch.setattr(venue_mod, "_wet_bulb_from_open_meteo", lambda *_a, **_kw: None)
+    monkeypatch.setattr(job_mod, "CLIMATE_RAW_DIR", tmp_path)
+
+    job_mod._job_climate_refresh()  # must not raise
+    assert list(tmp_path.glob("*.json")) == []
+
+
+def test_climate_refresh_no_ops_without_scheduled_csv(monkeypatch, tmp_path):
+    """If the Kaggle scheduled CSV is missing, the job logs + returns cleanly."""
+    from wc2026.ingest import kaggle_intl
+
+    def boom() -> object:
+        raise FileNotFoundError("no scheduled CSV")
+
+    monkeypatch.setattr(kaggle_intl, "load_scheduled", boom)
+    monkeypatch.setattr(job_mod, "CLIMATE_RAW_DIR", tmp_path)
+    job_mod._job_climate_refresh()  # must not raise
+    assert list(tmp_path.glob("*.json")) == []
