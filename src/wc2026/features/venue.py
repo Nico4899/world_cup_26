@@ -1,7 +1,7 @@
 """Host-venue metadata + climate features for the WC 2026 corpus.
 
 The static ``data/static/host_cities_climate.json`` table carries altitude
-(metres) and June–July climate normals for every 2026 host venue. Two
+(metres) and June-July climate normals for every 2026 host venue. Two
 helpers live here:
 
 * :func:`venue_altitude_m` — synchronous lookup, no network.
