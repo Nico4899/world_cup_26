@@ -35,13 +35,23 @@ for (const { path, heading, charts } of ROUTES) {
   });
 }
 
-test("top nav lists 5 primary tabs", async ({ page }) => {
+test("top nav lists 7 primary tabs + Operator icon", async ({ page }) => {
   await page.goto("/");
-  // Top-nav has the 5 high-frequency routes; the other 4 utility routes
-  // are reachable via the ⌘K command palette (see next test).
-  for (const label of ["Today", "Match Detail", "Groups", "Bracket", "Track Record"]) {
+  // 7 high-frequency tabs render their full label.
+  for (const label of [
+    "Today",
+    "Match Detail",
+    "Groups",
+    "Bracket",
+    "Track Record",
+    "Map",
+    "About",
+  ]) {
     await expect(page.getByRole("link", { name: label })).toBeVisible();
   }
+  // Operator sits in the chrome as an icon-only link (it's intentionally
+  // technical so it doesn't crowd the primary tabs).
+  await expect(page.getByRole("link", { name: "Operator" })).toBeVisible();
 });
 
 test("command palette reaches every route", async ({ page }) => {
@@ -84,7 +94,7 @@ test("first-visit tour opens once, then localStorage gates it", async ({ page })
   await expect(page.getByRole("dialog", { name: /each card is one match/i })).toBeHidden();
 });
 
-test("mobile hamburger sheet exposes the 5 primary tabs", async ({ page }) => {
+test("mobile hamburger sheet exposes 7 primary tabs + Operator", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 720 });
   await page.goto("/");
   // Persist the tour flag so it doesn't block the hamburger.
@@ -93,7 +103,16 @@ test("mobile hamburger sheet exposes the 5 primary tabs", async ({ page }) => {
   await page.getByRole("button", { name: /open primary navigation/i }).click();
   const sheet = page.locator("[data-slot='sheet-content']");
   await expect(sheet).toBeVisible();
-  for (const label of ["Today", "Match Detail", "Groups", "Bracket", "Track Record"]) {
+  for (const label of [
+    "Today",
+    "Match Detail",
+    "Groups",
+    "Bracket",
+    "Track Record",
+    "Map",
+    "About",
+    "Operator",
+  ]) {
     await expect(sheet.getByRole("link", { name: label })).toBeVisible();
   }
 });

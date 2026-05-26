@@ -40,7 +40,7 @@ export function BracketDetail({ data }: { data: BracketResponse }) {
         <Trophy className="h-5 w-5 text-amber-500" aria-hidden />
         <span className="text-sm">
           <span className="font-medium">Champion (seed {data.seed}):</span>{" "}
-          <TeamChip team={data.champion} bold />
+          <TeamChip team={data.champion} bold asLink />
         </span>
       </div>
       {ROUND_ORDER.map((round) => {
@@ -74,7 +74,7 @@ export function BracketDetail({ data }: { data: BracketResponse }) {
                     </TableCell>
                     <TableCell className="text-xs">{m.away_team}</TableCell>
                     <TableCell className="text-xs">
-                      <TeamChip team={m.winner} size="sm" bold />
+                      <TeamChip team={m.winner} size="sm" bold asLink />
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {DECIDED_LABEL[m.decided_in]}

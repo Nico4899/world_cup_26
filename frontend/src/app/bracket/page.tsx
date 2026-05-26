@@ -299,7 +299,7 @@ function ScenarioComparison({
           {rows.map((r) => (
             <TableRow key={r.team}>
               <TableCell>
-                <TeamChip team={r.team} bold />
+                <TeamChip team={r.team} bold asLink />
               </TableCell>
               <TableCell className="text-right tabular-nums">{r.sfs}</TableCell>
               <TableCell className="text-right tabular-nums">{r.finals}</TableCell>
@@ -316,7 +316,7 @@ function ScenarioComparison({
           <Card key={s.seed}>
             <CardContent className="py-3">
               <p className="text-xs text-muted-foreground">Seed {s.seed}</p>
-              <TeamChip team={s.champion} bold />
+              <TeamChip team={s.champion} bold asLink />
             </CardContent>
           </Card>
         ))}
@@ -478,7 +478,7 @@ function ConditionalLocks() {
                   <TableRow key={l.match_id}>
                     <TableCell className="tabular-nums">{l.match_id}</TableCell>
                     <TableCell>
-                      <TeamChip team={l.winner} bold />
+                      <TeamChip team={l.winner} bold asLink />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -555,7 +555,7 @@ function ConditionalLocks() {
                 {mutation.data.headline.map((h) => (
                   <TableRow key={h.team}>
                     <TableCell>
-                      <TeamChip team={h.team} bold />
+                      <TeamChip team={h.team} bold asLink />
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {pct(h.p_champion)}

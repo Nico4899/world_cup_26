@@ -150,7 +150,7 @@ function Row({
   return (
     <>
       <div className="py-1">
-        <TeamChip team={team} bold />
+        <TeamChip team={team} bold asLink />
       </div>
       <div className="text-right tabular-nums">{(p_champion * 100).toFixed(1)}%</div>
       <div className="text-right tabular-nums">{(p_final * 100).toFixed(1)}%</div>

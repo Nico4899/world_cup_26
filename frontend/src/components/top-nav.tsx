@@ -7,9 +7,12 @@ import {
   CalendarClock,
   Command,
   GitBranch,
+  Info,
   LayoutGrid,
   LineChart,
+  MapPinned,
   Menu,
+  Terminal,
   Trophy,
   type LucideIcon,
 } from "lucide-react";
@@ -28,6 +31,8 @@ const TABS: Tab[] = [
   { href: "/groups", label: "Groups", Icon: LayoutGrid },
   { href: "/bracket", label: "Bracket", Icon: GitBranch },
   { href: "/track-record", label: "Track Record", Icon: LineChart },
+  { href: "/map", label: "Map", Icon: MapPinned },
+  { href: "/about", label: "About", Icon: Info },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -75,7 +80,7 @@ export function TopNav() {
 
         <Link
           href="/"
-          className="flex-shrink-0 md:border-r md:border-border md:pr-4"
+          className="shrink-0 md:border-r md:border-border md:pr-4"
           aria-label="WC 2026 home"
         >
           <BrandLockup size={28} />
@@ -97,7 +102,7 @@ export function TopNav() {
                   "hover:bg-accent hover:text-accent-foreground",
                   active && "bg-accent font-semibold text-accent-foreground",
                   active &&
-                    "after:absolute after:-bottom-[13px] after:left-3 after:right-3 after:h-[3px] after:rounded-sm after:bg-primary",
+                    "after:absolute after:-bottom-3.25 after:left-3 after:right-3 after:h-0.75 after:rounded-sm after:bg-primary",
                 )}
               >
                 <Icon
@@ -128,6 +133,19 @@ export function TopNav() {
             ⌘K
           </kbd>
         </button>
+        {/* Operator stays outside the primary tabs (intentionally technical)
+            but is one click away as an icon in the chrome. */}
+        <Link
+          href="/ops"
+          aria-label="Operator"
+          title="Operator"
+          className={cn(
+            "hidden md:inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            isActive(pathname, "/ops") && "bg-accent text-foreground",
+          )}
+        >
+          <Terminal className="h-4 w-4" aria-hidden />
+        </Link>
         <ThemeToggle />
       </header>
 
@@ -159,7 +177,28 @@ export function TopNav() {
               );
             })}
           </nav>
-          <div className="border-t p-2">
+          <div className="border-t p-2 flex flex-col gap-0.5">
+            <Link
+              href="/ops"
+              className={cn(
+                "inline-flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent",
+                isActive(pathname, "/ops") && "bg-accent font-semibold",
+              )}
+            >
+              <Terminal
+                className="h-4 w-4"
+                aria-hidden
+                style={{
+                  color: isActive(pathname, "/ops")
+                    ? "var(--foreground)"
+                    : "var(--muted-foreground)",
+                }}
+              />
+              Operator
+              <span className="ml-auto text-[10px] uppercase tracking-wider text-muted-foreground">
+                tools
+              </span>
+            </Link>
             <button
               type="button"
               onClick={() => {

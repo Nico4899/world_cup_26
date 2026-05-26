@@ -64,7 +64,7 @@ export async function GroupStrip() {
                     className="flex items-center gap-2 text-xs whitespace-nowrap"
                   >
                     <code className="text-[10px] font-mono">{bar}</code>
-                    <TeamChip team={t.team} size="sm" />
+                    <TeamChip team={t.team} size="sm" asLink />
                     <span className="text-muted-foreground">
                       · {Math.round(adv * 100)}% adv
                     </span>
